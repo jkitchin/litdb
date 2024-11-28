@@ -1,0 +1,153 @@
+#+title: litdb - a literature and document database
+
+* litdb concept
+
+This is an updated concept. I think I can write a package that consumes a "source" that can be converted to text, chunk that text, and make embeddings of the chunks in a vector db. The sources might be a PDF, other document, or url. For now we do not consider images; I do this in org-db, but rarely find it helpful.
+
+Table structure
+
+- sources
+  - rowid
+  - source (path or url)
+  - text
+  - json (any extra data you want, in json form)
+  - date_added
+
+- chunks
+  - rowid
+  - textid -> source.rowid
+  - chunk
+
+- embeddings (virtual table)
+  - rowid
+  - chunkid -> chunks.rowid
+  - embedding
+
+- fts5
+  - rowid
+  - text.text
+
+I am not sure about this, maybe these are not stored in the db? some other cache file? There might be other kinds of queries down the road.
+
+- openalex_filters
+  - rowid
+  - filter
+  - last_updated
+
+
+Each source will have a different way to get the text, e.g.
+- openalex url -> title + abstract
+- other url -> scrape page to text
+- pdf -> text via pymupdf or something
+- docx -> doc2txt or python-docx
+- pptx https://github.com/shakiyam/pptx2txt
+- org / md notes
+
+
+The UI/cli will take a source and convert it to text using the tools above. Then, we chunk the text.
+
+Chunking options - this seems to be the main one. There are some other options, but it seems ok to rely on this.
+
+- langchain.text_splitter (I have used this so far) RecursiveCharacterTextSplitter
+
+Embedding options
+- sentence_transformers seems to have everything we would want.
+- A document level might be nice
+- https://radimrehurek.com/gensim/auto_examples/tutorials/run_doc2vec_lee.html (document level)
+
+Vector database
+- sqlite-vec seems fast enough, and may get faster
+- vectorlite potentially faster, but has hnswlib hyperparameters
+
+Other options are things like pgvector or other server-based databases. I am not interested in that at the moment.
+
+** configuration
+
+I would look for a dominating config file. maybe toml.
+
+#+BEGIN_src text :tangle config.toml
+[database]
+db = "oa.sqlite"
+
+[embedding]
+model = 'your choice'
+
+[openalex]
+email = "...@..."
+api_key = "..."
+#+END_src
+
+
+
+** cli
+
+There will be a cli to add/rm documents, and query the database. This will also provide the interface to emacs via ivy for interactive use, or buffers otherwise.
+
+
+* How do you grow your litdb?
+
+It is an open question of the best way to build a litdb. The answer surely depends on what your aim is. You have to compromise on breadth and depth with the database size. 
+
+Each of these approaches could be integrated with daily updates to add new articles that meet the filter criteria.
+
+** seed it with articles, and pull their references, citing and related papers
+
+You choose the articles so they are automatically relevant. 
+
+** Seed it with a query
+
+This would be a keyword or full text search query. These can be large. For example, a search on catalysis articles with publication dates greater than 2019 yields 40K results. This is likely to exceed the libsql could db size allowed (9GB). I am not sure how small I can make the db, right now it stores the text. Maybe I can just store the work id and embeddings, and look up data at search time? fulltext.search:catalysis,publication_year:>2021,type_crossref:journal-article
+
+The query could also include journals if you think it makes sense. 
+
+A plus side of this is it could reduce bias, although it relies on people using specific words, which introduces some bias.
+
+** Seed it with an author
+
+Say you know an author who does work related to your interest. You can just get all their work to start it. This obviously biases your litdb to people you know.
+
+** Similarity search
+
+If you had a set of papers you want to find similar works for, you might try getting all new works from OpenAlex, compute embedding, and add things that are "close enough". That number might be large though, like 50K per day? And you have to define what close enough means.
+
+
+* where are my search ideas?
+
+These are adjacent and related ideas I have worked on before.
+
+** lit-alerts
+
+There is not really much in search here, but this provides regular updates on topics from open alex
+
+[[nb:literature-alerts::readme.org::c1]]
+
+I would want to integrate this in this package to update the database.
+
+** OpenAlex discord bot
+
+These run on a raspberry pi and build on lit-alerts for discord
+
+[[nb:openalex::readme.org::c1]] 
+
+[[nb:kitchin-services::README.org::c1]]
+
+** cheme-directory
+
+[[nb:cheme-directory::README.org::c1]]
+
+There is a cli at [[nb:cheme-directory::cheme-directory.py::c1]]
+
+you can do some searches that are vector based, and full-text
+
+** pdf indexing
+
+I worked out some ideas on indexing pdfs here
+[[nb:journal::2024/11/16/2024-11-16.org::c1]]
+
+** litcoach
+
+[[nb:litcoach::src/readme.org::c1]] 
+
+used the older sqlite-vss, and is mostly focused on openalex, and has a cli. looks like it supports vector and fts5 search.
+
+This project basically replaces this one.

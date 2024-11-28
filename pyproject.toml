@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "litdb"
+dynamic = ["version"]
+authors = [
+  {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"},
+]
+maintainers = [
+  {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"}
+]
+description = "A literature database tool"
+license = {text = "MIT License"}
+readme = {file = "README.org", content-type = "text/org"}
+dependencies = [
+  "toml",
+  "requests",
+  "pymupdf4llm",
+  "langchain",
+  "tqdm",
+  "sqlite-vec",
+  "sentence-transformers",
+  "click",
+  "rich",
+  "beautifulsoup4",
+  "ratelimit",
+  "python-docx",
+  "python-pptx"
+]
+
+[project.scripts]
+litdb = "litdb.cli:cli"

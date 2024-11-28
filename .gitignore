@@ -1,0 +1,6 @@
+/.DS_Store
+/.projectile
+/litdb.egg-info/
+*.sqlite
+rdb*
+__pycache__
