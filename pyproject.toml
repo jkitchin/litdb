@@ -16,11 +16,12 @@ license = {text = "MIT License"}
 readme = {file = "README.org", content-type = "text/org"}
 dependencies = [
   "toml",
+  "tomlkit",
   "requests",
   "pymupdf4llm",
   "langchain",
   "tqdm",
-  "sqlite-vec",
+  "libsql-experimental",
   "sentence-transformers",
   "click",
   "rich",

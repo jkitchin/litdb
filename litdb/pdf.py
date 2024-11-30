@@ -4,13 +4,14 @@ import litdb.db
 
 import pymupdf4llm
 
-def add_pdf(source):
-    """Add SOURCE to litdb.
+def add_pdf(sources):
+    """Add SOURCES to litdb.
 
-    source: path to a pdf file.
+    sources: a list of paths to a pdf file.
     """
-    text = pymupdf4llm.to_markdown(source)
+    for source in sources:
+        text = pymupdf4llm.to_markdown(source)
 
-    # TODO should we normalize source to be relative to root?
-    litdb.db.add_source(source, text)
-    print(f'Added {source}')
+        # TODO should we normalize source to be relative to root?
+        litdb.db.add_source(source, text)
+        print(f'Added {source}')
