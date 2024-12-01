@@ -9,9 +9,10 @@ def add_pdf(sources):
 
     sources: a list of paths to a pdf file.
     """
+    if not isinstance(sources, list):
+        sources = [sources]
+        
     for source in sources:
         text = pymupdf4llm.to_markdown(source)
-
-        # TODO should we normalize source to be relative to root?
         litdb.db.add_source(source, text)
         print(f'Added {source}')
