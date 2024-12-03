@@ -4,23 +4,31 @@ The main command is litdb. There are subcommands for the actions.
 """
 
 import click
-from rich import print
+from rich import print as richprint
 import os
 from sentence_transformers import SentenceTransformer
 import bs4
 import requests
 import datetime
+import pathlib
 
 from tqdm import tqdm
 import datetime
+import dateparser
+import json
 import numpy as np
 import ollama
 import time
 import webbrowser
-
+from docx import Document
+from pptx import Presentation
+import nbformat
+from nbconvert import MarkdownExporter
+    
 from . import root, CONFIG, config
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
-from .openalex import get_data
+from .openalex import get_data, get_text
+from .pdf import add_pdf
 
 db = get_db()
 
@@ -29,6 +37,10 @@ def cli():
     """Group command for litdb."""
     pass
              
+
+#################
+# Add functions #
+#################
 
 @cli.command()
 @click.argument('sources', nargs=-1)
@@ -47,7 +59,9 @@ def add(sources, references=False, citing=False, related=False):
     for source in tqdm(sources):
 
         # a work
-        if 'doi.org' in source:
+        if source.startswith('10.') or 'doi.org' in source:
+            if source.startswith('10.'):
+                source = f'https://doi.org/{source}'
             add_work(source, references, citing, related)
 
         # works from an author
@@ -58,42 +72,136 @@ def add(sources, references=False, citing=False, related=False):
         elif source.endswith('.bib'):
             add_bibtex(source)
             
+        # pdf
+        elif source.endswith('.pdf'):
+            add_pdf(source)
 
-        # # pdf
-        # elif source.endswith('.pdf'):
-        #     import litdb.pdf
-        #     litdb.pdf.add_pdf(source)
+        # docx
+        elif source.endswith('.docx'):            
+            doc = Document(source)
+            add_source(source, '\n'.join([para.text for para in doc.paragraphs]))
 
-        # # docx
-        # elif source.endswith('.docx'):
-        #     from docx import Document
-        #     doc = Document(source)
-        #     add_source(source, '\n'.join([para.text for para in doc.paragraphs]))
+        # pptx
+        elif source.endswith('.pptx'):            
+            prs = Presentation(source)
+            text = []
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text.append(shape.text)
+            add_source(source, '\n'.join(text))
 
-        # # pptx
-        # elif source.endswith('.pptx'):
-        #     from pptx import Presentation
-        #     prs = Presentation(source)
-        #     text = []
-        #     for slide in prs.slides:
-        #         for shape in slide.shapes:
-        #             if hasattr(shape, "text"):
-        #                 text.append(shape.text)
-        #     add_source(source, '\n'.join(text))
+        # html
+        elif source.endswith('.html'):
+            with open(source) as f:
+                text = f.read()
+            soup = bs4.BeautifulSoup(text, features="lxml")
+            add_source(source, soup.get_text())
 
-        # # a url
-        # elif source.startswith('http'):
-        #     soup = bs4.BeautifulSoup(requests.get(source).text)
-        #     add_source(source, soup.get_text())
+        # a url
+        elif source.startswith('http'):
+            soup = bs4.BeautifulSoup(requests.get(source).text)
+            add_source(source, soup.get_text())
+
+        # ipynb
+        elif source.endswith('.ipynb'):
+            with open(source, 'r', encoding='utf-8') as f:
+                notebook = nbformat.read(f, as_version=4)
+
+            # Create a Markdown exporter
+            markdown_exporter = MarkdownExporter()
+
+            # Convert the notebook to Markdown
+            (body, resources) = markdown_exporter.from_notebook_node(notebook)
+
+            add_source(source, body)
+
+        # assume it is text
+        else:            
+            with open(source) as f:
+                text = f.read()
+            add_source(source, text)
+            
 
 
-        # # assume it is text
-        # else:            
-        #     with open(source) as f:
-        #         text = f.read()
-        #     add_source(source, text)
+@cli.command()
+@click.argument('sources', nargs=-1)
+def index(sources):
+    """Index the directories in SOURCES.
+    SOURCES is a list of directories.
+    """
+    
+    for directory in sources:
+        directory = pathlib.Path(directory).resolve()
+        for fname in directory.rglob('*'):            
+            # for f in files:            
+            if fname.suffix in ['.pdf', '.docx', '.pptx', '.org', '.md', '.html', '.bib', '.ipynb']:
+                fname = str(fname)
+                    
+                # skip files we already have
+                if db.execute('''select source from sources where source = ?''', (fname,)).fetchone():
+                    continue
+                    
+                try:
+                    print(f'Adding {fname}')
+                    add([fname])
+                    # add seems to call a SystemExit, so this line doesn't get run. I don't know why this happens here.
+                    richprint(f'Added {fname}')
+                # I don't know why this gets called, but it does, and I catch it so we keep going
+                except SystemExit:
+                    pass
+                except:
+                    richprint('Still something worng')
+                    import sys
+                    richprint(sys.exc_info())
+
+        last_updated = datetime.date.today().strftime('%Y-%m-%d')
+
+        directory = str(directory) # we need strings for the db
+        if db.execute('''select path from directories where path = ?''', (directory,)).fetchone():
+            print(f'Updating {directory}')
+            db.execute('''update directories set last_updated = ? where path = ?''',
+                       (last_updated, directory))
+        else:
+            print(f'Inserting {directory}: {last_updated}')
+            db.execute('''insert into directories(path, last_updated) values (?, ?)''', (directory, last_updated))
+
+        db.commit()
 
 
+@cli.command()
+def reindex():
+    """Reindex saved directories."""
+    for directory, in db.execute('''select path from directories''').fetchall():
+        print(f'Reindexing {directory}')
+        index([directory])
+
+
+
+##########
+# Review #
+##########
+@cli.command()
+@click.option('-s', '--since',  default='1 week ago')
+@click.option('-f', '--format', '_format',  default='org')
+def review(since, _format):
+    """Review new entries added SINCE. This should be something dateparser can handle.
+
+    The default format is org. Other formats might be supported in the future.
+    """
+    c = db.execute('''select source, text, extra from sources where date(date_added) > ?''',
+                   (dateparser.parse(since).strftime("%Y-%m-%d"),)).fetchall()
+    for source, text, extra in c:
+        if _format == 'org':
+            data = json.loads(extra) or {}
+            print(f'''* {source}
+:PROPERTIES:
+:CITED_BY_COUNT: {data.get('cited_by_count', 0)}
+:END:
+
+{text}
+''')
+                   
 
 #############
 # Searching #
@@ -111,21 +219,27 @@ def vsearch(query, n=3):
     (emb, emb, n))
     for i, row in enumerate(c.fetchall()):
         source, text, similarity = row
-        print(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
+        try:
+            richprint(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
+        except:
+            # rich.errors.MarkupError
+            print(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
 
         
 @cli.command()
-@click.argument('query')
+@click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
 def fulltext(query, n):
     """Perform a fulltext search on litdb.
     """
-    for source, text in db.execute('''select source, text
+    query = ' '.join(query)
+    
+    for source, text in db.execute('''select source, snippet(fulltext, 1, '', '', '', 16)
     from fulltext
     where text match ? order by rank limit ?''',
     (query, n)).fetchall():
-        print(f"[link]{source}[/link]")
-        print(text + '\n')
+        richprint(f"[link]{source}[/link]")
+        richprint(text + '\n')
 
         
 # Adapted from https://www.arsturn.com/blog/understanding-ollamas-embedding-models
@@ -138,21 +252,35 @@ def gpt(prompt):
     prompt = ' '.join(prompt)
     model = SentenceTransformer(config['embedding']['model'])
     emb = model.encode([prompt]).astype(np.float32).tobytes()
-    print(f'It took {time.time() - t0:1.1f} sec to embed the prompt')
+    richprint(f'It took {time.time() - t0:1.1f} sec to embed the prompt')
     t0 = time.time()
     data = db.execute('''select sources.text from vector_top_k('embedding_idx', ?, 3) join sources on sources.rowid = id''',
     (emb,)).fetchall()
-    print(f'It took  {time.time() - t0:1.1f} sec to get the top three docs')
+    richprint(f'It took  {time.time() - t0:1.1f} sec to get the top three docs')
     t0 = time.time()
     output = ollama.generate(model="llama2", prompt=f"Using data: {data}. Respond to the prompt: {prompt}")
-    print(output['response'])
-    print(f'It took  {time.time() - t0:1.1f} sec to generate and print the response.')
+    richprint(output['response'])
+    richprint(f'It took  {time.time() - t0:1.1f} sec to generate and richprint the response.')
 
-    print('The text was generated using these references')
+    richprint('The text was generated using these references')
     for i, result in enumerate(data):
-        print('f{i:2d}. {result}\n')        
+        richprint(f'{i:2d}. {result}\n')        
 
 
+@cli.command()
+@click.argument('source')
+@click.option('-n',  default=3)
+def similar(source, n=3):
+    emb, = db.execute('''select embedding from sources where source = ?''', (source,)).fetchone()
+
+    # print starting at index 1, the first item is always the source.
+    for i, row in enumerate(db.execute('''select sources.source, sources.text from vector_top_k('embedding_idx', ?, ?) join sources on sources.rowid = id''',
+                                       # we do n + 1 because the first entry is always the source
+                                       (emb, n + 1)).fetchall()[1:]):
+        source, text = row
+        richprint(f'{i:2d}. {source}\n{text}\n')
+        
+    
 ###########
 # Filters #
 ###########
@@ -193,9 +321,47 @@ def list_filters():
     """
     filters = db.execute('''select rowid, filter, description, last_updated from queries''')
     for rowid, f, description, last_updated in filters.fetchall():
-        print(f'{rowid:3d}. {description:30s} : {f} ({last_updated})')
+        richprint(f'{rowid:3d}. {description or "None":30s} : {f} ({last_updated})')
 
-        
+
+######################
+# OpenAlex searching #
+######################
+
+@cli.command()
+@click.argument('query')
+@click.option('-e', '--endpoint', default='works')
+def openalex(query, endpoint='works'):
+    """Run an openalex query on FILTER.
+
+    ENDPOINT should be one of works, authors, or another entity.
+    
+    This does not add anything to your database. It is to help you find starting points.
+
+    To search text:
+    litdb openalex "default.search:circular polymer"
+
+    To find a journal id
+    litdb openalex -e sources "display_name.search:Digital Discovery"
+    """
+    url = f'https://api.openalex.org/{endpoint}'
+
+    params={'email': config['openalex']['email'],
+            'api_key': config['openalex'].get('api_key'),
+            'filter': query}
+    resp = requests.get(url, params)
+    
+    data = resp.json()
+  
+    print(f'Found {data["meta"]["count"]} results.')
+    for result in data['results']:
+        try:
+            richprint(get_text(result))
+            print()
+        except:
+            richprint(f'{result["id"]}: {result["display_name"]}')
+    
+
 ########################################
 # Convenience functions to add filters #
 ########################################
@@ -216,7 +382,7 @@ def author_search(name):
                     params={'q': auname})
 
     for result in data['results']:
-        print(f'- {result["display_name"]}\n  {result["hint"]} {result["external_id"]}\n\n')
+        richprint(f'- {result["display_name"]}\n  {result["hint"]} {result["external_id"]}\n\n')
 
 
 @cli.command()
@@ -238,7 +404,7 @@ def follow(orcid, remove=False):
         c = db.execute('''delete from queries where  filter = ?''',
                    (f,))
         db.commit()
-        print(f'{c.rowcount} rows removed')
+        richprint(f'{c.rowcount} rows removed')
         return
         
     url = f'https://api.openalex.org/authors/{orcid}'
@@ -247,7 +413,7 @@ def follow(orcid, remove=False):
     
     db.execute('''insert or ignore into queries(filter, description) values (?, ?)''',
                (f, name))
-    print(f'Following {name}: {orcid}')
+    richprint(f'Following {name}: {orcid}')
     db.commit()
 
 
@@ -265,25 +431,25 @@ def watch(query, remove=False):
     if remove:
         c = db.execute('''delete from queries where filter = ?''', (query,))
         db.commit()
-        print(f'{c.rowcount} rows removed')
+        richprint(f'{c.rowcount} rows removed')
         return
     
     url = 'https://api.openalex.org/works'
 
     data = get_data(url, params={'filter': query})
     if len(data['results']) == 0:
-        print(f"Sorry, {query} does not seem valid.")
+        richprint(f"Sorry, {query} does not seem valid.")
 
     if remove:
-        c = db.execute('delete from queries where filter = ?''', (query,))        
-        print('Deleted {c.rowcount} rows')
+        c = db.execute('''delete from queries where filter = ?''', (query,))        
+        richprint(f'Deleted {c.rowcount} rows')
         db.commit()
     else:
         c = db.execute('''insert or ignore into queries(filter, description) values (?, ?)''',
                        (query,))        
-        print(f'Added {c.rowcount} rows')
+        richprint(f'Added {c.rowcount} rows')
         db.commit()
-        print(f'Watching {query}')
+        richprint(f'Watching {query}')
     
 
 @cli.command()
@@ -300,7 +466,7 @@ def citing(doi, remove=False):
 
     data = get_data(url, params={'filter': f})
     if len(data['results']) == 0:
-        print(f"Sorry, {doi} does not seem valid.")
+        richprint(f"Sorry, {doi} does not seem valid.")
 
     wid = data['results'][0]['id']
 
@@ -308,13 +474,13 @@ def citing(doi, remove=False):
         c = db.execute('''delete from queries where filter = ?''',
                    (f'cites:{wid}',))
         db.commit()
-        print(f'Deleted {c.rowcount} rows')
+        richprint(f'Deleted {c.rowcount} rows')
     else:
         c = db.execute('''insert or ignore into queries(filter, description) values (?, ?)''',
                (f'cites:{wid}', f'Citing papers for {doi}'))
         
         db.commit()
-        print(f'Added {c.rowcount} rows')
+        richprint(f'Added {c.rowcount} rows')
     
 
 @cli.command()
@@ -331,7 +497,7 @@ def related(doi, remove=False):
 
     data = get_data(url, params={'filter': f})
     if len(data['results']) == 0:
-        print(f"Sorry, {doi} does not seem valid.")
+        richprint(f"Sorry, {doi} does not seem valid.")
 
     wid = data['results'][0]['id']
 
@@ -339,13 +505,13 @@ def related(doi, remove=False):
         c = db.execute('''delete from queries where filter = ?''',
                    (f'related_to:{wid}',))
         db.commit()
-        print(f'Deleted {c.rowcount} rows')
+        richprint(f'Deleted {c.rowcount} rows')
     else:
         c = db.execute('''insert or ignore into queries(filter, description) values (?, ?)''',
                (f'related_to:{wid}', f'Related papers for {doi}'))
         
         db.commit()
-        print(f'Added {c.rowcount} rows')        
+        richprint(f'Added {c.rowcount} rows')        
 
 
 #############
@@ -361,7 +527,7 @@ def bibtex(sources):
     import json
     for source in sources:
         work, = db.execute('''select extra from sources where source = ?''', (source,)).fetchone()
-        print(dump_bibtex(json.loads(work)))
+        richprint(dump_bibtex(json.loads(work)))
 
 
 @cli.command()
@@ -373,14 +539,38 @@ def citation(sources):
     import json
     for i, source in enumerate(sources):
         citation, = db.execute('''select json_extract(extra, '$.citation') from sources where source = ?''', (source,)).fetchone()
-        print(f'{i + 1:2d}. {citation}') 
+        richprint(f'{i + 1:2d}. {citation}')
+
+
+@cli.command()
+@click.argument('doi')
+def unpaywall(doi):
+    """
+    """
+
+    url =  f'https://api.unpaywall.org/v2/{doi}'
+    params = {'email': config['openalex']['email']}
+
+    data = requests.get(url, params).json()
+    richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
+    richprint(f'Is open access: {data.get("is_oa", False)}')
+    
+    for loc in data.get('oa_locations', []):
+        richprint(loc.get('url_for_pdf') or loc.get('url_for_landing_page'))
+
 
 @cli.command()
 def about():
     """Summary statistics of your db.
     """
+    dbf = root / config['database']['db']
+    richprint(f'Your database is located at {dbf}')
+    kb = 1024
+    mb = 1024 * kb
+    gb = 1024 * mb
+    richprint(f'Database size: {os.path.getsize(dbf) / gb:1.2f} GB')
     nsources, = db.execute('select count(source) from sources').fetchone()    
-    print(f'You have {nsources} sources')
+    richprint(f'You have {nsources} sources')
 
     
 @cli.command()
@@ -389,15 +579,21 @@ def sql(sql):
     """Run the SQL command on the db.
     """
     for row in db.execute(sql).fetchall():
-        print(row)
+        richprint(row)
 
 
 @cli.command()
+@click.argument('source')
 def visit(source):
+    """Open source.
+    """
     
-
     if source.startswith('http'):
         webbrowser.open(source, new=2)
+    elif source.endswith('.pdf'):
+        webbrowser.open(f'file://{source}')
+    else:
+        webbrowser.open(f'file://{source}')
     
         
 if __name__ == '__main__':
