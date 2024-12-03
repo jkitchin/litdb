@@ -31,22 +31,9 @@ email = "you@example.com"
 api_key = "..."
 #+END_EXAMPLE
 
-
 * How do you grow your litdb?
 
-Your litdb starts out empty. You have to add articles that are relevant to you. It is an open question of the best way to build a litdb. The answer surely depends on what your aim is. You have to compromise on breadth and depth with the database size. Here are a few examples.
-
-Each of these approaches could be integrated with daily updates to add new articles that meet the filter criteria.
-
-- seed it with articles, and pull their references, citing and related papers. You choose the articles so they are automatically relevant. 
-
-- Seed it with an author. Say you know an author who does work related to your interest. You can just get all their work to start it. This obviously biases your litdb to people you know.
-
-- Import from a bibtex file. If you already have a bibtex file, you might use it to add all the articles to your litdb. This works on DOI, so only items with a doi are added.
-
-- Seed it with a query. This would be a keyword or full text search query. These can be large. For example, a search on catalysis articles with publication dates greater than 2019 yields 40K results. This is likely to exceed the libsql could db size allowed (9GB). I am not sure how small I can make the db, right now it stores the text. Maybe I can just store the work id and embeddings, and look up data at search time? The query could also include journals if you think it makes sense. 
-
-- Update your queries regularly. You can automate this, or do it manually. This will add new entries since the last update.
+Your litdb starts out empty. You have to add articles that are relevant to you. It is an open question of the best way to build a litdb. The answer surely depends on what your aim is. You have to compromise on breadth and depth with the database size. The CLI makes it pretty easy to do this
 
 ** The CLI
 
@@ -123,16 +110,9 @@ A filter is used in OpenAlex to search for relevant articles. Here is an example
 litdb add-filter "primary_location.source.id:https://openalex.org/S4210202120" -d "Digital Discovery"
 #+END_SRC
 
-You can remove a filter like this:
-
-#+BEGIN_SRC sh
-litdb rm-filter "filter-string"
-#+END_SRC
-
 **** Managing and updating the filters
 
 You can get a list of your filters like this.
-
 
 #+BEGIN_SRC sh
 litdb list-filters
@@ -146,11 +126,27 @@ litdb update-filters
 
 This adds papers that have been created since the last time you ran the filter. You need an OpenAlex premium API key for this. This will update the last_updated field.
 
+You can remove a filter like this:
+
+#+BEGIN_SRC sh
+litdb rm-filter "filter-string"
+#+END_SRC
+
+*** Review your litdb
+
+I find it helpful to review your litdb. To get a list of articles added in the last week, you can run this command. 
+
+#+BEGIN_SRC sh
+litdb review -s "1 week ago"
+#+END_SRC
+
+This works best when you update your litdb regularly. You might want to redirect that into a file so you can review it in an editor of your choice.
+
 *** Searching litdb
 
 There are three search options. 
 
-**** Vector search
+**** vector search
 
 The main way litdb was designed to be searched is with by natural language queries. The way this works is your query is converted to a vector using SentenceTransformers, and then a vector search identifies entries in the database that are similar to your query.
 
@@ -212,6 +208,17 @@ The output can be redirected to a file.
 litdb citation doi1 doi2
 #+END_SRC
 
+
+*** Find free pdfs
+
+You can use litdb to find freely available PDFs via https://unpaywall.org/.
+
+#+BEGIN_SRC sh
+litdb unpaywall doi
+#+END_SRC
+
+These do not always work, and sometimes you get a version from arxiv or pubmed.
+
 *** Low-level interaction with litdb
 
 litdb is just a sqlite database (although you need to use the libsql executable for vector search). There is a CLI way to run a sql command. For example, to find all entries with a null bibtex field and their types use a query like this.
@@ -226,6 +233,45 @@ You might also use this for very specific queries. For example, here I search th
 litdb sql "select source, json_extract(extra, '$.citation') as citation from sources where citation like '%kitchin%'"
 #+END_SRC
 
+
+* Adding local files
+
+The idea of using local files is that it is likely you have collected information in the form of files on your hard drive, and you want to be able to find information in those files. 
+
+It is possible to add any file that can be turned into text to litdb. That includes:
+
+- pdf
+- docx
+- pptx
+- html
+- ipynb
+- org / md
+- bib
+- url
+
+This limits portability because you need a path if you want to be able to open that file.
+
+The same vector, fulltext and gpt search commands are available for local file entries. These tend to be longer documents than the OpenAlex entries, and I am not sure how well the search works at the document level embeddings. Search at a chunk level is very precise; odds are you want paragraph level similarity to your query. 
+
+An early version of litdb stored each chunk. This is possible, but I used another table for it. You could munge the source to be something like f.pdf::chunk-1 so each one is unique, but that seems more complicated and you would need to do some experiments to see if it is warranted. 
+
+You can combine this with the OpenAlex entries in a single database. 
+
+You can walk a directory and add files from it with this command.
+
+#+BEGIN_SRC sh
+litdb index dir1
+#+END_SRC
+
+This directory is saved and you can update all the previously indexed directories like this.
+
+#+BEGIN_SRC sh
+litdb reindex
+#+END_SRC
+
+Some annoying things that may happen are duplicate content, e.g. because you have the same file in multiple formats like docx and pdf, or because you have literal copies of files in multiple places.
+
+You should also be careful sharing a litdb that has indexed local files. It may have sensitive information that you don't want others to be able to find.
 
 * Database design
 
@@ -265,35 +311,51 @@ I guess that document level embeddings are less effective on longer documents. T
 
 Second, we rely on defaults in libsql for the vector search, notably finding the top k nearest vectors based on cosine similarity. There are other distance metrics you could use like L2, but we have not considered these.
 
-Finally, the query is based on vector similarity between your query and the texts. So, you should write the query so it looks like what you want to find, rather than as a question.
+The query is based on vector similarity between your query and the texts. So, you should write the query so it looks like what you want to find, rather than as a question. It is less clear how you should structure your query if you are using the GPT capability. It is more natural to ask a question, or give instructions. The RAG is still done by similarity though.
+
+Finally, the search can only find things that are in your database. If you haven't added it there, you won't find it. That definitely means you will miss some papers. I try to use a mesh of approaches to cover the most likely papers. This includes:
+
+1. Follow authors
+2. add references, related, and citing papers to the most relevant papers.
+3. Use text search filters
+4. Add papers I find from X, bluesky, LinkedIn, etc. (and their references, related, etc)
+5. If read a paper in litdb that is good, add its references, related, etc.
+
+It is an iterative process, and you have to make a judgment call about when to stop it. You can always come back later. There might even be newer papers to find.
+
+** Local file limitations
+
+Similar limitations exist for local files. There are additionally the following known limitations:
+
+1. The quality of document to text influences the ultimate embedding. This varies by type of document, and the library used to convert it.
+2. Local files tend to be longer documents and this can lead to hundreds of text chunks per document. These chunk embeddings are averaged into one embedding. It is not obvious this is as effective as vector search on each chunk, but it is more memory efficient.
 
 * Roadmap
 
 These are ideas for future expansion.
 
-** Adding local files
+** Emacs integration
 
-It is possible to add any file that can be turned into text to litdb. That includes:
-
-- pdf
-- docx
-- pptx
-- html
-- org / md
-
-This limits portability because you need a path if you want to be able to open that file.
+Eventually I anticipate Emacs being the main UI to litdb. I don't know if it will replace org-db or augment it. 
 
 ** format specifications
 
 There is no way to specify the format of outputs. Eventually that might be nice, e.g. specify to only output paths, so you can pipe those to another command.
 
-** Emacs integration
-
-Eventually I anticipate Emacs being the main UI to litdb. I don't know if it will replace org-db or augment it. 
-
 ** Review process 
 
-You need to have a way to review what comes in to litdb; it is part of learning about what is current. I currently do this with Emacs 
+You need to have a way to review what comes in to litdb; it is part of learning about what is current. I currently do this with Emacs and scimax-org-feed. You could integrate review with update-filters, or by entries added in the past few days, or some other kind of query. Then you just need to add some format information to get what you want, e.g. org, maybe html?
+
+#+BEGIN_SRC sqlite :db example/litdb.libsql
+select source, date_added from sources where date(date_added) > '2024-11-28' limit 5
+#+END_SRC
+
+#+RESULTS:
+| https://doi.org/10.1021/jp047349j             | 2024-11-29 17:21:51 |
+| https://doi.org/10.1149/1.1856988             | 2024-11-29 17:21:52 |
+| https://doi.org/10.1002/cctc.201000397        | 2024-11-29 17:21:53 |
+| https://doi.org/10.1088/1361-648x/aa680e      | 2024-11-29 17:21:53 |
+| https://doi.org/10.1103/physrevlett.93.156801 | 2024-11-29 17:21:54 |
 
 ** web app / fast-api
 
@@ -309,13 +371,15 @@ You might also build a scoring system, e.g. for like/dislike tags.
 
 It might be helpful to have a graph representation of a paper that shows nodes of citing, references, and related papers, with edge length related to a similarity score, and node size related to number of citations.
 
-** Semantic similarity 
+ResearchRabbit and Litmaps do this pretty well.
+
+** semantic similarity 
 
 litdb uses cosine similarity as the distance metric for the nearest neighbors. It might be useful to re-rank these with cross-encoding.
 
 https://www.sbert.net/examples/applications/cross-encoder/README.html
 
-** Combine full text and vector search
+** combine full text and vector search
 
 Vector search might miss some things. Full text search is hard to do with meaning. There are several ways to do a hybrid search, e.g. do a full text search on keywords, and a vector search, and use some kind of union on those results.
 
@@ -335,7 +399,24 @@ litdb add https://doi.org/10.48550/arXiv.2004.07180 --related --citing --referen
 
 these might have a variety of uses with litdb that range from extracting data, named entity recognition, specific searches on materials, etc.
 
-** Image and text models
+It is not essential to use SentenceTransformers for embedding, they are just easy to use. An alternative is something like ollama embeddings (https://ollama.com/blog/embedding-models) or llama.cpp https://github.com/abetlen/llama-cpp-python?tab=readme-ov-file#embeddings. The main reason to use on of these would be performance, and maybe better integration with a chat llm.
+
+** image and text models
 
 One day it might be possible to include images in this (https://www.sbert.net/docs/sentence_transformer/pretrained_models.html#image-text-models). At the moment, OpenAlex entries do not have any images, but local files would. I have an image database in org-db, but I don't use it a lot. 
 
+** merge databases
+
+I have setup litdb to be project based. There may come a time when it is desirable to merge some set of databases. It might not be necessary, I think you can attach databases in sqlite (https://www.sqlitetutorial.net/sqlite-attach-database/).
+
+Still it might be interesting to sync two databases, e.g. https://www.sqlite.org/rsync.html. I don't know if this works with libsql, but it might allow there to be a central db that users pull from.
+
+** async operations
+
+Almost everything is done synchronously and it blocks the program. At least some things could be done asynchronously I think, and that might speed things up (especially for local files), or at least let you do other things while it happens.
+
+The only thing to be careful about is not exceeding rate limits to OpenAlex. This is handled in the synchronous code.
+
+** remote db
+
+The first version of litdb with libsql used a fully remote db on their cloud. The main benefit of that is you can update the db from another machine, keeping your working machine load low. It is a little more complex to set up though, and I got several api errors on long running scripts, and with network issues, so I switched to this local setup. I think you could specify this in the litdb.toml file and have it do the right thing on a project basis.
