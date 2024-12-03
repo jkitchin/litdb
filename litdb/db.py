@@ -50,6 +50,11 @@ filter text unique,
 description text,
 last_updated text)''')
 
+    db.execute('''create table if not exists
+directories(rowid integer primary key,
+    path text unique,
+    last_updated text)''')
+
     db.execute('''create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))''')
     return db
     
@@ -127,7 +132,10 @@ def add_work(workid, references=False, citing=False, related=False):
     if references:
         for wid in tqdm(data['referenced_works']):
             rdata = get_data('https://api.openalex.org/works/' + wid, params)
-            source = rdata.get('doi') or rdata['id']
+            source = rdata.get('doi') or rdata.get('id')
+            if source is None:
+                print(f'Something failed for {wid}. continuing')
+                continue
             text = get_text(rdata)
             rdata['citation'] = get_citation(source)
             rdata['bibtex'] = dump_bibtex(rdata)
@@ -136,7 +144,10 @@ def add_work(workid, references=False, citing=False, related=False):
     if related:
         for wid in tqdm(data['related_works']):
             rdata = get_data('https://api.openalex.org/works/' + wid, params)
-            source = rdata.get('doi') or rdata['id']
+            source = rdata.get('doi') or rdata.get('id')
+            if source is None:
+                print(f'Something failed for {wid}. continuing')
+                continue
             text = get_text(rdata)
             rdata['citation'] = get_citation(source)
             rdata['bibtex'] = dump_bibtex(rdata)
@@ -154,7 +165,7 @@ def add_work(workid, references=False, citing=False, related=False):
                 source = work.get('doi') or work['id']
                 text = get_text(work)
                 work['citation'] = get_citation(source)
-                work['bibtex'] = dump_bibtex(rdata)
+                work['bibtex'] = dump_bibtex(work)
                 add_source(source, text, work)
                 
 
