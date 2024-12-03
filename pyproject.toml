@@ -28,7 +28,11 @@ dependencies = [
   "beautifulsoup4",
   "ratelimit",
   "python-docx",
-  "python-pptx"
+  "python-pptx",
+  "nbconvert",
+  "nbformat",
+  "ollama",
+  "dateparser"
 ]
 
 [project.scripts]
