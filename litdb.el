@@ -6,12 +6,13 @@
 ;; 
 ;; litdb:https://doi.org/10.1002/cssc.202200362
 ;;
-;; These links are functional, and export to \cite commands in LaTeX, and you
-;; can extract bibtex entries with `litdb-generate-bibtex'.
+;; These links are functional, and can export to \cite commands in LaTeX, and
+;; you can extract bibtex entries with `litdb-generate-bibtex'.
 ;;
-;; You have to define where your db is `litdb-db' for now.
+;; You have to define where your db is in `litdb-db' for now.
 ;;
-;; `litdb-insert' selects entries by a citation string and inserts a link.
+;; `litdb' is an ivy entry-point with selection on citation strings. The default
+;; action inserts a link.
 ;; 
 ;; `litdb-fulltext' is an interactive function to do a full text search
 ;; 
@@ -160,13 +161,16 @@ The car is a timestamp for when the cache was created. The cdr are the
 candidates.")
 
 
-(defun litdb-insert-candidates ()
+(defun litdb-candidates ()
   "Return the candidates to insert a link.
 Use a cache if possible, and generate if not."
   (let* ((current-time (current-time))
 	 (attributes (file-attributes litdb-db))
 	 (db-mod-time (nth 5 attributes)))
-    (if (time-less-p db-mod-time (car litdb-insert-cache))
+    (message "%s  %s" (format-time-string "%Y-%m-%d %H:%m:%s" db-mod-time)
+	     (format-time-string "%Y-%m-%d %H:%m:%s" (car litdb-insert-cache)))
+    (if (and (not (null (car litdb-insert-cache)))
+	     (time-less-p db-mod-time (car litdb-insert-cache)))
 	(cdr litdb-insert-cache)
       ;; generate cache
       (let* ((db (sqlite-open litdb-db))
@@ -199,17 +203,20 @@ X is a candidate (citation source) as a list."
     (insert (format "litdb:%s" (nth 1 x))))))
 
 
-(defun litdb-insert ()
-  "Insert a litdb link."
+(defun litdb ()
+  "Entry point for litdb.
+Default action inserts a link"
   (interactive)
   (let* ((db (sqlite-open litdb-db))
-	 (candidates (litdb-insert-candidates)))
+	 (candidates (litdb-candidates)))
     
     (ivy-read "choose: " candidates
-	      :caller 'litdb-insert
+	      :caller 'litdb
 	      :action
 	      '(1
-		("o" litdb-insert-candidate "Insert link")))))
+		("o" litdb-insert-candidate "Insert link")
+		("c" (lambda (x) (kill-new (nth 0 x))) "Copy citation")
+		("u" (lambda (x) (browse-url (nth 1 x))) "Open url")))))
 
 
 (defun litdb-display-transformer (candidate)
@@ -230,7 +237,7 @@ This transformer allows org syntax in the candidate strings and wraps it to a ni
       (shr-render-region (point-min) (point-max))
       (string-trim-right (buffer-string)))))
 
-(ivy-configure 'litdb-insert :display-transformer-fn #'litdb-display-transformer)
+(ivy-configure 'litdb :display-transformer-fn #'litdb-display-transformer)
 
 ;; * Interactive functions to search / query
 ;;
