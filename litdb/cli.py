@@ -11,6 +11,7 @@ import bs4
 import requests
 import datetime
 import pathlib
+import warnings
 
 from tqdm import tqdm
 import datetime
@@ -24,11 +25,14 @@ from docx import Document
 from pptx import Presentation
 import nbformat
 from nbconvert import MarkdownExporter
-    
+from jinja2 import Template
+
 from . import root, CONFIG, config
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
+
+warnings.filterwarnings("ignore")
 
 db = get_db()
 
@@ -47,7 +51,8 @@ def cli():
 @click.option('--references', is_flag=True, help='Add references too.')
 @click.option('--related', is_flag=True, help='Add related too.')
 @click.option('--citing', is_flag=True, help='Add citing too.')
-def add(sources, references=False, citing=False, related=False):
+@click.option('--all', is_flag=True, help='Add references, related and citing.')
+def add(sources, references=False, citing=False, related=False, all=False):
     """Add WIDS to the db.
 
     SOURCES can be one or more of a doi or orcid, a pdf path, a url, bibtex
@@ -62,6 +67,9 @@ def add(sources, references=False, citing=False, related=False):
         if source.startswith('10.') or 'doi.org' in source:
             if source.startswith('10.'):
                 source = f'https://doi.org/{source}'
+
+            if all:
+                references, citing, related = True, True, True
             add_work(source, references, citing, related)
 
         # works from an author
@@ -181,26 +189,32 @@ def reindex():
 ##########
 # Review #
 ##########
+#
+# TODO this format syntax is not consistent with others.
 @cli.command()
 @click.option('-s', '--since',  default='1 week ago')
-@click.option('-f', '--format', '_format',  default='org')
-def review(since, _format):
+@click.option('-f', '--fmt', default=None)
+def review(since, fmt):
     """Review new entries added SINCE. This should be something dateparser can handle.
 
-    The default format is org. Other formats might be supported in the future.
+    fmt is a jinja template for the output. Defaults to an org-mode template.
     """
     c = db.execute('''select source, text, extra from sources where date(date_added) > ?''',
                    (dateparser.parse(since).strftime("%Y-%m-%d"),)).fetchall()
-    for source, text, extra in c:
-        if _format == 'org':
-            data = json.loads(extra) or {}
-            print(f'''* {source}
+
+    
+    template = Template(fmt or '''* {{ source }}
 :PROPERTIES:
-:CITED_BY_COUNT: {data.get('cited_by_count', 0)}
+:CITED_BY_COUNT: {{ data.get('cited_by_count', 0) }}
 :END:
 
-{text}
-''')
+{{ text }}
+        ''')
+    
+    for source, text, extra in c:
+        data = json.loads(extra) or {}
+        print(template.render(**locals()))
+            
                    
 
 #############
@@ -210,40 +224,49 @@ def review(since, _format):
 @cli.command()
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
-@click.option('-e', '--emacs', is_flag=True,)
-def vsearch(query, n=3, emacs=False):
+@click.option('-e', '--emacs', is_flag=True, default=False)
+@click.option('-f', '--fmt', default=" {{ i }}. ({{ similarity|round(3) }}) {{ text }}\n\n")
+@click.option('-x', '--cross-encode', is_flag=True, default=False)
+def vsearch(query, n, emacs, fmt, cross_encode):
     """Do a vector search on QUERY.
 
     N is an integer for number of results to return
-    EMACS is a flag for changing the 
+    EMACS is a flag for changing the output format for emacs
+    FORMAT is a jinja template for the output. The variables you have access to are i, source, text, extra, similarity.
+
+    CROSS_ENCODE is a boolean that resorts the results with a cross-encoder.
     """
     query = ' '.join(query)
     model = SentenceTransformer(config['embedding']['model'])
     emb = model.encode([query]).astype(np.float32).tobytes()
-    c = db.execute('''select sources.source, sources.text, vector_distance_cos(?, embedding) from vector_top_k('embedding_idx', ?, ?)
+    
+    c = db.execute('''select sources.source, sources.text, sources.extra, vector_distance_cos(?, embedding) from vector_top_k('embedding_idx', ?, ?)
     join sources on sources.rowid = id''',
     (emb, emb, n))
 
     results = c.fetchall()
-    # This is for integration with emacs.
-    if emacs:
-        print('(')
-        for row in results:
-            source, text, distance = row
-            # This is an s-exp cons cell for emacs
-            
-            print(f'("({distance:1.2f}) {text}" . "{source}")')
-        print(')')
-    else:
-        for i, row in enumerate(results):
-            source, text, similarity = row
-            try:
-                richprint(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
-            except:
-                # rich.errors.MarkupError
-                print(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
 
-        
+    if cross_encode:
+        import torch
+        from sentence_transformers.cross_encoder import CrossEncoder
+
+        # I don't know why I have to set the activation function here, but the score is not 0..1 otherwise
+        ce = CrossEncoder(config['embedding']['cross-encoder'],
+                          default_activation_function=torch.nn.Sigmoid())
+        scores = ce.predict([[query, text] for _, text, _, _ in results])
+        # resort based on the scores
+        results = [results[i] for i in np.argsort(scores)]
+
+    if emacs:
+        template = Template('''( {% for source, text, extra, distance in results %} ("({{ distance|round(3) }}) {{ text }}" . "{{ source }}" ) {% endfor %})''')
+        print(template.render(**locals()))        
+    else:        
+        for i, row in enumerate(results, 1):
+            source, text, extra, similarity = row
+            template = Template(fmt)            
+            richprint(template.render(**locals()))
+
+
 @cli.command()
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
@@ -287,31 +310,74 @@ def gpt(prompt):
 
 @cli.command()
 @click.argument('source')
-@click.option('-e', '--emacs', is_flag=True)
+@click.option('-f', '--fmt', default=None)
+@click.option('-e', '--emacs', is_flag=True, default=False)
 @click.option('-n',  default=3)
-def similar(source, n=3, emacs=False):
+def similar(source, n, emacs, fmt):
     """Find N sources similar to SOURCE by vector similarity.
 
     if EMACS is truthy, the output is lisp for Emacs to read.
+    FMT is a jinja template with access to source, text, and extra
     """
     emb, = db.execute('''select embedding from sources where source = ?''', (source,)).fetchone()
 
-    rows = db.execute('''select sources.source, sources.text from vector_top_k('embedding_idx', ?, ?) join sources on sources.rowid = id''',
+    rows = db.execute('''select sources.source, sources.text, sources.extra from vector_top_k('embedding_idx', ?, ?) join sources on sources.rowid = id''',
                                        # we do n + 1 because the first entry is always the source
                                        (emb, n + 1)).fetchall()[1:]
 
     if emacs:
-        print('(')
-        for row in rows:
-            source, text = row
-            print(f'("{text}" . "{source}")')
-        print(')')
+        template = Template('''({% for source, text, extra in rows %} ("({{ text }}" . "{{ source }}") {% endfor %})''')
+        print(template.render(**locals()))  
     else:
+        template = Template(fmt or '{{ i }}. {{ source }}\n {{text}}\n\n')
         # print starting at index 1, the first item is always the source.
-        for i, row in enumerate(rows):
-            source, text = row
-            richprint(f'{i:2d}. {source}\n{text}\n')
+        for i, row in enumerate(rows, 1):
+            source, text, extra = row
+            richprint(template.render(**locals()))
+
+
+# TODO: semantic similarity with cross-encoder
+
+
+@cli.command()
+@click.argument('query', nargs=-1)
+@click.option('-m', '--max-steps', default=2)
+def isearch(query, n=3, max_steps=2):
+    """Perform an iterative search on QUERY.
+    N is the number of results to return in each search.
+    You will be prompted in each iteration if you want to continue or not. 
+    """
+    query = ' '.join(query)
+    model = SentenceTransformer(config['embedding']['model'])
+    emb = model.encode([query]).astype(np.float32).tobytes()
+    
+    best = None
+    
+    while True:
+        results = db.execute('''select sources.source, sources.text, sources.extra, vector_distance_cos(?, embedding) as d from vector_top_k('embedding_idx', ?, ?)
+    join sources on sources.rowid = id order by d''',
+    (emb, emb, n)).fetchall()
         
+        for source, text, extra, d in results:
+            print(f'{d:1.3f}: {source}')
+
+        current = [x[0] for x in results] # sources
+
+        # This means no change
+        if current == best:
+            print('Nothing new was found')
+            break
+            
+        if input('Continue ([y]/n)?') == 'n':
+            return
+
+        # something changed. add references and loop
+        best = current
+        for source in current:
+            add_work(source, True, True, True)
+
+    print(best)
+
     
 ###########
 # Filters #
@@ -382,8 +448,12 @@ def openalex(query, endpoint='works'):
             'api_key': config['openalex'].get('api_key'),
             'filter': query}
     resp = requests.get(url, params)
+    if resp.status_code != 200:
+        print(resp.text)
+        return
     
     data = resp.json()
+    
   
     print(f'Found {data["meta"]["count"]} results.')
     for result in data['results']:
