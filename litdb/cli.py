@@ -189,8 +189,7 @@ def reindex():
 ##########
 # Review #
 ##########
-#
-# TODO this format syntax is not consistent with others.
+
 @cli.command()
 @click.option('-s', '--since',  default='1 week ago')
 @click.option('-f', '--fmt', default=None)
@@ -334,9 +333,6 @@ def similar(source, n, emacs, fmt):
         for i, row in enumerate(rows, 1):
             source, text, extra = row
             richprint(template.render(**locals()))
-
-
-# TODO: semantic similarity with cross-encoder
 
 
 @cli.command()
