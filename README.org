@@ -273,6 +273,14 @@ Some annoying things that may happen are duplicate content, e.g. because you hav
 
 You should also be careful sharing a litdb that has indexed local files. It may have sensitive information that you don't want others to be able to find.
 
+* Emacs integration
+
+Of course there is some Emacs integration. I made a new link for litdb.
+
+M-x litdb-insert
+
+[[litdb:https://doi.org/10.1021/jp047349j]]
+
 * Database design
 
 litdb uses a sqlite database with libsql. libsql is a sqlite fork with additional capabilities, most notably integrated vector search. 
@@ -329,6 +337,8 @@ Similar limitations exist for local files. There are additionally the following 
 
 1. The quality of document to text influences the ultimate embedding. This varies by type of document, and the library used to convert it.
 2. Local files tend to be longer documents and this can lead to hundreds of text chunks per document. These chunk embeddings are averaged into one embedding. It is not obvious this is as effective as vector search on each chunk, but it is more memory efficient.
+
+The embedding model we use is trained on text. It is probably not as good at finding code, and the gpt we use is also probably not good at generating code. I guess you would need another table in the database for code, and a different model for embedding and generation. This only matters if you index jupyter notebooks (and later if other code files are supported).
 
 * Roadmap
 
@@ -420,3 +430,35 @@ The only thing to be careful about is not exceeding rate limits to OpenAlex. Thi
 ** remote db
 
 The first version of litdb with libsql used a fully remote db on their cloud. The main benefit of that is you can update the db from another machine, keeping your working machine load low. It is a little more complex to set up though, and I got several api errors on long running scripts, and with network issues, so I switched to this local setup. I think you could specify this in the litdb.toml file and have it do the right thing on a project basis.
+
+** ollama and agents
+
+There might be a way to get better results using agents and / or tools. For example, you might have a tool that can lookup new articles on OpenAlex, or augment with google search somehow. Or there might be some iterative prompt building tool that refines the search for related articles based on output results.
+
+Here are some references for when I get back to this.
+
+- https://github.com/ollama/ollama-python
+- https://github.com/MikeyBeez/Ollama_Agents
+- https://github.com/premthomas/Ollama-and-Agents
+- https://medium.com/@lifanov.a.v/integrating-langgraph-with-ollama-for-advanced-llm-applications-d6c10262dafa
+- https://medium.com/@abhilasha.sinha/building-a-crew-of-agents-with-open-source-llm-using-ollama-to-analyze-fund-documents-as-multi-page-756d8fd9fbf0
+- https://blog.paperspace.com/building-local-ai-agents-a-guide-to-langgraph-ai-agents-and-ollama/
+
+I don't use llamaindex (maybe I should see what it does), but it has this section on agents https://docs.llamaindex.ai/en/stable/understanding/agent/
+
+* Related projects
+
+- paper-qa :: https://github.com/Future-House/paper-qa
+  - This project by Andrew White uses LLM+RAG to explore a paper.
+
+These projects require you to make an account. There are freemium levels in each one.
+
+- ResearchRabbit :: https://www.researchrabbit.ai/
+  - This is a browser tool to navigate the scientific literature graphically. You can make collections, and papers that are related by citations are shown in a graph
+
+- LitMaps :: https://www.litmaps.com/
+  - Another browser tool to graphically interact with scientific literature
+
+- Keenious :: https://keenious.com/explore
+  - Browser / Google Docs and Word plugin. Finds related articles to the text in your document.
+  
