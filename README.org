@@ -453,7 +453,7 @@ This would use your microphone to record and transcribe a query for search.
 
 ** Integrate with screenshot + OCR
 
-do the search from the results. I did this with tesseract (https://pypi.org/project/pytesseract/)
+Do the search from the results. I did this with tesseract (https://pypi.org/project/pytesseract/)
 
 #+BEGIN_SRC jupyter-python
 import pyautogui
