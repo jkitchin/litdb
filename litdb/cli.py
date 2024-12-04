@@ -13,6 +13,7 @@ import datetime
 import pathlib
 import warnings
 
+import toml
 from tqdm import tqdm
 import datetime
 import dateparser
@@ -40,8 +41,13 @@ db = get_db()
 def cli():
     """Group command for litdb."""
     pass
-             
 
+@cli.command()
+def init():
+    """Initialize a directory.
+    """
+    print(f'Initialized in {os.getcwd()}')
+  
 #################
 # Add functions #
 #################
