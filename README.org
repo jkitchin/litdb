@@ -447,6 +447,69 @@ The only thing to be careful about is not exceeding rate limits to OpenAlex. Thi
 
 The first version of litdb with libsql used a fully remote db on their cloud. The main benefit of that is you can update the db from another machine, keeping your working machine load low. It is a little more complex to set up though, and I got several api errors on long running scripts, and with network issues, so I switched to this local setup. I think you could specify this in the litdb.toml file and have it do the right thing on a project basis.
 
+** Integrate with audio input
+
+This would use your microphone to record and transcribe a query for search.
+
+** Integrate with screenshot + OCR
+
+do the search from the results. I did this with tesseract (https://pypi.org/project/pytesseract/)
+
+#+BEGIN_SRC jupyter-python
+import pyautogui
+
+# Prompt the user to move the mouse to the first corner and press Enter
+input("Move the mouse to the first corner and press Enter...")
+x1, y1 = pyautogui.position()
+
+# Prompt the user to move the mouse to the opposite corner and press Enter
+input("Move the mouse to the opposite corner and press Enter...")
+x2, y2 = pyautogui.position()
+
+# Calculate the region
+left = min(x1, x2)
+top = min(y1, y2)
+width = abs(x2 - x1)
+height = abs(y2 - y1)
+
+region = (left, top, width, height)
+print(f"Selected region: {region}")
+#+END_SRC
+
+#+RESULTS:
+: Selected region: (26, 332, 473, 69)
+
+#+BEGIN_SRC jupyter-python
+import pyscreeze
+im = pyscreeze.screenshot(region=(left, top, width, height))
+im.save('screenshot.png')
+#+END_SRC
+
+#+RESULTS:
+
+see mss also.
+
+#+BEGIN_SRC jupyter-python
+from PIL import Image
+import pytesseract
+
+# Open an image file
+img = Image.open('screenshot.png')
+
+# Use Tesseract to extract text
+text = pytesseract.image_to_string(img)
+
+# Print the extracted text
+print(text)
+#+END_SRC
+
+#+RESULTS:
+: ++RESULTS:
+: ; Selected region: (26, 332, 473, 69)
+: 
+
+This might be nice later when we have image embeddings.
+
 ** DONE review process 
 
 #+BEGIN_SRC sh

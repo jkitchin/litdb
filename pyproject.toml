@@ -33,7 +33,13 @@ dependencies = [
   "nbformat",
   "ollama",
   "dateparser",
-  "jinja2"
+  "jinja2",
+  "pyaudio",
+  "SpeechRecognition",
+  "pyautogui",	
+  "pyscreeze",
+  "pytesseract"
+
 ]
 
 [project.scripts]
