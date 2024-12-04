@@ -34,12 +34,14 @@ def get_db():
     db.execute('PRAGMA foreign_keys = ON')
     db.execute('PRAGMA journal_mode=WAL')
 
-    db.execute('''create table if not exists
+    _, dim = model.encode(['test']).shape
+
+    db.execute(f'''create table if not exists
 sources(rowid integer primary key,
 source text unique,
 text text,
 extra text,
-embedding F32_BLOB(384),
+embedding F32_BLOB({dim}),
 date_added text)''')
 
     db.execute('''create virtual table if not exists fulltext using fts5(source, text)''')
@@ -111,7 +113,8 @@ def add_work(workid, references=False, citing=False, related=False):
 
     """
 
-    params = {'email': config['openalex']['email']}
+    params = {'email': config['openalex']['email'],
+              'per_page': 200}
     if config['openalex'].get('api_key'):
         params.update(api_key=config['openalex'].get('api_key'))
 
