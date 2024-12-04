@@ -6,6 +6,14 @@ litdb is a tool to help you curate and us your collection of scientific literatu
 
 The idea is you add papers to your database, and then you can search it with natural language queries, and interact with it via an ollama GPT application. It will show you the papers that best match your query. You can read those papers, get bibtex entries for them, or add new papers based on the references, papers that cite that paper, or related papers. You can also set up filters that you update when you want to get new papers created since the last time you checked.
 
+** Installation
+
+Eventually there will be a package on pypi. Until then, you should be able to install litdb with this command.
+
+#+BEGIN_SRC sh
+pip install git+https://github.com/jkitchin/litdb
+#+END_SRC
+
 ** configuration
 
 You have to create a toml configuration file. This file is called litdb.toml. The directory this file is in is considered the root directory. All commands will start in the current working directory and look up to find this file. You can put this file in your home directory, or you can have sub-directories, e.g. a per project litdb.
@@ -21,7 +29,7 @@ db = "litdb.libsql"
 
 [embedding]
 model = 'all-MiniLM-L6-v2'
-embedding_size = 384
+cross-encoder = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
 chunk_size = 1000
 chunk_overlap = 200
 
@@ -29,6 +37,8 @@ chunk_overlap = 200
 [openalex]
 email = "you@example.com"
 api_key = "..."
+
+
 #+END_EXAMPLE
 
 * How do you grow your litdb?
@@ -158,6 +168,12 @@ The default number of entries returned is 3. You can change that with an optiona
 
 #+BEGIN_SRC sh
 litdb vsearch "natural language query" -n 5
+#+END_SRC
+
+There is an iterative version of vsearch called isearch. This finds the closest entries, then downloads the citations, references and related entries for each one, and repeats the query until you tell it to stop, or it doesn't find any new results.
+
+#+BEGIN_SRC sh
+litdb isearch "some query"
 #+END_SRC
 
 **** full text search
@@ -340,36 +356,23 @@ Similar limitations exist for local files. There are additionally the following 
 
 The embedding model we use is trained on text. It is probably not as good at finding code, and the gpt we use is also probably not good at generating code. I guess you would need another table in the database for code, and a different model for embedding and generation. This only matters if you index jupyter notebooks (and later if other code files are supported).
 
+** sqlite + sqlite-vec vs libsql
+
+Vector search is the core requirement for litdb. There are many ways to achieve this. I only considered local solutions so the options are:
+
+- sqlite + vectorlite (https://github.com/1yefuwang1/vectorlite)
+- sqlite + sqlite-vec (https://github.com/asg017/sqlite-vec)
+- libsql https://github.com/tursodatabase/libsql
+
+vectorlite aims to be faster than sqlite-vec, but it relies on hnsw for vector search, and I was uncomfortable figuring out how to set the size of the db for this application.
+
+sqlite-vec is nice, and early versions of litdb used it and its precursor. This approach requires a virtual table for the embeddings. This is installed as an extension, and is still considered in early stages of adoption.
+
+libsql is a fork of sqlite with integrated vector search, and potential for using it as a cloud database. It is supported by a company, with freemium cloud services. In libsql you store the vectors in a regular table, and search on an embedding index. The code is on GitHUB, and can also be used locally. 
+
 * Roadmap
 
 These are ideas for future expansion.
-
-** Emacs integration
-
-Eventually I anticipate Emacs being the main UI to litdb. I don't know if it will replace org-db or augment it. 
-
-** format specifications
-
-There is no way to specify the format of outputs. Eventually that might be nice, e.g. specify to only output paths, so you can pipe those to another command.
-
-** Review process 
-
-You need to have a way to review what comes in to litdb; it is part of learning about what is current. I currently do this with Emacs and scimax-org-feed. You could integrate review with update-filters, or by entries added in the past few days, or some other kind of query. Then you just need to add some format information to get what you want, e.g. org, maybe html?
-
-#+BEGIN_SRC sqlite :db example/litdb.libsql
-select source, date_added from sources where date(date_added) > '2024-11-28' limit 5
-#+END_SRC
-
-#+RESULTS:
-| https://doi.org/10.1021/jp047349j             | 2024-11-29 17:21:51 |
-| https://doi.org/10.1149/1.1856988             | 2024-11-29 17:21:52 |
-| https://doi.org/10.1002/cctc.201000397        | 2024-11-29 17:21:53 |
-| https://doi.org/10.1088/1361-648x/aa680e      | 2024-11-29 17:21:53 |
-| https://doi.org/10.1103/physrevlett.93.156801 | 2024-11-29 17:21:54 |
-
-** web app / fast-api
-
-It might be nice to have a flask app with an API. This would facilitate interaction with Emacs.
 
 ** tag system
 
@@ -383,11 +386,24 @@ It might be helpful to have a graph representation of a paper that shows nodes o
 
 ResearchRabbit and Litmaps do this pretty well.
 
-** semantic similarity 
+** ollama and agents
 
-litdb uses cosine similarity as the distance metric for the nearest neighbors. It might be useful to re-rank these with cross-encoding.
+There might be a way to get better results using agents and / or tools. For example, you might have a tool that can lookup new articles on OpenAlex, or augment with google search somehow. Or there might be some iterative prompt building tool that refines the search for related articles based on output results.
 
-https://www.sbert.net/examples/applications/cross-encoder/README.html
+Here are some references for when I get back to this.
+
+- https://github.com/ollama/ollama-python
+- https://github.com/MikeyBeez/Ollama_Agents
+- https://github.com/premthomas/Ollama-and-Agents
+- https://medium.com/@lifanov.a.v/integrating-langgraph-with-ollama-for-advanced-llm-applications-d6c10262dafa
+- https://medium.com/@abhilasha.sinha/building-a-crew-of-agents-with-open-source-llm-using-ollama-to-analyze-fund-documents-as-multi-page-756d8fd9fbf0
+- https://blog.paperspace.com/building-local-ai-agents-a-guide-to-langgraph-ai-agents-and-ollama/
+
+I don't use llamaindex (maybe I should see what it does), but it has this section on agents https://docs.llamaindex.ai/en/stable/understanding/agent/
+
+** web app / fast-api
+
+It might be nice to have a flask app with an API. This would facilitate interaction with Emacs.
 
 ** combine full text and vector search
 
@@ -395,7 +411,7 @@ Vector search might miss some things. Full text search is hard to do with meanin
 
 https://www.meilisearch.com/blog/full-text-search-vs-vector-search
 
-** Application specific encoders
+** application specific encoders
 
 I use a generic embedding model, and there are others that are better suited for specific tasks. For example:
 
@@ -431,20 +447,32 @@ The only thing to be careful about is not exceeding rate limits to OpenAlex. Thi
 
 The first version of litdb with libsql used a fully remote db on their cloud. The main benefit of that is you can update the db from another machine, keeping your working machine load low. It is a little more complex to set up though, and I got several api errors on long running scripts, and with network issues, so I switched to this local setup. I think you could specify this in the litdb.toml file and have it do the right thing on a project basis.
 
-** ollama and agents
+** DONE review process 
 
-There might be a way to get better results using agents and / or tools. For example, you might have a tool that can lookup new articles on OpenAlex, or augment with google search somehow. Or there might be some iterative prompt building tool that refines the search for related articles based on output results.
+#+BEGIN_SRC sh
+litdb review --since '1 week ago'
+#+END_SRC
 
-Here are some references for when I get back to this.
 
-- https://github.com/ollama/ollama-python
-- https://github.com/MikeyBeez/Ollama_Agents
-- https://github.com/premthomas/Ollama-and-Agents
-- https://medium.com/@lifanov.a.v/integrating-langgraph-with-ollama-for-advanced-llm-applications-d6c10262dafa
-- https://medium.com/@abhilasha.sinha/building-a-crew-of-agents-with-open-source-llm-using-ollama-to-analyze-fund-documents-as-multi-page-756d8fd9fbf0
-- https://blog.paperspace.com/building-local-ai-agents-a-guide-to-langgraph-ai-agents-and-ollama/
+You need to have a way to review what comes in to litdb; it is part of learning about what is current. I currently do this with Emacs and scimax-org-feed. You could integrate review with update-filters, or by entries added in the past few days, or some other kind of query. Then you just need to add some format information to get what you want, e.g. org, maybe html?
 
-I don't use llamaindex (maybe I should see what it does), but it has this section on agents https://docs.llamaindex.ai/en/stable/understanding/agent/
+#+BEGIN_SRC sqlite :db example/litdb.libsql
+select source, date_added from sources where date(date_added) > '2024-11-28' limit 5
+#+END_SRC
+
+#+RESULTS:
+| https://doi.org/10.1021/jp047349j             | 2024-11-29 17:21:51 |
+| https://doi.org/10.1149/1.1856988             | 2024-11-29 17:21:52 |
+| https://doi.org/10.1002/cctc.201000397        | 2024-11-29 17:21:53 |
+| https://doi.org/10.1088/1361-648x/aa680e      | 2024-11-29 17:21:53 |
+| https://doi.org/10.1103/physrevlett.93.156801 | 2024-11-29 17:21:54 |
+
+** DONE semantic similarity 
+CLOSED: [2024-12-04 Wed 13:12]
+
+litdb uses cosine similarity as the distance metric for the nearest neighbors. It might be useful to re-rank these with cross-encoding.
+
+https://www.sbert.net/examples/applications/cross-encoder/README.html
 
 * Related projects
 
