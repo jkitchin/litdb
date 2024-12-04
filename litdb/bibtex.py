@@ -14,6 +14,7 @@ entry_type_by_crossref_type = {
     'journal-article': 'article',
     'book-part': 'inbook',
     'other': 'misc',
+    'paratext': 'misc',    # new line added
     'book': 'book',
     'journal-volume': 'misc',
     'book-set': 'misc',
@@ -39,8 +40,11 @@ entry_type_by_crossref_type = {
 
 
 def dump_bibtex(work):
-    entry_type = entry_type_by_crossref_type.get(work.get('type'))
-    work_id = work.get('id')
+    #entry_type = entry_type_by_crossref_type.get(work.get('type'))
+    entry_type = entry_type_by_crossref_type.get(work.get('type_crossref'))
+
+    #work_id = work.get('id')
+    work_id = work.get('doi') or work.get('id')
 
     if not (entry_type and work_id):
         print(f'Unable to generate a bibtex entry for {work_id} ({entry_type})')
