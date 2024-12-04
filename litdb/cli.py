@@ -513,8 +513,8 @@ def follow(orcid, remove=False):
     data = get_data(url)
     name = data['display_name']  
     
-    db.execute('''insert or ignore into queries(filter, description) values (?, ?)''',
-               (f, name))
+    db.execute('''insert or ignore into queries(filter, description, last_updated) values (?, ?, ?)''',
+               (f, name, datetime.date.today().strftime('%Y-%m-%d')))
     richprint(f'Following {name}: {orcid}')
     db.commit()
 
