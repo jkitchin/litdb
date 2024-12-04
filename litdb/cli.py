@@ -206,24 +206,42 @@ def review(since, _format):
 #############
 # Searching #
 #############
-      
+
 @cli.command()
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
-def vsearch(query, n=3):
+@click.option('-e', '--emacs', is_flag=True,)
+def vsearch(query, n=3, emacs=False):
+    """Do a vector search on QUERY.
+
+    N is an integer for number of results to return
+    EMACS is a flag for changing the 
+    """
     query = ' '.join(query)
     model = SentenceTransformer(config['embedding']['model'])
     emb = model.encode([query]).astype(np.float32).tobytes()
     c = db.execute('''select sources.source, sources.text, vector_distance_cos(?, embedding) from vector_top_k('embedding_idx', ?, ?)
     join sources on sources.rowid = id''',
     (emb, emb, n))
-    for i, row in enumerate(c.fetchall()):
-        source, text, similarity = row
-        try:
-            richprint(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
-        except:
-            # rich.errors.MarkupError
-            print(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
+
+    results = c.fetchall()
+    # This is for integration with emacs.
+    if emacs:
+        print('(')
+        for row in results:
+            source, text, distance = row
+            # This is an s-exp cons cell for emacs
+            
+            print(f'("({distance:1.2f}) {text}" . "{source}")')
+        print(')')
+    else:
+        for i, row in enumerate(results):
+            source, text, similarity = row
+            try:
+                richprint(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
+            except:
+                # rich.errors.MarkupError
+                print(f'{i + 1:2d}. ({similarity:1.2f}) {text}\n\n')
 
         
 @cli.command()
@@ -269,16 +287,30 @@ def gpt(prompt):
 
 @cli.command()
 @click.argument('source')
+@click.option('-e', '--emacs', is_flag=True)
 @click.option('-n',  default=3)
-def similar(source, n=3):
+def similar(source, n=3, emacs=False):
+    """Find N sources similar to SOURCE by vector similarity.
+
+    if EMACS is truthy, the output is lisp for Emacs to read.
+    """
     emb, = db.execute('''select embedding from sources where source = ?''', (source,)).fetchone()
 
-    # print starting at index 1, the first item is always the source.
-    for i, row in enumerate(db.execute('''select sources.source, sources.text from vector_top_k('embedding_idx', ?, ?) join sources on sources.rowid = id''',
+    rows = db.execute('''select sources.source, sources.text from vector_top_k('embedding_idx', ?, ?) join sources on sources.rowid = id''',
                                        # we do n + 1 because the first entry is always the source
-                                       (emb, n + 1)).fetchall()[1:]):
-        source, text = row
-        richprint(f'{i:2d}. {source}\n{text}\n')
+                                       (emb, n + 1)).fetchall()[1:]
+
+    if emacs:
+        print('(')
+        for row in rows:
+            source, text = row
+            print(f'("{text}" . "{source}")')
+        print(')')
+    else:
+        # print starting at index 1, the first item is always the source.
+        for i, row in enumerate(rows):
+            source, text = row
+            richprint(f'{i:2d}. {source}\n{text}\n')
         
     
 ###########
