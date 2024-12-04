@@ -1,0 +1,15 @@
+name: Test installation
+
+on: 
+  push:
+
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5    
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          pip install litdb
