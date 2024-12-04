@@ -32,7 +32,8 @@ dependencies = [
   "nbconvert",
   "nbformat",
   "ollama",
-  "dateparser"
+  "dateparser",
+  "jinja2"
 ]
 
 [project.scripts]
