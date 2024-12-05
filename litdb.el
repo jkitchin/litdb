@@ -164,19 +164,15 @@ candidates.")
 (defun litdb-candidates ()
   "Return the candidates to insert a link.
 Use a cache if possible, and generate if not."
-  (let* ((current-time (current-time))
-	 (attributes (file-attributes litdb-db))
-	 (db-mod-time (nth 5 attributes)))
-    (message "%s  %s" (format-time-string "%Y-%m-%d %H:%m:%s" db-mod-time)
-	     (format-time-string "%Y-%m-%d %H:%m:%s" (car litdb-insert-cache)))
+  (let* ((attributes (file-attributes litdb-db))
+	 (db-mod-time (nth 5 attributes))
+	 (db (sqlite-open litdb-db)))
     (if (and (not (null (car litdb-insert-cache)))
 	     (time-less-p db-mod-time (car litdb-insert-cache)))
 	(cdr litdb-insert-cache)
       ;; generate cache
-      (let* ((db (sqlite-open litdb-db))
-	     (candidates (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")))
-	(setq litdb-insert-cache (cons current-time candidates))
-	candidates))))
+      (prog1 (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")
+	(setq litdb-insert-cache (cons (current-time) candidates))))))
 
 
 (defun litdb-insert-candidate (x)
