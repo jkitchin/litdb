@@ -11,7 +11,7 @@ authors = [
 maintainers = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"}
 ]
-description = "A literature database tool"
+description = "A literature database tool."
 license = {text = "MIT License"}
 readme = {file = "README.org", content-type = "text/org"}
 dependencies = [
