@@ -274,9 +274,11 @@ def update_filter(f, last_updated=None):
 
             results += []
 
-            c = db.execute('''insert or ignore into sources(source, text, extra, embedding, date_added)
-            values(?, ?, ?, ?, ?)''',
-            (source, text, json.dumps(work), embedding, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            c = db.execute('''insert or ignore into
+            sources(source, text, extra, embedding, date_added)
+            values(?, ?, ?, ?, ?)''', (source, text, json.dumps(work),
+                                       embedding, now))
 
             if c.rowcount > 0:
                 db.execute('''insert into fulltext(source, text) values (?, ?)''',
