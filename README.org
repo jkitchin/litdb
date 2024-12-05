@@ -6,7 +6,7 @@ litdb is a tool to help you curate and us your collection of scientific literatu
 
 The idea is you add papers to your database, and then you can search it with natural language queries, and interact with it via an ollama GPT application. It will show you the papers that best match your query. You can read those papers, get bibtex entries for them, or add new papers based on the references, papers that cite that paper, or related papers. You can also set up filters that you update when you want to get new papers created since the last time you checked.
 
-** Installation
+** installation
 
 Eventually there will be a package on pypi. Until then, you should be able to install litdb with this command.
 
@@ -204,6 +204,25 @@ You can use litdb as a RAG source for ollama. This looks up the three most relat
 litdb gpt "what is the state of the art in automated laboratories for soft materials"
 #+END_SRC
 
+**** search with audio
+
+This command will record audio, transcribe that audio to text, and then do a vector search on that text. You will be prompted when the recording starts, and you press return to stop it. litdb will show you what it heard, and ask if you want to do a vector search on it.
+
+#+BEGIN_SRC sh
+litdb audio -p
+#+END_SRC
+
+I haven't found the transcription to be very good on technical scientific terms. This is a proof of concept capability.
+
+**** search from a screenshot
+
+You can copy a screenshot to the clipboard, and then use OCR to extract text from it, and do a vector search on that text.
+
+#+BEGIN_SRC sh
+litdb screenshot
+#+END_SRC
+
+
 *** Exporting entries
 
 You can use these commands to export bibtex entries or citation strings.
@@ -218,12 +237,28 @@ litdb bibtex doi1 doi2
 
 The output can be redirected to a file.
 
+You can also use a search like this and pipe the output to litdb bibtex.
+
+#+BEGIN_SRC sh
+litdb vsearch "machine learning in catalysis
+" -f "{{ source }}" | litdb bibtex
+#+END_SRC
+
+
 **** Get a citation string
+
+This command will output a citation for the sources. It is mostly a convenience function. There is not currently a way to customize the citation.
 
 #+BEGIN_SRC sh
 litdb citation doi1 doi2
 #+END_SRC
 
+You can also use a search like this and pipe the output to litdb bibtex.
+
+#+BEGIN_SRC sh
+litdb vsearch "machine learning in catalysis
+" -f "{{ source }}" | litdb citations
+#+END_SRC
 
 *** Find free pdfs
 
@@ -447,11 +482,13 @@ The only thing to be careful about is not exceeding rate limits to OpenAlex. Thi
 
 The first version of litdb with libsql used a fully remote db on their cloud. The main benefit of that is you can update the db from another machine, keeping your working machine load low. It is a little more complex to set up though, and I got several api errors on long running scripts, and with network issues, so I switched to this local setup. I think you could specify this in the litdb.toml file and have it do the right thing on a project basis.
 
-** Integrate with audio input
+** DONE Integrate with audio input
+CLOSED: [2024-12-05 Thu 09:11]
 
 This would use your microphone to record and transcribe a query for search.
 
-** Integrate with screenshot + OCR
+** DONE Integrate with screenshot + OCR
+CLOSED: [2024-12-05 Thu 09:11]
 
 Do the search from the results. I did this with tesseract (https://pypi.org/project/pytesseract/)
 
