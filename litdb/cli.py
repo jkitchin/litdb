@@ -502,7 +502,7 @@ def isearch(query, n=3, max_steps=2):
             print('Nothing new was found')
             break
             
-        if input('Continue ([y]/n)?') == 'n':
+        if input('Continue ([y]/n)?').lower().startswith('n'):
             return
 
         # something changed. add references and loop
