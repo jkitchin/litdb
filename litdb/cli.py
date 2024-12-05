@@ -510,7 +510,8 @@ def isearch(query, n=3, max_steps=2):
         for source in current:
             add_work(source, True, True, True)
 
-    print(best)
+    for source, text, extra, d in results:
+        print(f'{d:1.3f}: {source}\n{text}')
 
     
 ###########
