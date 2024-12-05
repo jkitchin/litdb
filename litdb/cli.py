@@ -12,6 +12,7 @@ import requests
 import datetime
 import pathlib
 import warnings
+import tempfile
 
 import toml
 from tqdm import tqdm
@@ -226,6 +227,137 @@ def review(since, fmt):
 # Searching #
 #############
 
+@cli.command()
+def screenshot():
+    """Use OCR to get text from an image on the clipboard (probably from a
+    screenshot) and do a vector search on the text.
+
+    """
+    from PIL import ImageGrab
+    import pytesseract
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+    # Grab the image from the clipboard
+    img = ImageGrab.grabclipboard()
+
+    if img:
+        text = pytesseract.image_to_string(img)
+        print(f'Searching for {text}')
+        vsearch(text)
+    else:
+        print("No image found in clipboard.")
+
+
+
+def record():
+    """Make a recording to a tempfile.
+    Returns the audio filename it is recorded in.
+    """
+    import pyaudio
+    import wave
+    import threading
+
+    # Parameters for recording
+    FORMAT = pyaudio.paInt16
+    CHANNELS = 2
+    RATE = 44100
+    CHUNK = 1024
+    
+    _, audio_file = tempfile.mkstemp(suffix='.wav')
+
+    # Initialize PyAudio
+    audio = pyaudio.PyAudio()
+
+    # Function to record audio
+    def record_audio():
+        # Open stream
+        stream = audio.open(format=FORMAT, channels=CHANNELS,
+                            rate=RATE, input=True,
+                            frames_per_buffer=CHUNK)
+        print("Recording... Press Enter to stop.")
+
+        frames = []
+
+        # Record until Enter is pressed
+        while not stop_recording.is_set():
+            data = stream.read(CHUNK)
+            frames.append(data)
+
+        # Stop and close the stream
+        stream.stop_stream()
+        stream.close()
+
+        # Save the recorded data as a WAV file
+        wf = wave.open(audio_file, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(audio.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+
+    # Event to signal when to stop recording
+    stop_recording = threading.Event()
+
+    # Start recording in a separate thread
+    recording_thread = threading.Thread(target=record_audio)
+    recording_thread.start()
+
+    # Wait for Enter key press to stop recording
+    input()
+    stop_recording.set()
+
+    # Wait for the recording thread to finish
+    recording_thread.join()
+
+    # Terminate PyAudio
+    audio.terminate()
+
+    return audio_file
+
+
+@cli.command()
+@click.option('-p', '--playback', is_flag=True, help='Play audio back')
+def audio(playback=False):
+    """Record audio, convert it to text, and do a vector search on the text.
+
+    The idea is nice, but the quality of transcription for scientific words is
+    not that great. A better transcription library might make this more useful.
+    """
+
+    import speech_recognition as sr
+
+    while True:
+        
+        afile = record()
+        audio_file = sr.AudioFile(afile)
+        r = sr.Recognizer()
+        with audio_file as source:
+            audio = r.listen(source)
+            try:
+                text = r.recognize_sphinx(audio)
+                print('\n' + text + '\n')
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
+
+        if playback:
+            import playsound
+            playsound.playsound(afile, block=True)
+            
+        response = input('Is that what you want to search? ([y]/n/q): ')
+        if response.lower().startswith('q'):
+            return
+        elif response.lower().startswith('n'):
+            # record a new audio
+            continue
+        else:
+            # move on to searching
+            break
+
+    vsearch(text)
+    
+
+
+        
 @cli.command()
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)

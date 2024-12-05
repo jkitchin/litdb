@@ -34,12 +34,11 @@ dependencies = [
   "ollama",
   "dateparser",
   "jinja2",
+  "pytesseract",
+  "pillow",
   "pyaudio",
-  "SpeechRecognition",
-  "pyautogui",	
-  "pyscreeze",
-  "pytesseract"
-
+  "playsound",
+  "SpeechRecognition"
 ]
 
 [project.scripts]
