@@ -13,6 +13,7 @@ import datetime
 import pathlib
 import warnings
 import tempfile
+import sys
 
 import toml
 from tqdm import tqdm
@@ -754,7 +755,7 @@ def related(doi, remove=False):
 #############
 # Utilities #
 #############
-        
+
 @cli.command()
 @click.argument('sources', nargs=-1)
 def bibtex(sources):
@@ -762,6 +763,10 @@ def bibtex(sources):
 
     from .bibtex import dump_bibtex
     import json
+
+    if not sources:
+        sources = sys.stdin.read().strip().split()
+    
     for source in sources:
         work, = db.execute('''select extra from sources where source = ?''', (source,)).fetchone()
         richprint(dump_bibtex(json.loads(work)))
