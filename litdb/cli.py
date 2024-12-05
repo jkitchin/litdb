@@ -249,7 +249,6 @@ def screenshot():
         print("No image found in clipboard.")
 
 
-
 def record():
     """Make a recording to a tempfile.
     Returns the audio filename it is recorded in.
