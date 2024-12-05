@@ -51,6 +51,48 @@ litdb has a cli with an entry command of litdb and subcommands (like git) for in
 litdb --help
 #+END_SRC
 
+** Searching the web
+
+You have to start somewhere. You can use this to open a search in OpenAlex.
+
+#+BEGIN_SRC sh
+litdb web query
+#+END_SRC
+
+You can also open searches with these options:
+
+| option                | source         |
+|-----------------------+----------------|
+| -g, --google          | Google         |
+| -gs, --google-scholar | Google Scholar |
+| -ar, --arxiv          | Arxiv          |
+| -pm, --pubmed         | Pubmed         |
+| -cr, --chemrxiv       | ChemRxiv       |
+| -br, --biorxiv        | BioRxiv        |
+| -a, --all             | All            |
+
+You can find starting points this way.
+
+*** Fine-tuned search in OpenAlex
+
+This is a default query in Open Alex. It does not change your litdb, it just does a simple text search query on works.
+
+#+BEGIN_SRC sh
+litdb openalex query
+#+END_SRC
+
+You can get more specific with a filter:
+
+#+BEGIN_SRC sh
+jkitchin$ litdb openalex -f 'author.orcid:https://orcid.org/0000-0003-2625-9232'
+#+END_SRC
+
+You can also search other endpoints and use fulters. Here we perform a search on Sources for display_names that contain the word discovery.
+
+#+BEGIN_SRC sh
+litdb openalex -e sources -f display_name.search:discovery
+#+END_SRC
+
 ** One time additions of articles to litdb
 
 You add an article by its DOI. There are optional arguments to also add references, citing and related articles. 
