@@ -41,11 +41,9 @@ api_key = "..."
 
 #+END_EXAMPLE
 
-* How do you grow your litdb?
+* Using litdb 
 
 Your litdb starts out empty. You have to add articles that are relevant to you. It is an open question of the best way to build a litdb. The answer surely depends on what your aim is. You have to compromise on breadth and depth with the database size. The CLI makes it pretty easy to do this
-
-** The CLI
 
 litdb has a cli with an entry command of litdb and subcommands (like git) for interacting with it. You can see all the options with this command.
 
@@ -53,7 +51,7 @@ litdb has a cli with an entry command of litdb and subcommands (like git) for in
 litdb --help
 #+END_SRC
 
-*** One time additions of articles to litdb
+** One time additions of articles to litdb
 
 You add an article by its DOI. There are optional arguments to also add references, citing and related articles. 
 
@@ -82,11 +80,11 @@ litdb add doi1 doi2 orcid
 
 These are all one time additions.
 
-*** Adding filters
+** Adding filters
 
 litdb provides several convenient ways to add queries to update your litdb in the future.
 
-**** Follow an author
+*** Follow an author
 
 To get new papers by an author, you can follow them.
 
@@ -94,25 +92,25 @@ To get new papers by an author, you can follow them.
 litdb follow orcid
 #+END_SRC
 
-**** Watch a query
+*** Watch a query
 
 #+BEGIN_SRC sh
 litdb watch "filter to query"
 #+END_SRC
 
-**** Citations on a paper
+*** Citations on a paper
 
 #+BEGIN_SRC sh
 litdb citing doi
 #+END_SRC
 
-**** Related papers
+*** Related papers
 
 #+BEGIN_SRC sh
 litdb related doi
 #+END_SRC
 
-**** A custom filter
+*** A custom filter
 
 A filter is used in OpenAlex to search for relevant articles. Here is an example of adding a filter for articles in the journal Digital Discovery. This doesn't add any entries directly, it simply stores the filter in the database. The main difference of this vs the watch command above is the explicit description.
 
@@ -120,7 +118,7 @@ A filter is used in OpenAlex to search for relevant articles. Here is an example
 litdb add-filter "primary_location.source.id:https://openalex.org/S4210202120" -d "Digital Discovery"
 #+END_SRC
 
-**** Managing and updating the filters
+*** Managing and updating the filters
 
 You can get a list of your filters like this.
 
@@ -142,7 +140,7 @@ You can remove a filter like this:
 litdb rm-filter "filter-string"
 #+END_SRC
 
-*** Review your litdb
+** Review your litdb
 
 I find it helpful to review your litdb. To get a list of articles added in the last week, you can run this command. 
 
@@ -152,11 +150,11 @@ litdb review -s "1 week ago"
 
 This works best when you update your litdb regularly. You might want to redirect that into a file so you can review it in an editor of your choice.
 
-*** Searching litdb
+** Searching litdb
 
 There are three search options. 
 
-**** vector search
+*** vector search
 
 The main way litdb was designed to be searched is with by natural language queries. The way this works is your query is converted to a vector using SentenceTransformers, and then a vector search identifies entries in the database that are similar to your query.
 
@@ -176,7 +174,7 @@ There is an iterative version of vsearch called isearch. This finds the closest 
 litdb isearch "some query"
 #+END_SRC
 
-**** full text search
+*** full text search
 
 There is a full text search (full on the text in litdb) available. The command looks like this.
 
@@ -196,7 +194,7 @@ The default number of entries returned is 3. You can change that with an optiona
 litdb fulltext "natural language query" -n 5
 #+END_SRC
 
-**** ollama GPT
+*** ollama GPT
 
 You can use litdb as a RAG source for ollama. This looks up the three most related papers to your query, and uses them as context in a prompt to ollama (with the llama2 model). I find this quite slow (it can be minutes to generate a response on an old Intel Mac). I also find it makes up things like references, and that it is usually necessary to actually read the three papers. The three papers come from the same vector search described above.
 
@@ -204,7 +202,7 @@ You can use litdb as a RAG source for ollama. This looks up the three most relat
 litdb gpt "what is the state of the art in automated laboratories for soft materials"
 #+END_SRC
 
-**** search with audio
+*** search with audio
 
 This command will record audio, transcribe that audio to text, and then do a vector search on that text. You will be prompted when the recording starts, and you press return to stop it. litdb will show you what it heard, and ask if you want to do a vector search on it.
 
@@ -214,7 +212,7 @@ litdb audio -p
 
 I haven't found the transcription to be very good on technical scientific terms. This is a proof of concept capability.
 
-**** search from a screenshot
+*** search from a screenshot
 
 You can copy a screenshot to the clipboard, and then use OCR to extract text from it, and do a vector search on that text.
 
@@ -226,11 +224,49 @@ If you can copy and paste text, you should do that instead. This is helpful to g
 
 Eventually, if images get integrated into litdb, this is also an entry point for image searches.
 
-*** Exporting entries
+** Tagging entries
+
+litdb supports tagging entries so you can group them. To tag a source with tag1 and tag2, use this syntax.
+
+#+BEGIN_SRC sh
+litdb add-tag source -t tag1 -t tag2
+#+END_SRC
+
+You can remove tags like this.
+
+#+BEGIN_SRC sh
+litdb rm-tag source -t tag1 -t tag2
+#+END_SRC
+
+You can delete a tag from the database.
+
+#+BEGIN_SRC sh
+litdb delete-tag tag1
+#+END_SRC
+
+To see all the tags do this.
+
+#+BEGIN_SRC sh
+litdb list-tags
+#+END_SRC
+
+To see entries with a tag:
+
+#+BEGIN_SRC sh
+litdb show-tag tag1
+#+END_SRC
+
+You can use this to export tagged entries into bibtex entries like this.
+
+#+BEGIN_SRC sh
+litdb show-tag workflow -f '{{ source }}' | litdb bibtex
+#+END_SRC
+
+** Exporting entries
 
 You can use these commands to export bibtex entries or citation strings.
 
-**** Get a bibtex entry
+*** Get a bibtex entry
 
 This command will try to generate a bibtex entry for entries in your litdb.
 
@@ -248,7 +284,7 @@ litdb vsearch "machine learning in catalysis
 #+END_SRC
 
 
-**** Get a citation string
+*** Get a citation string
 
 This command will output a citation for the sources. It is mostly a convenience function. There is not currently a way to customize the citation.
 
@@ -263,7 +299,7 @@ litdb vsearch "machine learning in catalysis
 " -f "{{ source }}" | litdb citations
 #+END_SRC
 
-*** Find free pdfs
+** Find free pdfs
 
 You can use litdb to find freely available PDFs via https://unpaywall.org/.
 
@@ -273,7 +309,7 @@ litdb unpaywall doi
 
 These do not always work, and sometimes you get a version from arxiv or pubmed.
 
-*** Low-level interaction with litdb
+** Low-level interaction with litdb
 
 litdb is just a sqlite database (although you need to use the libsql executable for vector search). There is a CLI way to run a sql command. For example, to find all entries with a null bibtex field and their types use a query like this.
 

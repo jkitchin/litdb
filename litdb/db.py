@@ -47,6 +47,17 @@ date_added text)''')
     db.execute('''create virtual table if not exists fulltext using fts5(source, text)''')
 
     db.execute('''create table if not exists
+    tags(rowid integer primary key,
+    tag text unique)''')
+
+    db.execute('''create table if not exists
+    source_tag(rowid integer primary key,
+    source_id integer,
+    tag_id integer,
+    foreign key(source_id) references sources(rowid) on delete cascade,
+    foreign key(tag_id) references tags(rowid) on delete cascade)''')
+
+    db.execute('''create table if not exists
 queries(rowid integer primary key,
 filter text unique,
 description text,
