@@ -3,32 +3,32 @@
 The main command is litdb. There are subcommands for the actions.
 """
 
-import click
-from rich import print as richprint
 import os
-from sentence_transformers import SentenceTransformer
-import bs4
-import requests
 import datetime
 import pathlib
-import warnings
 import tempfile
-import sys
-
-from tqdm import tqdm
-import dateparser
-import json
-import numpy as np
-import ollama
 import time
-import webbrowser
+import sys
+import warnings
+
+import bs4
+import click
+import dateparser
 from docx import Document
-from pptx import Presentation
+from jinja2 import Template
+import json
+from more_itertools import batched
 import nbformat
 from nbconvert import MarkdownExporter
-from jinja2 import Template
+import numpy as np
+import ollama
+from pptx import Presentation
+import requests
+from rich import print as richprint
+from sentence_transformers import SentenceTransformer
 import tabulate
-from more_itertools import batched
+from tqdm import tqdm
+import webbrowser
 
 from . import root, config
 from .db import (get_db, add_source, add_work, add_author,
