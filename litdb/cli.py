@@ -1095,6 +1095,11 @@ def open(source):
 @cli.command()
 @click.argument('orcid')
 def coa(orcid):
+    """Generate Table 4 of Collaborators and Other Affiliations
+
+    ORCID is an orcid URL for the user to generate the table for.
+    The file is saved in {orcid}-{today}.xlsx.
+    """
     from .coa import get_coa
     get_coa(orcid)
 
