@@ -612,7 +612,8 @@ def similar(source, n, emacs, fmt):
 @click.argument('query', nargs=-1)
 @click.option('-n', default=3)
 @click.option('-m', '--max-steps', default=None)
-def isearch(query, n=3, max_steps=None):
+@click.option('-f', '--fmt', default='{{ distance|round(3) }}. {{ source }}\n{{ text }}\n\n')
+def isearch(query, n, max_steps, fmt):
     """Perform an iterative search on QUERY.
 
     N is the number of results to return in each search.
@@ -649,7 +650,7 @@ def isearch(query, n=3, max_steps=None):
             print('Nothing new was found')
             break
 
-        if input('Continue ([y]/n)?').lower().startswith('n'):
+        if input('Search for better matches? ([y]/n)').lower().startswith('n'):
             break
 
         # something changed. add references and loop
@@ -657,8 +658,9 @@ def isearch(query, n=3, max_steps=None):
         for source in current:
             add_work(source, True, True, True)
 
-    for source, text, extra, d in results:
-        print(f'{d:1.3f}: {source}\n{text}')
+    for source, text, extra, distance in results:
+        t = Template(fmt)
+        richprint(t.render(**locals()))
 
     return results
 
