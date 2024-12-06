@@ -29,6 +29,29 @@
   "Path to your litdb.")
 
 
+(defmacro with-litdb (&rest body)
+  "Run BODY in the directory where `litdb-db' is and with db defined."
+  `(let ((default-directory (file-name-directory litdb-db))
+	 (db (sqlite-open litdb-db)))
+     ,@body))
+
+
+(defun litdb-tags ()
+  "Show entries with a tag."
+  (interactive)
+  (let* ((tags (with-litdb
+		(sqlite-select db "select tag, rowid from tags")))
+	 (tag (ivy-read "Tag: " tags))
+	 (tag-id (nth 1 (assoc tag tags)))
+	 (entries (with-litdb
+		   (sqlite-select db "select json_extract(sources.extra, '$.citation'),sources.source
+from sources
+inner join source_tag on sources.rowid = source_tag.source_id
+inner join tags on tags.rowid = source_tag.tag_id
+where source_tag.tag_id = ?" (list tag-id)))))
+
+    (ivy-read "Entry: " entries)))
+
 ;; * litdb link definition
 
 (defface litdb-link-face
@@ -85,14 +108,56 @@ START and END are the bounds. PATH could be a comma-separated list."
 (defhydra litdb-follow (:color blue :hint nil)
   "litdb actions
 "
-  ("o" (browse-url (litdb-path-at-point)) "Open")
-  ("k" (kill-new (litdb-path-at-point)) "Copy source")
-  ("c" (litdb-copy-citation (litdb-path-at-point))
-   "Copy citation")
-  ("b" (litdb-copy-bibtex (litdb-path-at-point))
-   "Copy bibtex")
-  ("a" (litdb-openalex (litdb-path-at-point)) "OpenAlex")
-  ("s" (litdb-insert-similar (litdb-path-at-point)) "Insert related"))
+  ("o" (browse-url (litdb-path-at-point)) "Open" :column "Open")
+  ("a" (litdb-openalex (litdb-path-at-point)) "OpenAlex" :column "Open")
+  
+  ("il" litdb "Insert new link" :column "Insert")
+  ("is" (litdb-insert-similar (litdb-path-at-point)) "Insert similar" :column "Insert")
+  
+  ("k" (kill-new (litdb-path-at-point)) "Copy key" :column "Copy")
+  ("c" (litdb-copy-citation (litdb-path-at-point)) "Copy citation" :column "Copy")
+  ("b" (litdb-copy-bibtex (litdb-path-at-point)) "Copy bibtex" :column "Copy")
+  ("t" litdb-edit-tags-at-point "Edit tags" :column "Copy")
+  
+  ("gf" (let* ((default-directory (file-name-directory litdb-db)))
+	  (message "%s" (shell-command-to-string
+			 (format "litdb add %s --references" (litdb-path-at-point)))))
+   "Get references"  :column "Get")
+  ("gc" (message "%s" (let* ((default-directory (file-name-directory litdb-db)))
+			(shell-command-to-string
+			 (format "litdb add %s --citing" (litdb-path-at-point)))))
+   "Get citing"  :column "Get")
+  ("gr" (let* ((default-directory (file-name-directory litdb-db)))
+	  (message "%s" (shell-command-to-string
+			 (format "litdb add %s --related" (litdb-path-at-point)))))
+   "Get related" :column "Get"))
+
+
+(defun litdb-edit-tags-at-point ()
+  "Edit tags at point."
+  (interactive)
+  (let* ((db (sqlite-open litdb-db))
+	 (tags (cl-loop for (tag) in  (sqlite-select db "select tag from tags")
+			collect tag))
+	 (source (litdb-path-at-point))
+	 (source-id (caar (sqlite-select db "select rowid from sources where source = ?" (list source))))
+	 (current-tags (cl-loop for (tag) in  (sqlite-select db "select tags.tag from tags inner join source_tag on tags.rowid=source_tag.tag_id where source_tag.source_id=?" (list source-id))
+				collect tag))
+	 (new-tags (string-split (read-string "Tags (space separated): " (string-join current-tags " ")) " ")))
+
+    ;; delete old tags
+    (cl-loop for tag in current-tags do
+	     (let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
+	       (sqlite-execute db "delete from source_tag where source_tag.source_id=? and source_tag.tag_id=?"
+	      		       (list source-id tag-id))))
+
+    ;; add new tags
+    (cl-loop for tag in new-tags do
+	     (progn
+	       (sqlite-execute db "insert or ignore into tags(tag) values (?)" (list tag))
+	       (let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
+		 (sqlite-execute db "insert into source_tag(source_id, tag_id) values (?, ?)"
+				 (list source-id tag-id)))))))
 
 
 (defun litdb-insert-similar (source)
@@ -136,7 +201,6 @@ This function is kind of slow because it uses the cli."
   (let* ((db (sqlite-open litdb-db)))
     (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
 				   (list source))))))
-
 
 (defun litdb-follow (_path)
   "Hydra for litdb-follow function"
@@ -182,7 +246,7 @@ X is a candidate (citation source) as a list."
    ;; on a source in a link. add to end
    ((get-text-property (point) 'litdb)
     ;; go to end, insert source
-    (goto-char (next-single-property-change (point) 'litdb))
+    (goto-char (or (next-single-property-change (point) 'litdb) (line-end-position)))
     (insert (format ",%s" (nth 1 x))))
 
    ;; at the end of a link, one character past. this won't work for bracketed links
@@ -352,6 +416,46 @@ This has potential for an async function."
     (goto-char (point-min))))
 
 
+;; * review functions
+
+(defun litdb-review (since)
+  "Open a buffer to review articles SINCE a date."
+  (interactive "sSince: ")
+  (let ((buf (get-buffer-create (format "*litdb review - %s" since))))
+    
+    (with-current-buffer buf
+      (insert (with-litdb
+	       (shell-command-to-string (format "litdb review -s \"%s\"" since)))))
+    (pop-to-buffer buf)
+    (goto-char (point-min))
+    (org-mode)))
+
+;; TODO add speed keys for things, tag, delete, ?
+
+(defun litdb-insert-article (doi)
+  "Add DOI to litdb, and insert an org item for review."
+  ;; TODO: make a heading? tag the entry as unread or something?
+  (interactive (list (cond
+		      ((region-active-p)
+		       (buffer-substring (region-beginning) (region-end)))
+		      ((progn
+			 (let ((current-kill (ignore-errors (current-kill 0 t))))
+			   (when (and (stringp current-kill)
+				      (or
+				       (string-prefix-p "https://doi.org" current-kill)
+				       (string-prefix-p "http://dx.doi.org" current-kill)
+				       (string-prefix-p "10." current-kill)))
+			     current-kill))))
+		      (t
+		       (read-string "DOI: ")))))
+  (let ((default-directory (file-name-directory litdb-db))
+	(db (sqlite-open litdb-db)))
+    
+    (shell-command (format "litdb add \"%s\"" doi))
+    (insert 
+     (caar
+      (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi))))
+    (insert (format " litdb:%s" doi))))
 
 ;; * extract entries to bibtex
 
