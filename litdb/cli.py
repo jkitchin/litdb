@@ -86,7 +86,8 @@ def add(sources, references=False, citing=False, related=False, all=False):
             add_work(source, references, citing, related)
 
         # works from an author
-        elif 'orcid' in source or source.lower().startswith('https://openalex.org/a'):
+        elif ('orcid' in source or
+              source.lower().startswith('https://openalex.org/a')):
             add_author(source)
 
         # a bibtex file
@@ -100,7 +101,8 @@ def add(sources, references=False, citing=False, related=False, all=False):
         # docx
         elif source.endswith('.docx'):
             doc = Document(source)
-            add_source(source, '\n'.join([para.text for para in doc.paragraphs]))
+            add_source(source, '\n'.join([para.text for para
+                                          in doc.paragraphs]))
 
         # pptx
         elif source.endswith('.pptx'):
@@ -482,7 +484,8 @@ def audio(playback=False):
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
 @click.option('-e', '--emacs', is_flag=True, default=False)
-@click.option('-f', '--fmt', default=" {{ i }}. ({{ similarity|round(3) }}) {{ text }}\n\n")
+@click.option('-f', '--fmt',
+              default=" {{ i }}. ({{ similarity|round(3) }}) {{ text }}\n\n")
 @click.option('-x', '--cross-encode', is_flag=True, default=False)
 def vsearch(query, n, emacs, fmt, cross_encode):
     """Do a vector search on QUERY.
@@ -612,7 +615,8 @@ def similar(source, n, emacs, fmt):
 @click.argument('query', nargs=-1)
 @click.option('-n', default=3)
 @click.option('-m', '--max-steps', default=None)
-@click.option('-f', '--fmt', default='{{ distance|round(3) }}. {{ source }}\n{{ text }}\n\n')
+@click.option('-f', '--fmt',
+              default='{{ distance|round(3) }}. {{ source }}\n{{ text }}\n\n')
 def isearch(query, n, max_steps, fmt):
     """Perform an iterative search on QUERY.
 
@@ -641,7 +645,7 @@ def isearch(query, n, max_steps, fmt):
 
         steps += 1
         if steps == max_steps:
-            break            
+            break
 
         current = [x[0] for x in results]  # sources
 
@@ -725,11 +729,10 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
         url = f'https://www.biorxiv.org/search/{query}'
         webbrowser.open(url)
 
-
-
 ###########
 # Filters #
 ###########
+
 
 @cli.command()
 @click.argument('filter')
@@ -983,8 +986,7 @@ def related(doi, remove=False):
         richprint(f'Deleted {c.rowcount} rows')
     else:
         c = db.execute('''insert or ignore into queries(filter, description)
-        values (?, ?)''',
-        (f'related_to:{wid}', f'Related papers for {doi}'))
+        values (?, ?)''', (f'related_to:{wid}', f'Related papers for {doi}'))
 
         db.commit()
         richprint(f'Added {c.rowcount} rows')
@@ -1024,7 +1026,6 @@ def citation(sources):
 @click.argument('doi')
 def unpaywall(doi):
     """Use unpaywall to find PDFs for doi."""
-
     url = f'https://api.unpaywall.org/v2/{doi}'
     params = {'email': config['openalex']['email']}
 
@@ -1092,10 +1093,11 @@ def open(source):
 # Academic functions #
 ######################
 
+
 @cli.command()
 @click.argument('orcid')
 def coa(orcid):
-    """Generate Table 4 of Collaborators and Other Affiliations
+    """Generate Table 4 of Collaborators and Other Affiliations for NSF.
 
     ORCID is an orcid URL for the user to generate the table for.
     The file is saved in {orcid}-{today}.xlsx.
@@ -1135,19 +1137,19 @@ def suggest_reviewers(query, n):
 
     for i, row in enumerate(results):
         source, citation, extra, distance = row
-                
+
         d = json.loads(extra)
-    
+
         for authorship in d['authorships']:
             authors += [authorship['author']['id']]
 
-    # get the unique ones    
+    # get the unique ones
     authors = set(authors)
 
     # Get author information
     data = []
 
-    url = f'https://api.openalex.org/authors/'
+    url = 'https://api.openalex.org/authors/'
     for batch in batched(authors, 50):
         url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
 
@@ -1161,16 +1163,19 @@ def suggest_reviewers(query, n):
                    d['affiliations'][0]['institution']['display_name'])
             row = [d['display_name'], d['summary_stats']['h_index'], d['id'], lki]
             data += [row]
-            
-    # Sort and display the results
-    data.sort(key = lambda row: row[1], reverse=True)
 
-    print(tabulate.tabulate(data, headers=['name', 'h-index', 'oaid', 'institution'],
+    # Sort and display the results
+    data.sort(key=lambda row: row[1], reverse=True)
+
+    print(tabulate.tabulate(data, headers=['name', 'h-index', 'oaid',
+                                           'institution'],
                             tablefmt='orgtbl'))
 
     print('\n' + 'From these papers:')
     for i, row in enumerate(results):
         source, citation, extra, distance = row
         print(f'{i + 1:2d}. {citation} (source)\n\n')
+
+
 if __name__ == '__main__':
     cli()
