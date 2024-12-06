@@ -641,7 +641,7 @@ def isearch(query, n, max_steps, fmt):
         order by d''', (emb, emb, n)).fetchall()
 
         for source, text, extra, d in results:
-            print(f'{d:1.3f}: {source}')
+            richprint(f'{d:1.3f}: {source}')
 
         steps += 1
         if steps == max_steps:
@@ -1108,7 +1108,7 @@ def coa(orcid):
 
 @cli.command()
 @click.argument('query', nargs=-1)
-@click.option('-n', default=5)
+@click.option('-n', default=5, help='Number of documents to use')
 def suggest_reviewers(query, n):
     """Suggest reviewers for QUERY.
 
@@ -1116,21 +1116,11 @@ def suggest_reviewers(query, n):
     prompted to expand the search.
     """
     query = ' '.join(query)
-    model = SentenceTransformer(config['embedding']['model'])
-    emb = model.encode([query]).astype(np.float32).tobytes()
 
-    results = db.execute('''select
-        sources.source, sources.text,
-        sources.extra, vector_distance_cos(?, embedding) as d
-        from vector_top_k('embedding_idx', ?, ?)
-        join sources on sources.rowid = id
-        order by d''', (emb, emb, n)).fetchall()
-
-    for source, text, extra, d in results:
-        richprint(f'{d:1.3f}: {source}')
-
-    if input('Look for something better (n/y): ').lower().startswith('y'):
-        results = isearch(query.split(' '), n=n)
+    # This is a surprise. You can't just call the functions above! This is
+    # apparently the way to do this.
+    with click.Context(isearch) as ctx:
+        results = ctx.invoke(isearch, query=query.split(' '), n=n, fmt='')
 
     # Now collect the authors from the matching papers
     authors = []
@@ -1166,7 +1156,7 @@ def suggest_reviewers(query, n):
 
     # Sort and display the results
     data.sort(key=lambda row: row[1], reverse=True)
-
+    print('Potential reviewers')
     print(tabulate.tabulate(data, headers=['name', 'h-index', 'oaid',
                                            'institution'],
                             tablefmt='orgtbl'))
@@ -1174,7 +1164,7 @@ def suggest_reviewers(query, n):
     print('\n' + 'From these papers:')
     for i, row in enumerate(results):
         source, citation, extra, distance = row
-        print(f'{i + 1:2d}. {citation} (source)\n\n')
+        richprint(f'{i + 1:2d}. {citation} (source)\n\n')
 
 
 if __name__ == '__main__':
