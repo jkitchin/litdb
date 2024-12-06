@@ -27,6 +27,8 @@ from pptx import Presentation
 import nbformat
 from nbconvert import MarkdownExporter
 from jinja2 import Template
+import tabulate
+from more_itertools import batched
 
 from . import root, config
 from .db import (get_db, add_source, add_work, add_author,
@@ -84,7 +86,7 @@ def add(sources, references=False, citing=False, related=False, all=False):
             add_work(source, references, citing, related)
 
         # works from an author
-        elif 'orcid' in source:
+        elif 'orcid' in source or source.lower().startswith('https://openalex.org/a'):
             add_author(source)
 
         # a bibtex file
@@ -225,7 +227,6 @@ def add_tag(sources, tags):
 
             if not tag_id:
                 c = db.execute('insert into tags(tag) values (?)', (tag,))
-                print(f'Inserted {c.lastrowid}')
                 tag_id = c.lastrowid
                 db.commit()
             else:
@@ -597,7 +598,7 @@ def similar(source, n, emacs, fmt):
     if emacs:
         template = Template('({% for source, text, extra in rows %}'
                             ' ("({{ text }}" . "{{ source }}")'
-                            ' {% endfor %})''')
+                            ' {% endfor %})')
         print(template.render(**locals()))
     else:
         template = Template(fmt or '{{ i }}. {{ source }}\n {{text}}\n\n')
@@ -609,8 +610,9 @@ def similar(source, n, emacs, fmt):
 
 @cli.command()
 @click.argument('query', nargs=-1)
-@click.option('-m', '--max-steps', default=2)
-def isearch(query, n=3, max_steps=2):
+@click.option('-n', default=3)
+@click.option('-m', '--max-steps', default=None)
+def isearch(query, n=3, max_steps=None):
     """Perform an iterative search on QUERY.
 
     N is the number of results to return in each search.
@@ -622,7 +624,10 @@ def isearch(query, n=3, max_steps=2):
 
     best = None
 
+    steps = 0
+
     while True:
+
         results = db.execute('''select
         sources.source, sources.text,
         sources.extra, vector_distance_cos(?, embedding) as d
@@ -633,6 +638,10 @@ def isearch(query, n=3, max_steps=2):
         for source, text, extra, d in results:
             print(f'{d:1.3f}: {source}')
 
+        steps += 1
+        if steps == max_steps:
+            break            
+
         current = [x[0] for x in results]  # sources
 
         # This means no change
@@ -641,7 +650,7 @@ def isearch(query, n=3, max_steps=2):
             break
 
         if input('Continue ([y]/n)?').lower().startswith('n'):
-            return
+            break
 
         # something changed. add references and loop
         best = current
@@ -650,6 +659,8 @@ def isearch(query, n=3, max_steps=2):
 
     for source, text, extra, d in results:
         print(f'{d:1.3f}: {source}\n{text}')
+
+    return results
 
 
 @cli.command()
@@ -1075,6 +1086,84 @@ def open(source):
     else:
         webbrowser.open(f'file://{source}')
 
+######################
+# Academic functions #
+######################
 
+@cli.command()
+@click.argument('orcid')
+def coa(orcid):
+    from .coa import get_coa
+    get_coa(orcid)
+
+
+@cli.command()
+@click.argument('query', nargs=-1)
+@click.option('-n', default=5)
+def suggest_reviewers(query, n):
+    """Suggest reviewers for QUERY.
+
+    Use up to N similar documents. This is an iterative function, you will be
+    prompted to expand the search.
+    """
+    query = ' '.join(query)
+    model = SentenceTransformer(config['embedding']['model'])
+    emb = model.encode([query]).astype(np.float32).tobytes()
+
+    results = db.execute('''select
+        sources.source, sources.text,
+        sources.extra, vector_distance_cos(?, embedding) as d
+        from vector_top_k('embedding_idx', ?, ?)
+        join sources on sources.rowid = id
+        order by d''', (emb, emb, n)).fetchall()
+
+    for source, text, extra, d in results:
+        richprint(f'{d:1.3f}: {source}')
+
+    if input('Look for something better (n/y): ').lower().startswith('y'):
+        results = isearch(query.split(' '), n=n)
+
+    # Now collect the authors from the matching papers
+    authors = []
+
+    for i, row in enumerate(results):
+        source, citation, extra, distance = row
+                
+        d = json.loads(extra)
+    
+        for authorship in d['authorships']:
+            authors += [authorship['author']['id']]
+
+    # get the unique ones    
+    authors = set(authors)
+
+    # Get author information
+    data = []
+
+    url = f'https://api.openalex.org/authors/'
+    for batch in batched(authors, 50):
+        url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
+
+        params = {'per-page': 50,
+                  'email': config['openalex']['email']}
+
+        r = get_data(url, params)
+
+        for d in r['results']:
+            lki = (d.get('last_known_institutions', [])[0].get('display_name') or
+                   d['affiliations'][0]['institution']['display_name'])
+            row = [d['display_name'], d['summary_stats']['h_index'], d['id'], lki]
+            data += [row]
+            
+    # Sort and display the results
+    data.sort(key = lambda row: row[1], reverse=True)
+
+    print(tabulate.tabulate(data, headers=['name', 'h-index', 'oaid', 'institution'],
+                            tablefmt='orgtbl'))
+
+    print('\n' + 'From these papers:')
+    for i, row in enumerate(results):
+        source, citation, extra, distance = row
+        print(f'{i + 1:2d}. {citation} (source)\n\n')
 if __name__ == '__main__':
     cli()

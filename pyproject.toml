@@ -38,7 +38,12 @@ dependencies = [
   "pillow",
   "pyaudio",
   "playsound",
-  "SpeechRecognition"
+  "SpeechRecognition",
+  # for coa
+  "pandas",
+  "more-itertools",
+  "nameparser",
+  "tabulate"
 ]
 
 [project.scripts]
