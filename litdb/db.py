@@ -178,7 +178,8 @@ def add_work(workid, references=False, citing=False, related=False):
 
             # TODO: should the max citations to trigger this be configurable in litdb.toml
             trigger = config['openalex'].get('citation_count_trigger', 100)
-            if count:=cdata['meta']['count'] > trigger:
+            count = cdata['meta']['count']
+            if count > trigger:
                 r = input(f'Found {count} citations. Do you want to download them all? (n/y): ')
                 if r.lower().startswith('n'):
                     return
