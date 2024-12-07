@@ -912,36 +912,37 @@ def author_search(name):
 
 
 @cli.command()
-@click.argument('orcid')
+@click.argument('orcids', nargs=-1)
 @click.option('-r', '--remove', is_flag=True, help='remove')
-def follow(orcid, remove=False):
+def follow(orcids, remove=False):
     """Add a filter to follow orcid."""
-    if not orcid.startswith('http'):
-        orcid = f'https://orcid.org/{orcid}'
+    for orcid in orcids:
+        if not orcid.startswith('http'):
+            orcid = f'https://orcid.org/{orcid}'
 
-    # Seems like we should get their articles first.
-    add_author(orcid)
+        # Seems like we should get their articles first.
+        add_author(orcid)
 
-    f = f'author.orcid:{orcid}'
+        f = f'author.orcid:{orcid}'
 
-    if remove:
-        c = db.execute('''delete from queries where  filter = ?''',
-                       (f,))
+        if remove:
+            c = db.execute('''delete from queries where  filter = ?''',
+                           (f,))
+            db.commit()
+            richprint(f'{c.rowcount} rows removed')
+            return
+
+        url = f'https://api.openalex.org/authors/{orcid}'
+        data = get_data(url)
+        name = data['display_name']
+
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        db.execute('''insert or ignore into
+        queries(filter, description, last_updated)
+        values (?, ?, ?)''', (f, name, today))
+
+        richprint(f'Following {name}: {orcid}')
         db.commit()
-        richprint(f'{c.rowcount} rows removed')
-        return
-
-    url = f'https://api.openalex.org/authors/{orcid}'
-    data = get_data(url)
-    name = data['display_name']
-
-    today = datetime.date.today().strftime('%Y-%m-%d')
-    db.execute('''insert or ignore into
-    queries(filter, description, last_updated)
-    values (?, ?, ?)''', (f, name, today))
-
-    richprint(f'Following {name}: {orcid}')
-    db.commit()
 
 
 @cli.command()
