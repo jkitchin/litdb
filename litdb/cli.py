@@ -1213,7 +1213,7 @@ def suggest_reviewers(query, n):
             data += [row]
 
     # Sort and display the results
-    data.sort(key=lambda row: row[1], reverse=True)
+    data.sort(key=lambda row: row[2], reverse=True)
     print('Potential reviewers')
     print(tabulate.tabulate(data, headers=['name', '# papers', 'h-index', 'oaid',
                                            'institution'],
