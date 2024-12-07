@@ -1136,12 +1136,15 @@ def suggest_reviewers(query, n):
             authors += [authorship['author']['id']]
 
     # get the unique ones
-    authors = set(authors)
-
+    from collections import Counter
+    authors = Counter(authors)
+   
     # Get author information
     data = []
 
     url = 'https://api.openalex.org/authors/'
+    # You can only filter on 50 ids at a time, so we hard code this limit here
+    # and per page.
     for batch in batched(authors, 50):
         url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
 
@@ -1153,13 +1156,14 @@ def suggest_reviewers(query, n):
         for d in r['results']:
             lki = (d.get('last_known_institutions', [])[0].get('display_name') or
                    d['affiliations'][0]['institution']['display_name'])
-            row = [d['display_name'], d['summary_stats']['h_index'], d['id'], lki]
+            row = [d['display_name'], authors[d['id']],
+                   d['summary_stats']['h_index'], d['id'], lki]
             data += [row]
 
     # Sort and display the results
     data.sort(key=lambda row: row[1], reverse=True)
     print('Potential reviewers')
-    print(tabulate.tabulate(data, headers=['name', 'h-index', 'oaid',
+    print(tabulate.tabulate(data, headers=['name', '# papers', 'h-index', 'oaid',
                                            'institution'],
                             tablefmt='orgtbl'))
 
