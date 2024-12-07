@@ -420,19 +420,66 @@ This has potential for an async function."
 
 ;; * review functions
 
-(defun litdb-review (since)
-  "Open a buffer to review articles SINCE a date."
-  (interactive (list (read-string "Since: " "one week ago")))
-  (let ((buf (get-buffer-create (format "*litdb review - %s*" since))))
-    
-    (with-current-buffer buf
-      (insert (with-litdb
-	       (shell-command-to-string (format "litdb review -s \"%s\"" since)))))
-    (pop-to-buffer buf)
-    (goto-char (point-min))
-    (org-mode)))
+(defcustom litdb-speed-commands
+  '(;; delete org heading
+    ("d" . (progn
+	     (org-mark-element)
+	     (cl--set-buffer-substring (region-beginning)
+				       (region-end)
+				       "")
+	     (litdb-review-header)))
+    ;; TODO
+    ;; tag entry
+    ;; delete entry
+    ;; refile to somewhere
+    ;; get related, citing, references
+    )
+  "List of speed commands for litdb.")
 
-;; TODO add speed keys for things, tag, delete, ?
+(defun litdb-speed-keys (keys)
+  "Find the command to run for KEYS."
+  (when (and (string-prefix-p "*litdb review" (buffer-name))
+	     (bolp)
+	     (looking-at org-outline-regexp))
+    (cdr (assoc keys litdb-speed-commands))))
+
+(add-hook 'org-speed-command-hook 'litdb-speed-keys)
+
+
+(defun litdb-review-header ()
+  "Add/update a header with number of entries."
+  (setq header-line-format
+	(format "%s entries - Click to update" (count-matches org-heading-regexp (point-min) (point-max)))))
+
+
+(local-set-key [header-line down-mouse-1]
+	       `(lambda ()
+		  (interactive)
+		  (litdb-review-header)))
+
+
+(defun litdb-review (since)
+  "Open a buffer to review articles SINCE a date.
+This runs asynchronously, and a review buffer appears in another frame."
+  (interactive (list (read-string "Since: " "one week ago")))
+  (async-start
+   ;; What to do in the child process
+   `(lambda ()
+      (let ((default-directory (file-name-directory ,litdb-db)))
+	(shell-command "litdb update-filters")
+	(shell-command-to-string (format "litdb review -s \"%s\"" ,since))))
+
+   ;; What to do when it finishes
+   `(lambda (result)
+      (message "Something got done!")
+      (let ((buf (get-buffer-create (format "*litdb review - %s*" ,since))))
+	(with-current-buffer buf
+	  (insert result))
+	(switch-to-buffer-other-frame buf)
+	(goto-char (point-min))
+	(org-mode)
+	(litdb-review-header)))))
+
 
 (defun litdb-insert-article (doi)
   "Add DOI to litdb, and insert an org item for review."
