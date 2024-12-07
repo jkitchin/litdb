@@ -422,8 +422,8 @@ This has potential for an async function."
 
 (defun litdb-review (since)
   "Open a buffer to review articles SINCE a date."
-  (interactive "sSince: ")
-  (let ((buf (get-buffer-create (format "*litdb review - %s" since))))
+  (interactive (list (read-string "Since: " "one week ago")))
+  (let ((buf (get-buffer-create (format "*litdb review - %s*" since))))
     
     (with-current-buffer buf
       (insert (with-litdb
