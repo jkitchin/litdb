@@ -230,13 +230,15 @@ candidates.")
 Use a cache if possible, and generate if not."
   (let* ((attributes (file-attributes litdb-db))
 	 (db-mod-time (nth 5 attributes))
-	 (db (sqlite-open litdb-db)))
+	 (db (sqlite-open litdb-db))
+	 candidates)
     (if (and (not (null (car litdb-insert-cache)))
 	     (time-less-p db-mod-time (car litdb-insert-cache)))
 	(cdr litdb-insert-cache)
       ;; generate cache
-      (prog1 (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")
-	(setq litdb-insert-cache (cons (current-time) candidates))))))
+      (setq candidates (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")
+	    litdb-insert-cache (cons (current-time) candidates))
+      candidates)))
 
 
 (defun litdb-insert-candidate (x)
