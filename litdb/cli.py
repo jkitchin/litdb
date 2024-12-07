@@ -486,10 +486,12 @@ def audio(playback=False):
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
 @click.option('-e', '--emacs', is_flag=True, default=False)
+@click.option('-i', '--iterative', is_flag=True, default=False)
+@click.option('-m', '--max-steps', default=None)
 @click.option('-f', '--fmt',
-              default=" {{ i }}. ({{ similarity|round(3) }}) {{ text }}\n\n")
+              default=" {{ i }}. ({{ score|round(3) }}) {{ text }}\n\n")
 @click.option('-x', '--cross-encode', is_flag=True, default=False)
-def vsearch(query, n, emacs, fmt, cross_encode):
+def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
     """Do a vector search on QUERY.
 
     N is an integer for number of results to return
@@ -500,17 +502,62 @@ def vsearch(query, n, emacs, fmt, cross_encode):
 
     CROSS_ENCODE is a boolean that resorts the results with a cross-encoder.
 
+    ITERATIVE is a boolean that expands the search by references, citations and
+    related articles from the top matches until you tell it to stop or reach
+    MAX_STEPS.
+
+    MAX_STEPS is the maximum number of iterations to take. If you set this, you
+    will not be prompted each time, it will just run those steps until nothing
+    better is found, or you reach the number.
+
     """
     query = ' '.join(query)
     model = SentenceTransformer(config['embedding']['model'])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
-    c = db.execute('''select sources.source, sources.text,
-    sources.extra, vector_distance_cos(?, embedding)
-    from vector_top_k('embedding_idx', ?, ?)
-    join sources on sources.rowid = id''', (emb, emb, n))
+    if iterative:
+        best = None
 
-    results = c.fetchall()
+        steps = 0
+
+        while True:
+
+            results = db.execute('''select
+            sources.source, sources.text,
+            sources.extra, vector_distance_cos(?, embedding) as d
+            from vector_top_k('embedding_idx', ?, ?)
+            join sources on sources.rowid = id
+            order by d''', (emb, emb, n)).fetchall()
+
+            for source, text, extra, d in results:
+                richprint(f'{d:1.3f}: {source}')
+
+            steps += 1
+            if steps == max_steps:
+                break
+
+            current = [x[0] for x in results]  # sources
+
+            # This means no change
+            if current == best:
+                print('Nothing new was found')
+                break
+
+            if not max_steps and input('Search for better matches? ([y]/n)').lower().startswith('n'):
+                break
+
+            # something changed. add references and loop
+            best = current
+            for source in current:
+                add_work(source, True, True, True)
+        
+    else:
+        c = db.execute('''select sources.source, sources.text,
+        sources.extra, vector_distance_cos(?, embedding)
+        from vector_top_k('embedding_idx', ?, ?)
+        join sources on sources.rowid = id''', (emb, emb, n))
+
+        results = c.fetchall()
 
     if cross_encode:
         import torch
@@ -525,31 +572,38 @@ def vsearch(query, n, emacs, fmt, cross_encode):
         results = [results[i] for i in np.argsort(scores)]
 
     if emacs:
-        tmpl = ('( {% for source, text, extra, distance in results %}'
-                '("({{ distance|round(3) }}) {{ text }}" . "{{ source }}") '
+        tmpl = ('( {% for source, text, extra, score in results %}'
+                '("({{ score|round(3) }}) {{ text }}" . "{{ source }}") '
                 '{% endfor %})')
         template = Template(tmpl)
         print(template.render(**locals()))
     else:
         for i, row in enumerate(results, 1):
-            source, text, extra, similarity = row
+            source, text, extra, score = row
             template = Template(fmt)
             richprint(template.render(**locals()))
+
+    return results
 
 
 @cli.command()
 @click.argument('query', nargs=-1)
 @click.option('-n',  default=3)
-def fulltext(query, n):
+@click.option('-f', '--fmt', default='{{ source }} ({{ score | round(3) }})\n{{ text }}')
+def fulltext(query, n, fmt):
     """Perform a fulltext search on litdb."""
     query = ' '.join(query)
 
-    for source, text in db.execute('''select
-    source, snippet(fulltext, 1, '', '', '', 16)
+    results = db.execute('''select
+    sources.source, snippet(fulltext, 1, '', '', '', 16), sources.extra, bm25(fulltext)
     from fulltext
-    where text match ? order by rank limit ?''', (query, n)).fetchall():
-        richprint(f"[link]{source}[/link]")
-        richprint(text + '\n')
+    inner join sources on fulltext.source = sources.source
+    where fulltext.text match ? order by rank limit ?''', (query, n)).fetchall()
+    
+    for source, text, extra, score in results:
+        richprint(Template(fmt).render(**locals()))
+
+    return results
 
 
 # Adapted from https://www.arsturn.com/blog/understanding-ollamas-embedding-models
@@ -614,62 +668,58 @@ def similar(source, n, emacs, fmt):
 
 
 @cli.command()
-@click.argument('query', nargs=-1)
-@click.option('-n', default=3)
-@click.option('-m', '--max-steps', default=None)
+@click.argument('vector_query')
+@click.argument('text_query')
+@click.option('-n', default=5)
 @click.option('-f', '--fmt',
-              default='{{ distance|round(3) }}. {{ source }}\n{{ text }}\n\n')
-def isearch(query, n, max_steps, fmt):
-    """Perform an iterative search on QUERY.
+              default='{{ source }} ({{ score | round(3) }})\n{{ text }}\n\n')
+def hybrid_search(vector_query, text_query, n, fmt):
+    """Perform a hybrid vector and full text search.
 
-    N is the number of results to return in each search.
-    You will be prompted in each iteration if you want to continue or not.
+    VECTOR_QUERY: The query to do vector search on
+    TEXT_QUERY: The query for full text search
+    N is an integer number of documents to return.
+    FMT is a jinja template.
     """
-    query = ' '.join(query)
-    model = SentenceTransformer(config['embedding']['model'])
-    emb = model.encode([query]).astype(np.float32).tobytes()
+    # Get vector results and score
+    with click.Context(vsearch) as ctx:
+        # source, text, extra, score
+        vresults = ctx.invoke(vsearch, query=vector_query.split(' '), n=n, fmt='')
+        vscores = [(result[0], result[3]) for result in vresults]
+        
+    # Get text results and score
+    with click.Context(vsearch) as ctx:
+        tresults = ctx.invoke(fulltext, query=text_query.split(' '), n=n, fmt='')
+        tscores = [(result[0], result[3]) for result in vresults]
+    
+    # Normalize scores
+    minv, maxv = min([x[1] for x in vscores]), max([x[1] for x in vscores])
+    mint, maxt = min([x[1] for x in tscores]), max([x[1] for x in tscores])
 
-    best = None
+    vscores = {oaid: (score - minv) / (maxv - minv) for oaid, score in vscores}
+    tscores = {oaid: (score - minv) / (maxv - minv) for oaid, score in tscores}
 
-    steps = 0
+    combined_scores = {}
+    for oaid in set(vscores.keys()).union(tscores.keys()):
+        vscore = vscores.get(oaid, 0)
+        tscore = tscores.get(oaid, 0)
+        cscore = 1 / (1 + vscore) + 1 / (1 + tscore)
+        combined_scores[oaid] = cscore
+        
+    sorted_results = sorted(combined_scores.items(), key=lambda x: x[1],
+                            reverse=True)
+    results = []
+    for oaid, score in sorted_results:
+        c = db.execute('select source, text, extra from sources where source = ?',
+                       (oaid,))
+        row = c.fetchone()
+        results += [[*row, score]]
 
-    while True:
-
-        results = db.execute('''select
-        sources.source, sources.text,
-        sources.extra, vector_distance_cos(?, embedding) as d
-        from vector_top_k('embedding_idx', ?, ?)
-        join sources on sources.rowid = id
-        order by d''', (emb, emb, n)).fetchall()
-
-        for source, text, extra, d in results:
-            richprint(f'{d:1.3f}: {source}')
-
-        steps += 1
-        if steps == max_steps:
-            break
-
-        current = [x[0] for x in results]  # sources
-
-        # This means no change
-        if current == best:
-            print('Nothing new was found')
-            break
-
-        if input('Search for better matches? ([y]/n)').lower().startswith('n'):
-            break
-
-        # something changed. add references and loop
-        best = current
-        for source in current:
-            add_work(source, True, True, True)
-
-    for source, text, extra, distance in results:
-        t = Template(fmt)
-        richprint(t.render(**locals()))
+    for row in results:
+        source, text, extra, score = row
+        richprint(Template(fmt).render(**locals()))
 
     return results
-
 
 @cli.command()
 @click.argument('query', nargs=-1)
@@ -1121,8 +1171,9 @@ def suggest_reviewers(query, n):
 
     # This is a surprise. You can't just call the functions above! This is
     # apparently the way to do this.
-    with click.Context(isearch) as ctx:
-        results = ctx.invoke(isearch, query=query.split(' '), n=n, fmt='')
+    with click.Context(vsearch) as ctx:
+        results = ctx.invoke(vsearch, query=query.split(' '), n=n, fmt='',
+                             iterative=True)
 
     # Now collect the authors from the matching papers
     authors = []
