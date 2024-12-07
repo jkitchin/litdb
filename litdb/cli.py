@@ -330,20 +330,22 @@ def review(since, fmt):
     SINCE should be something dateparser can handle.
     FMT is a jinja template for the output. Defaults to an org-mode template.
     """
+
     since = dateparser.parse(since).strftime("%Y-%m-%d")
     c = db.execute('''select source, text, extra from sources
     where date(date_added) > ?''', (since,)).fetchall()
 
-    template = Template(fmt or '''* {{ source }}
+    template = Template(fmt or '''* {{ extra['display_name'] }}
 :PROPERTIES:
-:CITED_BY_COUNT: {{ data.get('cited_by_count', 0) }}
+:SOURCE: {{ source }}    
+:CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
 :END:
 
 {{ text }}
         ''')
 
     for source, text, extra in c:
-        data = json.loads(extra) or {}
+        extra = json.loads(extra) or {}
         print(template.render(**locals()))
 
 
