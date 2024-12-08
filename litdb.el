@@ -9,8 +9,6 @@
 ;; These links are functional, and can export to \cite commands in LaTeX, and
 ;; you can extract bibtex entries with `litdb-generate-bibtex'.
 ;;
-;; You have to define where your db is in `litdb-db' for now.
-;;
 ;; `litdb' is an ivy entry-point with selection on citation strings. The default
 ;; action inserts a link.
 ;; 
@@ -25,14 +23,23 @@
 
 ;;; Code:
 
-(defcustom litdb-db nil
-  "Path to your litdb.")
+(defun litdb-get-db ()
+  "Get the path to the litdb db.
+If there is a dominating litdb.toml file we get the db from there.
+Otherwise, we look for LITDB_ROOT as an environment variable."
+  (let ((dir (or
+	      (file-name-parent-directory (or (locate-dominating-file default-directory "litdb.toml") "/"))
+	      (getenv "LITDB_ROOT"))))
+    (if dir
+	(f-join dir "litdb.libsql")
+      (error "No litdb directory found."))))
 
 
 (defmacro with-litdb (&rest body)
   "Run BODY in the directory where `litdb-db' is and with db defined."
-  `(let ((default-directory (file-name-directory litdb-db))
-	 (db (sqlite-open litdb-db)))
+  `(let* ((default-directory (file-name-directory litdb-db))
+	  (litdb-db (litdb-get-db))
+	  (db (sqlite-open litdb-db)))
      ,@body))
 
 
@@ -85,7 +92,7 @@ cite command."
   "Activation function for a litdb link
 START and END are the bounds. PATH could be a comma-separated list."
   (let ((substrings (split-string path ","))
-	(db (sqlite-open litdb-db)))
+	(db (sqlite-open (litdb-get-db))))
     (goto-char start)
     (cl-loop for path in substrings
 	     do
@@ -119,15 +126,15 @@ START and END are the bounds. PATH could be a comma-separated list."
   ("b" (litdb-copy-bibtex (litdb-path-at-point)) "Copy bibtex" :column "Copy")
   ("t" litdb-edit-tags-at-point "Edit tags" :column "Copy")
   
-  ("gf" (let* ((default-directory (file-name-directory litdb-db)))
+  ("gf" (let* ((default-directory (file-name-directory (litdb-get-db))))
 	  (message "%s" (shell-command-to-string
 			 (format "litdb add %s --references" (litdb-path-at-point)))))
    "Get references"  :column "Get")
-  ("gc" (message "%s" (let* ((default-directory (file-name-directory litdb-db)))
+  ("gc" (message "%s" (let* ((default-directory (file-name-directory (litdb-get-db))))
 			(shell-command-to-string
 			 (format "litdb add %s --citing" (litdb-path-at-point)))))
    "Get citing"  :column "Get")
-  ("gr" (let* ((default-directory (file-name-directory litdb-db)))
+  ("gr" (let* ((default-directory (file-name-directory (litdb-get-db))))
 	  (message "%s" (shell-command-to-string
 			 (format "litdb add %s --related" (litdb-path-at-point)))))
    "Get related" :column "Get"))
@@ -141,7 +148,7 @@ START and END are the bounds. PATH could be a comma-separated list."
 
 (defun litdb-edit-tags (source)
   "Edit tags for SOURCE."
-  (let* ((db (sqlite-open litdb-db))
+  (let* ((db (sqlite-open (litdb-get-db)))
 	 (tags (cl-loop for (tag) in  (sqlite-select db "select tag from tags")
 			collect tag))
 	 (source-id (caar (sqlite-select db "select rowid from sources where source = ?" (list source))))
@@ -167,7 +174,7 @@ START and END are the bounds. PATH could be a comma-separated list."
 (defun litdb-insert-similar (source)
   "Insert new entry similar to SOURCE by vector similarity.
 This function is kind of slow because it uses the cli."
-  (let* ((default-directory (file-name-directory litdb-db))
+  (let* ((default-directory (file-name-directory (litdb-get-db)))
 	 (candidates (read (shell-command-to-string
 			    (format "litdb similar -n 10 -e \"%s\"" source)))))
     (ivy-read "Choose: " candidates
@@ -184,7 +191,7 @@ This function is kind of slow because it uses the cli."
 (defun litdb-openalex (source)
   "Open source in OpenAlex."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open litdb-db)))
+  (let* ((db (sqlite-open (litdb-get-db))))
     (browse-url
      (caar
       (sqlite-select db "select json_extract(extra, '$.id') from sources where source = ?"
@@ -194,7 +201,7 @@ This function is kind of slow because it uses the cli."
 (defun litdb-copy-citation (source)
   "Copy a citation for SOURCE."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open litdb-db)))
+  (let* ((db (sqlite-open (litdb-get-db))))
     (kill-new (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
 				   (list source))))))
 
@@ -202,7 +209,7 @@ This function is kind of slow because it uses the cli."
 (defun litdb-copy-bibtex (source)
   "Copy a bibtex for SOURCE."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open litdb-db)))
+  (let* ((db (sqlite-open (litdb-get-db))))
     (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
 				   (list source))))))
 
@@ -232,9 +239,9 @@ candidates.")
 (defun litdb-candidates ()
   "Return the candidates to insert a link.
 Use a cache if possible, and generate if not."
-  (let* ((attributes (file-attributes litdb-db))
+  (let* ((attributes (file-attributes (litdb-get-db)))
 	 (db-mod-time (nth 5 attributes))
-	 (db (sqlite-open litdb-db))
+	 (db (sqlite-open (litdb-get-db)))
 	 candidates)
     (if (and (not (null (car litdb-insert-cache)))
 	     (time-less-p db-mod-time (car litdb-insert-cache)))
@@ -273,7 +280,7 @@ X is a candidate (citation source) as a list."
   "Entry point for litdb.
 Default action inserts a link"
   (interactive)
-  (let* ((db (sqlite-open litdb-db))
+  (let* ((db (sqlite-open (litdb-get-db)))
 	 (candidates (litdb-candidates)))
     
     (ivy-read "choose: " candidates
@@ -324,7 +331,7 @@ Default action is insert link. Some other actions include:
 		  (read-string "Query: "))
 		current-prefix-arg))
   (let* ((N (or current-prefix-arg 5))
-	 (db (sqlite-open litdb-db))
+	 (db (sqlite-open (litdb-get-db)))
 	 (results (sqlite-select db "select snippet(fulltext, 1, '', '', '', 64),source
     from fulltext
     where text match ? order by rank limit ?" (list query N))))
@@ -343,14 +350,14 @@ Default action is insert link. Some other actions include:
 		 "Open source")
 		("b" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open litdb-db))
+		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (nth 1 x))))))
 			 
 			 (kill-new bibtex)))
 		 "Insert bibtex")
 		("c" (lambda (x)
 		       "Copy citation string."
-		       (let* ((db (sqlite-open litdb-db))
+		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (nth 1 x))))))
 			 
 			 (kill-new citation)))
@@ -367,7 +374,7 @@ This is not a fast function. It goes through the litdb cli command."
 		    (buffer-substring-no-properties (region-beginning) (region-end))
 		  (read-string "Query: "))
 		current-prefix-arg))
-  (let* ((default-directory (file-name-directory litdb-db))
+  (let* ((default-directory (file-name-directory (litdb-get-db)))
 	 (N (or N 5))
 	 (candidates (read (shell-command-to-string
 			    (format "litdb vsearch -n %s -e \"%s\"" N query)))))
@@ -384,14 +391,14 @@ This is not a fast function. It goes through the litdb cli command."
 		 "Open source")
 		("b" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open litdb-db))
+		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (cdr x))))))
 			 
 			 (kill-new bibtex)))
 		 "Copy bibtex")
 		("c" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open litdb-db))
+		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (cdr x))))))
 			 
 			 (kill-new citation)))
@@ -409,7 +416,7 @@ working while it generates."
   (interactive (list (if (region-active-p)
 			 (buffer-substring-no-properties (region-beginning) (region-end))
 		       (read-string "Query: "))))
-  (let* ((default-directory (file-name-directory litdb-db))
+  (let* ((default-directory (file-name-directory (litdb-get-db)))
 	 (proc (async-start-process "litdb-gpt" "litdb"
 				    (lambda (proc)
 				      (switch-to-buffer (process-buffer proc))
@@ -488,7 +495,7 @@ working while it generates."
     
     ;; get related, citing, references
     ("r" (lambda ()
-	   (let* ((default-directory (file-name-directory litdb-db))
+	   (let* ((default-directory (file-name-directory (litdb-get-db)))
 		  (source (org-entry-get (point) "SOURCE"))
 		  (proc (async-start-process "litdb" "litdb"
 					     (lambda (proc)
@@ -499,7 +506,7 @@ working while it generates."
 	     (pop-to-buffer (process-buffer proc))
 	     (insert (format "Adding related for %s\n" source)))))
     ("f" (lambda ()
-	   (let* ((default-directory (file-name-directory litdb-db))
+	   (let* ((default-directory (file-name-directory (litdb-get-db)))
 		  (source (org-entry-get (point) "SOURCE"))
 		  (proc (async-start-process "litdb" "litdb"
 					     (lambda (proc)
@@ -510,7 +517,7 @@ working while it generates."
 	     (pop-to-buffer (process-buffer proc))
 	     (insert (format "Adding references for %s\n" source)))))
     ("c" (lambda ()
-	   (let* ((default-directory (file-name-directory litdb-db))
+	   (let* ((default-directory (file-name-directory (litdb-get-db)))
 		  (source (org-entry-get (point) "SOURCE"))
 		  (proc (async-start-process "litdb" "litdb"
 					     (lambda (proc)
@@ -552,7 +559,7 @@ This runs asynchronously, and a review buffer appears in another frame."
   (async-start
    ;; What to do in the child process
    `(lambda ()
-      (let ((default-directory (file-name-directory ,litdb-db)))
+      (let ((default-directory (file-name-directory ,(file-name-directory (litdb-get-db)))))
 	(shell-command "litdb update-filters")
 	(shell-command-to-string (format "litdb review -s \"%s\"" ,since))))
 
@@ -585,8 +592,8 @@ This runs asynchronously, and a review buffer appears in another frame."
 			     current-kill))))
 		      (t
 		       (read-string "DOI: ")))))
-  (let ((default-directory (file-name-directory litdb-db))
-	(db (sqlite-open litdb-db)))
+  (let ((default-directory (file-name-directory (litdb-get-db)))
+	(db (sqlite-open (litdb-get-db))))
     
     (shell-command (format "litdb add \"%s\"" doi))
     (insert 
@@ -652,7 +659,7 @@ some of these are invalid."
   (interactive "fBibtex file: ")
 
   ;; get all the paths
-  (let* ((db (sqlite-open litdb-db))
+  (let* ((db (sqlite-open (litdb-get-db)))
 	 (sources (org-element-map (org-element-parse-buffer) 'link
 		    (lambda (link)
 		      (let ((plist (nth 1 link))

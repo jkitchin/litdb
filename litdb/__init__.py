@@ -1,8 +1,8 @@
-import toml
-import tomlkit
-
+import os
 from pathlib import Path
 
+import toml
+import tomlkit
 
 def find_root_directory(rootfile):
     """Search upwards for rootfile.
@@ -16,11 +16,18 @@ def find_root_directory(rootfile):
     return Path.cwd()
 
 
-# I am not 100% sure this does what I expect. I guess we will see.
-
 CONFIG = "litdb.toml"
 root = find_root_directory(CONFIG)
 
+# if you don't find a litdb.toml you might not be in a litdb root. We check for
+# an env var next so that litdb works everywhere.
+if not (root / CONFIG).exists():
+    litdb_root = os.environ.get('LITDB_ROOT')
+    if litdb_root:
+        root = Path(litdb_root)
+
+# If you aren't in a litdb project, and there is no env var, we might have to
+# make a new one.
 if not (root / CONFIG).exists():
     if input("No config found. Do you want to make one here? (y/n)") == "n":
         import sys
@@ -31,7 +38,6 @@ if not (root / CONFIG).exists():
     api_key = input("OpenAlex API key (Enter if None): ")
 
     d = {
-        "database": {"db": "litdb.libsql"},
         "embedding": {
             "model": "all-MiniLM-L6-v2",
             "cross-encoder": "cross-encoder/ms-marco-MiniLM-L-6-v2",

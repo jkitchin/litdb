@@ -29,7 +29,7 @@ splitter = RecursiveCharacterTextSplitter(
     chunk_overlap=config["embedding"]["chunk_overlap"],
 )
 
-DB = str(root / config["database"]["db"])
+DB = str(root / 'litdb.libsql')
 
 
 def get_db():
