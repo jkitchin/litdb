@@ -657,23 +657,30 @@ Note it is not certain all the bibtex entries are correct and valid.
 Notably, the DOI or OpenAlex id is used as a key, and almost certainly
 some of these are invalid."
   (interactive "fBibtex file: ")
-
-  ;; get all the paths
+  
+  ;; get all the paths from litdb links
   (let* ((db (sqlite-open (litdb-get-db)))
 	 (sources (org-element-map (org-element-parse-buffer) 'link
 		    (lambda (link)
 		      (let ((plist (nth 1 link))
 			    (keys '()))
 			(when (string= "litdb" (plist-get plist ':type))
-			  (setq keys (append keys (org-element-property :path link))))))))
+			  (setq keys (append
+				      keys
+				      (split-string
+				       (org-element-property :path link)
+				       ","))))))))
 	 ;; look up bibtex entries. In theory this is ok, but the entries don't
 	 ;; have the right key to match right now.
 	 (bibtex-entries (cl-loop for source in sources
 				  collect
 				  (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list source))))))
 
-    (with-temp-file bibtex-file
-      (insert (string-join bibtex-entries "\n")))))
+    (when (file-exists-p bibtex-file)
+      (when (y-or-n-p (format "%s exists. Do you want to clobber it? (y/n):"
+			      bibtex-file))
+	(with-temp-file bibtex-file
+	  (insert (string-join bibtex-entries "\n")))))))
 
 
 (provide 'litdb)
