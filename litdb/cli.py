@@ -30,7 +30,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
-from . import root, config
+from . import root, config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
@@ -50,7 +50,8 @@ def cli():
 
 @cli.command()
 def init():
-    """Initialize a directory."""
+    """Initialize a litdb directory in the current working directory."""
+    init_litdb()
     print(f"Initialized in {os.getcwd()}")
 
 
@@ -1199,7 +1200,7 @@ def unpaywall(doi):
 @cli.command()
 def about():
     """Summary statistics of your db."""
-    dbf = root / config["database"]["db"]
+    dbf = root / 'litdb.libsql'
     richprint(f"Your database is located at {dbf}")
     kb = 1024
     mb = 1024 * kb

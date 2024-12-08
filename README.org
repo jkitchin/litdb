@@ -27,10 +27,6 @@ There are a few choices you have to make. You have to choose a SentenceTransform
 You will need an OpenAlex premium key if you want to use the update-filters feature.
 
 #+BEGIN_EXAMPLE
-[database]
-# relative to root directory
-db = "litdb.libsql"
-
 [embedding]
 model = 'all-MiniLM-L6-v2'
 cross-encoder = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
@@ -44,6 +40,14 @@ api_key = "..."
 
 
 #+END_EXAMPLE
+
+You can define an environment variable to the root of your default litdb project. This should be a directory with a litdb.toml file in it.
+
+#+BEGIN_SRC sh
+export LITDB_ROOT="/path/to/your/default/litdb"
+#+END_SRC
+
+When you run a litdb command, it will look for a dominating litdb.toml file, which means you are running the command in a litdb project. If one is not found, it will check for the LITDB_ROOT environment variable and use that if it is found. Finally, if that does not exist, it will prompt you to make a new project in the current directory.
 
 * Using litdb 
 

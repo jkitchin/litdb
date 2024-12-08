@@ -26,14 +26,8 @@ if not (root / CONFIG).exists():
     if litdb_root:
         root = Path(litdb_root)
 
-# If you aren't in a litdb project, and there is no env var, we might have to
-# make a new one.
-if not (root / CONFIG).exists():
-    if input("No config found. Do you want to make one here? (y/n)") == "n":
-        import sys
 
-        sys.exit()
-
+def init_litdb():
     email = input("Email address: ")
     api_key = input("OpenAlex API key (Enter if None): ")
 
@@ -53,6 +47,16 @@ if not (root / CONFIG).exists():
     with open("litdb.toml", "w") as f:
         toml.dump(d, f)
 
-
+    
+# If you aren't in a litdb project, and there is no env var, we might have to
+# make a new one. We ask for confirmation before doing this.
+if not (root / CONFIG).exists():
+    if input("No config found. Do you want to make one here? (y/n)") == "n":
+        import sys
+        sys.exit()
+    else:
+        init_litdb()
+    
+# This file should exist if you get here.
 with open(root / CONFIG) as f:
     config = tomlkit.parse(f.read())
