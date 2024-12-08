@@ -401,25 +401,22 @@ This is not a fast function. It goes through the litdb cli command."
 (defun litdb-gpt (query)
   "Run litdb gpt on the QUERY.
 
-This is not a fast function. It goes through the litdb cli command, and
-gpt is slow (it can be minutes to generate depending on what else the
-computer is going. I don't have GPU acceleration on this. It is here as
-a proof of concept.
-
-This has potential for an async function."
+This is done in an async process because it goes through the litdb cli
+command, and it is slow (it can be minutes to generate depending on what
+else the computer is going). I don't have GPU acceleration on this. It
+is here as a proof of concept. With the async process you can keep
+working while it generates."
   (interactive (list (if (region-active-p)
 			 (buffer-substring-no-properties (region-beginning) (region-end))
 		       (read-string "Query: "))))
   (let* ((default-directory (file-name-directory litdb-db))
-	 (output (shell-command-to-string
-		  (format "litdb gpt \"%s\"" query)))
-	 (buf (get-buffer-create "*litdb-gpt*")))
-    (with-current-buffer buf
-      (erase-buffer)
-      (insert output)
-      (org-mode))
-    (pop-to-buffer buf)
-    (goto-char (point-min))))
+	 (proc (async-start-process "litdb-gpt" "litdb"
+				    (lambda (proc)
+				      (switch-to-buffer (process-buffer proc))
+				      (org-mode)
+				      (goto-char (point-min)))
+				    "gpt" query)))
+    (pop-to-buffer (process-buffer proc))))
 
 
 ;; * review functions
