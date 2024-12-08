@@ -339,9 +339,10 @@ def review(since, fmt):
     c = db.execute('''select source, text, extra from sources
     where date(date_added) > ?''', (since,)).fetchall()
 
-    template = Template(fmt or '''* {{ extra['display_name'] }}
+    template = Template(fmt or '''* {{ extra['display_name'] | replace("\n", " ") }}
 :PROPERTIES:
-:SOURCE: {{ source }}    
+:SOURCE: {{ source }}
+:REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}    
 :CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
 :END:
 
