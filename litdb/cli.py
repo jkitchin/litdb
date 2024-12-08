@@ -895,15 +895,27 @@ def update_filters():
 
 
 @cli.command()
-def list_filters():
-    """List the filters."""
+@click.option('-f', '--fmt', default='{{ "{:3d}".format(rowid) }}. {{ "{:30s}".format(description or "None") }} {{ f }} ({{ last_updated }})')
+def list_filters(fmt):
+    """List the filters.
+
+    FMT is a jinja template with access to the variables rowid, f, description
+    and last_updated. f is the filter string.
+
+    You can dump the filters to stdout like this.
+
+    > litdb list-filters -f 'litdb add-filter {{ f }}'
+
+    You could use that to send a list of your filters to someone, or to recreate
+    a db somewhere else.
+    """
     filters = db.execute(
         """select rowid, filter, description, last_updated
     from queries"""
     )
     for rowid, f, description, last_updated in filters.fetchall():
-        richprint(f'{rowid:3d}. {description or "None":30s} : {f} ' f"({last_updated})")
-
+        richprint(Template(fmt).render(**locals()))
+        
 
 ######################
 # OpenAlex searching #
