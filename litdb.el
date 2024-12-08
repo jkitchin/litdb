@@ -136,10 +136,14 @@ START and END are the bounds. PATH could be a comma-separated list."
 (defun litdb-edit-tags-at-point ()
   "Edit tags at point."
   (interactive)
+  (litdb-edit-tags (litdb-path-at-point)))
+
+
+(defun litdb-edit-tags (source)
+  "Edit tags for SOURCE."
   (let* ((db (sqlite-open litdb-db))
 	 (tags (cl-loop for (tag) in  (sqlite-select db "select tag from tags")
 			collect tag))
-	 (source (litdb-path-at-point))
 	 (source-id (caar (sqlite-select db "select rowid from sources where source = ?" (list source))))
 	 (current-tags (cl-loop for (tag) in  (sqlite-select db "select tags.tag from tags inner join source_tag on tags.rowid=source_tag.tag_id where source_tag.source_id=?" (list source-id))
 				collect tag))
