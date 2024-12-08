@@ -1,5 +1,9 @@
 #+title: litdb - a literature and document database
 
+
+[[./screenshots/date-08-12-2024-time-08-32-26.png]]
+
+
 * litdb concept
 
 litdb is a tool to help you curate and us your collection of scientific literature. You use it to collect and search papers. You can use it to collect older articles, and to keep up with newer articles. litdb uses https://openalex.org for searching the scientific literature, and https://turso.tech/libsql to store results in a local database.
