@@ -431,10 +431,95 @@ working while it generates."
 	     (litdb-review-header)))
     ;; TODO
     ;; tag entry
-    ;; delete entry
-    ;; refile to somewhere
+    ("t" . (litdb-edit-tags (org-entry-get (point) "SOURCE")))
+
+    ;; open in OpenAlex
+    ("a" . (progn
+	     (with-litdb
+	      (browse-url
+	       (caar
+		(sqlite-select db
+			       "select json_extract(extra, '$.id') from sources where source = ?"
+			       (list (org-entry-get (point) "SOURCE"))))))))
+    ;; delete entry from database
+    ("D" . (progn
+	     (with-litdb
+	      (sqlite-execute "delete from sources where source = ?"
+			      (list (org-entry-get (point) "SOURCE"))))
+	     (org-mark-element)
+	     (cl--set-buffer-substring (region-beginning)
+				       (region-end)
+				       "")
+	     (litdb-review-header)))
+    
+    ;; refile the heading to somewhere
+    ("r" . litdb-refile-to-project)
+
+    ;; get / open pdf
+    ("P" . (let* ((candidates '())
+		  (source (org-entry-get (point) "SOURCE"))
+		  (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
+		  (parser (lambda ()
+			    "Parse the response from json to elisp."
+			    (let ((json-array-type 'list)
+				  (json-object-type 'plist)
+				  (json-key-type 'keyword)
+				  (json-false nil)
+				  (json-encoding-pretty-print nil))
+			      (json-read))))
+		  (resp (request unpaywall
+			  :sync t :parser parser
+			  :params '(("email" . "jkitchin@cmu.edu"))))
+		  (data (request-response-data resp)))
+	     
+	     (setq candidates (append
+			       candidates
+			       (with-litdb
+				(car (sqlite-select db
+						    "select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
+						    (list (org-entry-get (point) "SOURCE")))))))
+	     
+	     ;; try with unpaywall
+	     (cl-loop for loc in (plist-get data :oa_locations)
+		      do
+		      (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
+
+	     (browse-url (completing-read "URL: " (remove nil candidates)))))
+    
     ;; get related, citing, references
-    )
+    ("r" (lambda ()
+	   (let* ((default-directory (file-name-directory litdb-db))
+		  (source (org-entry-get (point) "SOURCE"))
+		  (proc (async-start-process "litdb" "litdb"
+					     (lambda (proc)
+					       (switch-to-buffer (process-buffer proc))
+					       (org-mode)
+					       (goto-char (point-min)))
+					     "add" source "--related" "-v")))
+	     (pop-to-buffer (process-buffer proc))
+	     (insert (format "Adding related for %s\n" source)))))
+    ("f" (lambda ()
+	   (let* ((default-directory (file-name-directory litdb-db))
+		  (source (org-entry-get (point) "SOURCE"))
+		  (proc (async-start-process "litdb" "litdb"
+					     (lambda (proc)
+					       (switch-to-buffer (process-buffer proc))
+					       (org-mode)
+					       (goto-char (point-min)))
+					     "add" source "--references" "-v")))
+	     (pop-to-buffer (process-buffer proc))
+	     (insert (format "Adding references for %s\n" source)))))
+    ("c" (lambda ()
+	   (let* ((default-directory (file-name-directory litdb-db))
+		  (source (org-entry-get (point) "SOURCE"))
+		  (proc (async-start-process "litdb" "litdb"
+					     (lambda (proc)
+					       (switch-to-buffer (process-buffer proc))
+					       (org-mode)
+					       (goto-char (point-min)))
+					     "add" source "--citing" "-v")))
+	     (pop-to-buffer (process-buffer proc))
+	     (insert (format "Adding citing papers for %s\n" source))))))
   "List of speed commands for litdb.")
 
 (defun litdb-speed-keys (keys)
@@ -506,6 +591,53 @@ This runs asynchronously, and a review buffer appears in another frame."
      (caar
       (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi))))
     (insert (format " litdb:%s" doi))))
+
+
+(defun litdb-refile-to-project (project)
+  "Refile current heading to a heading in the current project.
+If PROJECT is non-nil (prefix arg) or you are not in a project,
+you will be prompted to pick one."
+  (interactive "P")
+  (let* ((default-directory (cond
+			     ((or project (not (projectile-project-p)))
+			      (ivy-read "Project: " projectile-known-projects))
+			     (t
+			      (projectile-project-p))))
+	 (org-files (-filter (lambda (f)
+			       (and
+				(f-ext? f "org")
+				(not (s-contains? "#" f))))
+			     (projectile-current-project-files)))
+	 (headlines (cl-loop for file in org-files
+			     append
+			     (let ((hl '()))
+			       
+			       (when (file-exists-p file)
+				 (with-temp-buffer
+				   (insert-file-contents file)
+				   ;; (org-mode)
+				   ;; (font-lock-ensure)
+				   (goto-char (point-min))
+				   (while (re-search-forward org-heading-regexp nil t)
+				     (cl-pushnew
+				      (list
+				       (format "%-80s (%s)"
+					       (match-string 0)
+					       (file-name-nondirectory file))
+				       :file file
+				       :headline (match-string 0)
+				       :position (match-beginning 0))
+				      hl))))
+			       hl)))
+	 (selection (ivy-read "Heading: " headlines))
+	 (candidate (cdr (assoc selection headlines)))
+	 (rfloc (list
+		 (plist-get candidate :headline)
+		 (plist-get candidate :file)
+		 nil
+		 (plist-get candidate :position))))
+    (org-refile nil nil rfloc))
+  (litdb-feed-header))
 
 ;; * extract entries to bibtex
 
