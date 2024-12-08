@@ -65,7 +65,8 @@ def init():
 @click.option('--related', is_flag=True, help='Add related too.')
 @click.option('--citing', is_flag=True, help='Add citing too.')
 @click.option('--all', is_flag=True, help='Add references, related and citing.')
-def add(sources, references=False, citing=False, related=False, all=False):
+@click.option('-v', '--verbose', is_flag=True, default=False)
+def add(sources, references=False, citing=False, related=False, all=False, verbose=False):
     """Add WIDS to the db.
 
     SOURCES can be one or more of a doi or orcid, a pdf path, a url, bibtex
@@ -83,6 +84,9 @@ def add(sources, references=False, citing=False, related=False, all=False):
 
             if all:
                 references, citing, related = True, True, True
+
+            if verbose:
+                print(f'Adding {source}: references={references}, citing={citing}, related={related}')
             add_work(source, references, citing, related)
 
         # works from an author
