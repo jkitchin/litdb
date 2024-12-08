@@ -670,8 +670,9 @@ some of these are invalid."
 				      (split-string
 				       (org-element-property :path link)
 				       ","))))))))
-	 ;; look up bibtex entries. In theory this is ok, but the entries don't
-	 ;; have the right key to match right now.
+	 ;; use the stored bibtex entries. It is not clear this is the best
+	 ;; thing to do, but so far it works. It would be faster than trying to
+	 ;; get them all from crossref.
 	 (bibtex-entries (cl-loop for source in sources
 				  collect
 				  (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list source))))))
