@@ -4,6 +4,7 @@ import litdb.db
 
 import pymupdf4llm
 
+
 def add_pdf(sources):
     """Add SOURCES to litdb.
 
@@ -11,8 +12,8 @@ def add_pdf(sources):
     """
     if not isinstance(sources, list):
         sources = [sources]
-        
+
     for source in sources:
         text = pymupdf4llm.to_markdown(source)
         litdb.db.add_source(source, text)
-        print(f'Added {source}')
+        print(f"Added {source}")
