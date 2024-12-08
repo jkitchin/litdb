@@ -1086,12 +1086,16 @@ def unpaywall(doi):
     url = f'https://api.unpaywall.org/v2/{doi}'
     params = {'email': config['openalex']['email']}
 
-    data = requests.get(url, params).json()
-    richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
-    richprint(f'Is open access: {data.get("is_oa", False)}')
+    resp = requests.get(url, params)
+    if resp.status_code == 200:
+        
+        richprint(f'{data["display_name"]}, {data.get("journal_name") or ""}')
+        richprint(f'Is open access: {data.get("is_oa", False)}')
 
-    for loc in data.get('oa_locations', []):
-        richprint(loc.get('url_for_pdf') or loc.get('url_for_landing_page'))
+        for loc in data.get('oa_locations', []):
+            richprint(loc.get('url_for_pdf') or loc.get('url_for_landing_page'))
+    else:
+        richprint(f'{doi} not found in unpaywall')
 
 
 @cli.command()
