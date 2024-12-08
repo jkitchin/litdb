@@ -548,6 +548,7 @@ working while it generates."
   "Open a buffer to review articles SINCE a date.
 This runs asynchronously, and a review buffer appears in another frame."
   (interactive (list (read-string "Since: " "one week ago")))
+  (message "Starting a %s review process" since)
   (async-start
    ;; What to do in the child process
    `(lambda ()
@@ -560,6 +561,7 @@ This runs asynchronously, and a review buffer appears in another frame."
       (message "Something got done!")
       (let ((buf (get-buffer-create (format "*litdb review - %s*" ,since))))
 	(with-current-buffer buf
+	  (erase-buffer)
 	  (insert result))
 	(switch-to-buffer-other-frame buf)
 	(goto-char (point-min))
