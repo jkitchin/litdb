@@ -684,6 +684,8 @@ def gpt(prompt):
     emb = model.encode([prompt]).astype(np.float32).tobytes()
     richprint(f"It took {time.time() - t0:1.1f} sec to embed the prompt")
     t0 = time.time()
+
+    # This is the RAG
     data = db.execute(
         """select sources.text
     from vector_top_k('embedding_idx', ?, 3)
@@ -700,7 +702,7 @@ def gpt(prompt):
 
     richprint("The text was generated using these references")
     for i, result in enumerate(data):
-        richprint(f"{i:2d}. {result}\n")
+        richprint(f"{i:2d}. {result[0]}\n")
 
 
 @cli.command()
