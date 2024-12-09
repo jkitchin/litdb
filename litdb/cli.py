@@ -380,7 +380,7 @@ def review(since, fmt):
         or """* {{ extra['display_name'] | replace("\n", " ") }}
 :PROPERTIES:
 :SOURCE: {{ source }}
-:REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}    
+:REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}
 :CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
 :END:
 
@@ -726,10 +726,13 @@ def similar(source, n, emacs, fmt):
     ).fetchall()[1:]
     # we do n + 1 because the first entry is always the source
 
+    rows = [(source, text, json.loads(extra))
+            for source, text, extra in rows]
+
     if emacs:
         template = Template(
             "({% for source, text, extra in rows %}"
-            ' ("({{ text }}" . "{{ source }}")'
+            ' ("{{ extra.get("citation") or text }}" . "{{ source }}")'
             " {% endfor %})"
         )
         print(template.render(**locals()))
@@ -888,16 +891,42 @@ def rm_filter(filter):
     db.commit()
 
 
+update_filter_fmt = """* {{ extra['display_name'] | replace("\n", "") | replace("\r", "") }}
+:PROPERTIES:
+:SOURCE: {{ source }}
+:REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}
+:CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
+:END:
+
+litdb:{{ source }}
+
+{{ text }}
+
+"""
+
+
 @cli.command()
-def update_filters():
+@click.option('-f', '--fmt', default=update_filter_fmt)
+@click.option('-s', '--silent', is_flag=True, default=False)
+def update_filters(fmt, silent):
     """Update litdb using a filter with works from a created date."""
     filters = db.execute("""select filter, last_updated from queries""")
     for f, last_updated in filters.fetchall():
-        update_filter(f, last_updated)
+        results = update_filter(f, last_updated, silent)
+        for result in results:
+            source, text, extra = result
+
+            richprint(Template(fmt).render(**locals()))
+
+
+list_filter_fmt = ('{{ "{:3d}".format(rowid) }}.'
+                   ' {{ "{:30s}".format(description'
+                   ' or "None") }} {{ f }}'
+                   ' ({{ last_updated }})')
 
 
 @cli.command()
-@click.option('-f', '--fmt', default='{{ "{:3d}".format(rowid) }}. {{ "{:30s}".format(description or "None") }} {{ f }} ({{ last_updated }})')
+@click.option('-f', '--fmt', default=list_filter_fmt)
 def list_filters(fmt):
     """List the filters.
 
@@ -917,7 +946,7 @@ def list_filters(fmt):
     )
     for rowid, f, description, last_updated in filters.fetchall():
         richprint(Template(fmt).render(**locals()))
-        
+
 
 ######################
 # OpenAlex searching #
