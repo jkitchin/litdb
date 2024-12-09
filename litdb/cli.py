@@ -121,8 +121,8 @@ def add(
                         text.append(shape.text)
             add_source(source, "\n".join(text))
 
-        # html
-        elif source.endswith(".html"):
+        # local html
+        elif not source.startswith("http") and source.endswith(".html"):
             with open(source) as f:
                 text = f.read()
             soup = bs4.BeautifulSoup(text, features="lxml")
