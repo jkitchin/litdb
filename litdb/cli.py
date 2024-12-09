@@ -765,8 +765,10 @@ def hybrid_search(vector_query, text_query, n, fmt):
     # Get text results and score
     with click.Context(vsearch) as ctx:
         tresults = ctx.invoke(fulltext, query=text_query.split(" "), n=n, fmt="")
-        tscores = [(result[0], result[3]) for result in vresults]
-
+        # I think sqlite makes scores negative to sort them the way they want. I
+        # reverse this here.
+        tscores = [(result[0], -result[3]) for result in tresults]
+        
     # Normalize scores
     minv, maxv = min([x[1] for x in vscores]), max([x[1] for x in vscores])
     mint, maxt = min([x[1] for x in tscores]), max([x[1] for x in tscores])
