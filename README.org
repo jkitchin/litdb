@@ -127,7 +127,6 @@ You can provide more than one source and even mix them like this.
 litdb add doi1 doi2 orcid
 #+END_SRC
 
-
 These are all one time additions.
 
 ** Adding filters
@@ -202,7 +201,7 @@ This works best when you update your litdb regularly. You might want to redirect
 
 ** Searching litdb
 
-There are three search options. 
+There are several search options. 
 
 *** vector search
 
@@ -244,6 +243,14 @@ The default number of entries returned is 3. You can change that with an optiona
 litdb fulltext "natural language query" -n 5
 #+END_SRC
 
+*** hybrid search
+
+Vector and full text search have complementary strengths and weaknesses. We combine them in the hybrid-search subcommand. This performs two searches on two different queries, and combines them with a unified score that is used to rank all the matches. This ensures you get some results that match the full search, and the vector search. It is worth trying if you aren't finding what you want by vector or text search alone.
+
+#+BEGIN_SRC sh
+litdb hybrid-search "vector query" "text query"
+#+END_SRC
+
 *** ollama GPT
 
 You can use litdb as a RAG source for ollama. This looks up the three most related papers to your query, and uses them as context in a prompt to ollama (with the llama2 model). I find this quite slow (it can be minutes to generate a response on an old Intel Mac). I also find it makes up things like references, and that it is usually necessary to actually read the three papers. The three papers come from the same vector search described above.
@@ -260,7 +267,7 @@ This command will record audio, transcribe that audio to text, and then do a vec
 litdb audio -p
 #+END_SRC
 
-I haven't found the transcription to be very good on technical scientific terms. This is a proof of concept capability.
+I haven't found the transcription to be that good on technical scientific terms. This is a proof of concept capability.
 
 *** search from a screenshot
 
