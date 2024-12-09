@@ -28,7 +28,8 @@
 If there is a dominating litdb.toml file we get the db from there.
 Otherwise, we look for LITDB_ROOT as an environment variable."
   (let ((dir (or
-	      (file-name-parent-directory (or (locate-dominating-file default-directory "litdb.toml") "/"))
+	      (when-let (toml (locate-dominating-file default-directory "litdb.toml"))
+		(file-name-directory toml))
 	      (getenv "LITDB_ROOT"))))
     (if dir
 	(f-join dir "litdb.libsql")
@@ -58,6 +59,17 @@ inner join tags on tags.rowid = source_tag.tag_id
 where source_tag.tag_id = ?" (list tag-id)))))
 
     (ivy-read "Entry: " entries)))
+
+
+(defun litdb-about ()
+  "Show a buffer with information about your litdb."
+  (interactive)
+  (let* ((default-directory (file-name-directory (litdb-get-db)))
+	 (proc (start-process-shell-command "litdb about" "*litdb-about*"
+					    "litdb about")))
+    (pop-to-buffer (process-buffer proc))
+    (org-mode)
+    (goto-char (point-min))))
 
 ;; * litdb link definition
 
@@ -117,6 +129,35 @@ START and END are the bounds. PATH could be a comma-separated list."
 "
   ("o" (browse-url (litdb-path-at-point)) "Open" :column "Open")
   ("a" (litdb-openalex (litdb-path-at-point)) "OpenAlex" :column "Open")
+  ("p" (let* ((candidates '())
+	      (source (litdb-path-at-point))
+	      (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
+	      (parser (lambda ()
+			"Parse the response from json to elisp."
+			(let ((json-array-type 'list)
+			      (json-object-type 'plist)
+			      (json-key-type 'keyword)
+			      (json-false nil)
+			      (json-encoding-pretty-print nil))
+			  (json-read))))
+	      (resp (request unpaywall
+		      :sync t :parser parser
+		      :params '(("email" . "jkitchin@cmu.edu"))))
+	      (data (request-response-data resp)))
+	 
+	 (setq candidates (append
+			   candidates
+			   (with-litdb
+			    (car (sqlite-select db
+						"select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
+						(list (org-entry-get (point) "SOURCE")))))))
+	 
+	 ;; try with unpaywall
+	 (cl-loop for loc in (plist-get data :oa_locations)
+		  do
+		  (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
+
+	 (browse-url (completing-read "URL: " (remove nil candidates))))"pdf")
   
   ("il" litdb "Insert new link" :column "Insert")
   ("is" (litdb-insert-similar (litdb-path-at-point)) "Insert similar" :column "Insert")
@@ -178,6 +219,7 @@ This function is kind of slow because it uses the cli."
 	 (candidates (read (shell-command-to-string
 			    (format "litdb similar -n 10 -e \"%s\"" source)))))
     (ivy-read "Choose: " candidates
+	      :caller 'litdb
 	      :action
 	      '(1
 		("o" (lambda (x)
@@ -210,7 +252,7 @@ This function is kind of slow because it uses the cli."
   "Copy a bibtex for SOURCE."
   (interactive "sSource: ")
   (let* ((db (sqlite-open (litdb-get-db))))
-    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
+    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = '?'"
 				   (list source))))))
 
 (defun litdb-follow (_path)
@@ -531,7 +573,7 @@ working while it generates."
 
 (defun litdb-speed-keys (keys)
   "Find the command to run for KEYS."
-  (when (and (string-prefix-p "*litdb review" (buffer-name))
+  (when (and (string-prefix-p "*litdb" (buffer-name))
 	     (bolp)
 	     (looking-at org-outline-regexp))
     (cdr (assoc keys litdb-speed-commands))))
@@ -551,6 +593,34 @@ working while it generates."
 		  (litdb-review-header)))
 
 
+
+(defun litdb-update ()
+  "Open a buffer to review articles updates.
+This runs asynchronously, and a review buffer appears in another frame."
+  (interactive)
+  
+  (async-start
+   ;; What to do in the child process
+   `(lambda ()
+      (let ((default-directory (file-name-directory ,(file-name-directory (litdb-get-db))))
+	    ;; apparently not having this was resulting in wrapping at about 80 columns
+	    (process-environment (cons "COLUMNS=1000" process-environment)))
+	(shell-command-to-string "litdb update-filters -s")))
+
+   ;; What to do when it finishes
+   `(lambda (result)
+      (message "Something got done!")
+      (let ((buf (get-buffer-create (format "*litdb update*")))
+	    (truncate-lines t))
+	(with-current-buffer buf
+	  (erase-buffer)
+	  (insert result))
+	(switch-to-buffer-other-frame buf)
+	(goto-char (point-min))
+	(org-mode)
+	(litdb-review-header)))))
+
+
 (defun litdb-review (since)
   "Open a buffer to review articles SINCE a date.
 This runs asynchronously, and a review buffer appears in another frame."
@@ -560,7 +630,6 @@ This runs asynchronously, and a review buffer appears in another frame."
    ;; What to do in the child process
    `(lambda ()
       (let ((default-directory (file-name-directory ,(file-name-directory (litdb-get-db)))))
-	(shell-command "litdb update-filters")
 	(shell-command-to-string (format "litdb review -s \"%s\"" ,since))))
 
    ;; What to do when it finishes
