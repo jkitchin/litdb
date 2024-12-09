@@ -698,7 +698,7 @@ def gpt(prompt):
     prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
 
 Respond to the prompt: {prompt}"""
-    gpt = config.get('gpt', {'model': "llama2"})
+    gpt = config.get('ollama', {'model': "llama2"})
     gpt_model = gpt['model']
     richprint(f'Generating with {gpt_model}')
     output = ollama.generate(model=gpt_model, prompt=prompt)
