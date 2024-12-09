@@ -249,7 +249,7 @@ def add_author(oaid):
             add_work(work.get("doi") or work["id"])
 
 
-def update_filter(f, last_updated=None):
+def update_filter(f, last_updated=None, silent=False):
     """Update one filter (f). f should be a string that goes in the filter=
     param for openalex.
 
@@ -259,7 +259,6 @@ def update_filter(f, last_updated=None):
     That might still lead to a lot of hits.
 
     """
-    print(f"Working on {f}, last update = {last_updated}")
 
     _filter = f  # make a copy because we modify it later.
 
@@ -282,15 +281,14 @@ def update_filter(f, last_updated=None):
     next_cursor = "*"
     params.update(cursor=next_cursor)
 
+    results = []
     while next_cursor:
         data = get_data(wurl, params)
         next_cursor = data["meta"]["next_cursor"]
         params.update(cursor=next_cursor)
         tot = data["meta"]["count"]
 
-        results = []
-        sources = []
-        for work in tqdm(data["results"]):
+        for work in tqdm(data["results"], disable=silent):
             source = work.get("doi") or work.get("id")
             citation = get_citation(source)
             work["citation"] = citation
@@ -298,13 +296,12 @@ def update_filter(f, last_updated=None):
             bibtex = dump_bibtex(work)
             work["bibtex"] = bibtex
 
-            sources += [source]
             text = get_text(work)
-            print(f"{text}\n\n")
+            
             chunks = splitter.split_text(text)
             embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
 
-            results += []
+            results += [[source, text, work]]
 
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             c = db.execute(
@@ -321,13 +318,14 @@ def update_filter(f, last_updated=None):
                 )
 
             db.commit()
-
+        
     db.execute(
         """update queries set last_updated = ? where filter = ?""",
         (datetime.date.today().strftime("%Y-%m-%d"), f),
     )
 
     db.commit()
+    return results
 
 
 def add_bibtex(bibfile):
