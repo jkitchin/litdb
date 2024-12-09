@@ -695,8 +695,13 @@ def gpt(prompt):
 
     richprint(f"It took  {time.time() - t0:1.1f} sec to get the top three docs")
     t0 = time.time()
-    prompt = f"Using data: {data}. Respond to the prompt: {prompt}"
-    output = ollama.generate(model="llama2", prompt=prompt)
+    prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
+
+Respond to the prompt: {prompt}"""
+    gpt = config.get('gpt', {'model': "llama2"})
+    gpt_model = gpt['model']
+    richprint(f'Generating with {gpt_model}')
+    output = ollama.generate(model=gpt_model, prompt=prompt)
     richprint(output["response"])
     richprint(f"It took  {time.time() - t0:1.1f} " "sec to generate the response.")
 
