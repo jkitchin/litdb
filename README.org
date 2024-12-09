@@ -38,7 +38,8 @@ chunk_overlap = 200
 email = "you@example.com"
 api_key = "..."
 
-
+[ollama]
+model = "llama2"
 #+END_EXAMPLE
 
 You can define an environment variable to the root of your default litdb project. This should be a directory with a litdb.toml file in it.
@@ -513,18 +514,6 @@ libsql is a fork of sqlite with integrated vector search, and potential for usin
 
 These are ideas for future expansion.
 
-** tag system
-
-It could be useful to have a tag system where you could label entries, or they could be auto-tagged when updating filters. This would allow you to tag entries by a project, or select entries for some kind of bulk action like update, export to bibtex, or delete.
-
-You might also build a scoring system, e.g. for like/dislike tags.
-
-#+BEGIN_SRC sh
-litdb tag doi -t "tag1" "tag2"  # add tag
-litdb tab doi -r "tag" "tag2"  # rm tags
-#+END_SRC
-
-
 ** graph visualization
 
 It might be helpful to have a graph representation of a paper that shows nodes of citing, references, and related papers, with edge length related to a similarity score, and node size related to number of citations.
@@ -550,12 +539,6 @@ I don't use llamaindex (maybe I should see what it does), but it has this sectio
 
 It might be nice to have a flask app with an API. This would facilitate interaction with Emacs.
 
-** combine full text and vector search
-
-Vector search might miss some things. Full text search is hard to do with meaning. There are several ways to do a hybrid search, e.g. do a full text search on keywords, and a vector search, and use some kind of union on those results.
-
-https://www.meilisearch.com/blog/full-text-search-vs-vector-search
-
 ** async operations
 
 Almost everything is done synchronously and it blocks the program. At least some things could be done asynchronously I think, and that might speed things up (especially for local files), or at least let you do other things while it happens.
@@ -576,7 +559,18 @@ These might have a variety of uses with litdb that range from extracting data, n
 
 It is not essential to use SentenceTransformers for embedding, they are just easy to use. An alternative is something like ollama embeddings (https://ollama.com/blog/embedding-models) or llama.cpp https://github.com/abetlen/llama-cpp-python?tab=readme-ov-file#embeddings. The main reason to use on of these would be performance, and maybe better integration with a chat llm.
 
-It is not that easy to just switch models; you would need to either add new columns and compute embeddings for everything, or update all the embeddings for a new model.
+It is not that easy to just switch models; you would need to either add new columns and compute embeddings for everything, or update all the embeddings for a new model. The SPECTER embedding is much bigger than the all-MiniLM-L6-v2 embedding.
+
+#+BEGIN_SRC jupyter-python :restart
+from sentence_transformers import SentenceTransformer
+
+m = SentenceTransformer('allenai-specter')
+print(m.encode(['test']).shape)
+#+END_SRC
+
+#+RESULTS:
+: (1, 768)
+
 
 ** merge databases
 
@@ -590,7 +584,26 @@ The first version of litdb with libsql used a fully remote db on their cloud. Th
 
 ** image and text models
 
-One day it might be possible to include images in this (https://www.sbert.net/docs/sentence_transformer/pretrained_models.html#image-text-models). At the moment, OpenAlex entries do not have any images, but local files would. I have an image database in org-db, but I don't use it a lot. 
+One day it might be possible to include images in this (https://www.sbert.net/docs/sentence_transformer/pretrained_models.html#image-text-models). At the moment, OpenAlex entries do not have any images, but other web resources and local files could. I have an image database in org-db, but I don't use it a lot. 
+
+** DONE combine full text and vector search
+CLOSED: [2024-12-09 Mon 13:59]
+
+Vector search might miss some things. Full text search is hard to do with meaning. There are several ways to do a hybrid search, e.g. do a full text search on keywords, and a vector search, and use some kind of union on those results.
+
+https://www.meilisearch.com/blog/full-text-search-vs-vector-search
+
+** DONE tag system
+CLOSED: [2024-12-09 Mon 13:58]
+
+It could be useful to have a tag system where you could label entries, or they could be auto-tagged when updating filters. This would allow you to tag entries by a project, or select entries for some kind of bulk action like update, export to bibtex, or delete.
+
+You might also build a scoring system, e.g. for like/dislike tags.
+
+#+BEGIN_SRC sh
+litdb tag doi -t "tag1" "tag2"  # add tag
+litdb tab doi -r "tag" "tag2"  # rm tags
+#+END_SRC
 
 ** DONE Integrate with audio input
 CLOSED: [2024-12-05 Thu 09:11]
