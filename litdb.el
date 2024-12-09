@@ -668,7 +668,7 @@ This runs asynchronously, and a review buffer appears in another frame."
     (insert 
      (caar
       (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi))))
-    (insert (format " litdb:%s" doi))))
+    (insert (format " litdb:%s\n\n" doi))))
 
 
 (defun litdb-refile-to-project (project)
