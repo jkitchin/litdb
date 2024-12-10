@@ -725,4 +725,4 @@ These projects require you to make an account. There are freemium levels in each
 - Scopus AI :: https://www.scopus.com/search/form.uri?display=basic#scopus-ai
   - Sponsored by Elsevier
 
-With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs.
+With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no-code solutions, and if that is what you are looking for, look there! But they are not free, not extensible, and you cannot look under the hood to see what they do. In my experience, this ultimately limits what I can learn from them.
