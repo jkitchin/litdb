@@ -516,6 +516,10 @@ libsql is a fork of sqlite with integrated vector search, and potential for usin
 
 These are ideas for future expansion.
 
+** Jupyter lab integration
+
+An alternative to the CLI and Emacs would be to run this in Jupyter Lab with magic commands and rich output. 
+
 ** graph visualization
 
 It might be helpful to have a graph representation of a paper that shows nodes of citing, references, and related papers, with edge length related to a similarity score, and node size related to number of citations.
@@ -716,4 +720,9 @@ These projects require you to make an account. There are freemium levels in each
   - Browser / Google Docs and Word plugin. Finds related articles to the text in your document.
   
 - scite.ai :: https://scite.ai/
-  -  Browser tool that integrates GPT with the scientific literature, integration with Zotero
+  - Browser tool that integrates GPT with the scientific literature, integration with Zotero
+
+- Scopus AI :: https://www.scopus.com/search/form.uri?display=basic#scopus-ai
+  - Sponsored by Elsevier
+
+With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs.
