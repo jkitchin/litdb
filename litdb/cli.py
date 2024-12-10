@@ -839,11 +839,9 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
         google, google_scholar = (
             True,
             True,
-            True,
         )
         pubmed, arxiv, chemrxiv, biorxiv = True, True, True, True
 
-    print(google, google_scholar, pubmed, arxiv)
     # This is to avoid some huggingface/tokenizer warning. I don't know why we
     # need to do it, but this code forks the process, and triggers that warning.
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
