@@ -966,7 +966,10 @@ def list_filters(fmt):
 @click.argument("query", nargs=-1)
 @click.option("-f", "--filter", "_filter", is_flag=True, default=False)
 @click.option("-e", "--endpoint", default="works")
-def openalex(query, _filter, endpoint):
+@click.option('--sort', default='publication_year:desc')
+@click.option('--sample', default=-1)
+@click.option('--per-page', default=5)
+def openalex(query, _filter, endpoint, sort, sample, per_page):
     """Run an openalex query on FILTER.
 
     ENDPOINT should be one of works, authors, or another entity.
@@ -989,13 +992,21 @@ def openalex(query, _filter, endpoint):
 
     next_cursor = "*"
     params = {
-        "email": config["openalex"]["email"],
-        "api_key": config["openalex"].get("api_key"),
+        "email": config["openalex"]["email"],        
         "filter": query,
+        'sort': sort,
         "cursor": next_cursor,
+        'per_page': per_page
     }
 
-    ok = False  # flag for large results
+    if api_key:=config["openalex"].get("api_key"):
+        params.update(api_key=api_key)
+
+    if sample > 0:
+        del params['sort']  # incompatible param with sample
+        params.update(sample=sample)
+
+   
     while next_cursor:
         resp = requests.get(url, params)
         if resp.status_code != 200:
@@ -1004,23 +1015,23 @@ def openalex(query, _filter, endpoint):
             return
 
         data = resp.json()
-
-        count = data["meta"]["count"]
-        if not ok and count > 100:
-            resp = input(f"Found {count} results. Continue? ([y]/n)")
-            if resp.lower().startswith("n"):
-                return
-            else:
-                ok = True
         next_cursor = data["meta"]["next_cursor"]
         params.update(cursor=next_cursor)
 
+        s = []
         for result in data["results"]:
             try:
                 richprint(get_text(result))
                 print()
             except:
-                richprint(f'{result["id"]}: {result["display_name"]}')
+                # Probably this is a richprint syntax error
+                print(f'{result["id"]}: {result["display_name"]}')
+                print()
+
+        if next_cursor:
+            if input('Continue? (y/n)').lower().startswith('n'):
+                return
+
 
 
 ########################################
