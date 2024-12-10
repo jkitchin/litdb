@@ -1,6 +1,6 @@
 #+title: litdb - a literature and document database
 
-
+#+attr_org: :width 600
 [[./litdb.png]]
 
 
@@ -380,7 +380,6 @@ You might also use this for very specific queries. For example, here I search th
 #+BEGIN_SRC sh
 litdb sql "select source, json_extract(extra, '$.citation') as citation from sources where citation like '%kitchin%'"
 #+END_SRC
-
 
 * Adding local files
 
