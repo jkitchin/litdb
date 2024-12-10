@@ -617,60 +617,32 @@ working while it generates."
 		  (litdb-review-header)))
 
 
-
-(defun litdb-update ()
-  "Open a buffer to review articles updates.
-This runs asynchronously, and a review buffer appears in another frame."
-  (interactive)
-  
-  (async-start
-   ;; What to do in the child process
-   `(lambda ()
-      (let ((default-directory (file-name-directory ,(file-name-directory (litdb-get-db))))
-	    ;; apparently not having this was resulting in wrapping at about 80 columns
-	    (process-environment (cons "COLUMNS=1000" process-environment)))
-	(shell-command-to-string "litdb update-filters -s")))
-
-   ;; What to do when it finishes
-   `(lambda (result)
-      (message "Something got done!")
-      (let ((buf (get-buffer-create (format "*litdb update*")))
-	    (truncate-lines t))
-	(with-current-buffer buf
-	  (erase-buffer)
-	  (insert result))
-	(switch-to-buffer-other-frame buf)
-	(goto-char (point-min))
-	(org-mode)
-	(litdb-review-header)))))
-
-
 (defun litdb-update ()
   "Update the filters in litdb.
 Show new updated results in a buffer: *litdb-update*."
   (interactive)
-  (let* ((process-environment (cons "COLUMNS=1000" process-environment))
+  (let* ((process-environment (cons "COLUMNS=10000" process-environment))
 	 (proc (async-start-process "litdb-update" "litdb"
-				    (lambda (proc)
-				      (switch-to-buffer (process-buffer proc))
-				      (org-mode)
-				      (goto-char (point-min)))
+				    ;; (lambda (proc)
+				    ;;   (switch-to-buffer (process-buffer proc))
+				    ;;   (org-mode)
+				    ;;   (goto-char (point-min)))
+				    nil
 				    "update-filters")))
-    (set-process-sentinel (get-process "litdb-update") 'litdb-async-process-sentinel)
-    (pop-to-buffer (process-buffer proc))))
+    (set-process-sentinel proc 'litdb-async-process-sentinel)
+    (switch-to-buffer-other-frame (process-buffer proc))))
+
 
 (defun litdb-review (since)
   "Open a buffer to review articles SINCE a date.
 This runs asynchronously, and a review buffer appears in another frame."
   (interactive (list (read-string "Since: " "one week ago")))
-  (let* ((proc (async-start-process "litdb-review" "litdb"
-				    (lambda (proc)
-				      (switch-to-buffer (process-buffer proc))
-				      (org-mode)
-				      (goto-char (point-min)))
+  (let* ((process-environment (cons "COLUMNS=10000" process-environment))
+	 (proc (async-start-process "litdb-review" "litdb"
+				    nil
 				    "review" "-s" since)))
-    (set-process-sentinel (get-process "litdb-review") 'litdb-async-process-sentinel)
-    (pop-to-buffer (process-buffer proc))))
+    (set-process-sentinel proc 'litdb-async-process-sentinel)
+    (switch-to-buffer-other-frame (process-buffer proc))))
 
 
 (defun litdb-insert-article (doi)
