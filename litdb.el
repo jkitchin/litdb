@@ -451,6 +451,20 @@ This is not a fast function. It goes through the litdb cli command."
 		 "Copy citation")))))
 
 
+(defun litdb-async-process-sentinel (process event)
+  "Sentinel to keep the buffer alive after PROCESS finishes."
+  (when (memq (process-status process) '(exit signal))
+    (let ((buffer (process-buffer process)))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (goto-char (point-max))
+          (insert (format "\nProcess %s finished with event: %s" process event))
+	  (org-mode)
+	  (goto-char (point-min))
+	  (litdb-review-header)
+          (read-only-mode 1))))))
+
+
 (defun litdb-gpt (query)
   "Run litdb gpt on the QUERY.
 
@@ -462,13 +476,15 @@ working while it generates."
   (interactive (list (if (region-active-p)
 			 (buffer-substring-no-properties (region-beginning) (region-end))
 		       (read-string "Query: "))))
-  (let* ((default-directory (file-name-directory (litdb-get-db)))
-	 (proc (async-start-process "litdb-gpt" "litdb"
+  (let* ((proc (async-start-process "litdb-gpt" "litdb"
 				    (lambda (proc)
 				      (switch-to-buffer (process-buffer proc))
 				      (org-mode)
 				      (goto-char (point-min)))
 				    "gpt" query)))
+    ;; (async-start-process "my-process" "*my-process-buffer*" "my-command" "arg1" "arg2")
+    (set-process-sentinel (get-process "litdb-gpt") 'litdb-async-process-sentinel)
+
     (pop-to-buffer (process-buffer proc))))
 
 
@@ -575,6 +591,7 @@ working while it generates."
 	     (insert (format "Adding citing papers for %s\n" source))))))
   "List of speed commands for litdb.")
 
+
 (defun litdb-speed-keys (keys)
   "Find the command to run for KEYS."
   (when (and (string-prefix-p "*litdb" (buffer-name))
@@ -625,28 +642,32 @@ This runs asynchronously, and a review buffer appears in another frame."
 	(litdb-review-header)))))
 
 
+(defun litdb-update ()
+  "Update the filters in litdb.
+Show new updated results in a buffer: *litdb-update*."
+  (interactive)
+  (let* ((process-environment (cons "COLUMNS=1000" process-environment))
+	 (proc (async-start-process "litdb-update" "litdb"
+				    (lambda (proc)
+				      (switch-to-buffer (process-buffer proc))
+				      (org-mode)
+				      (goto-char (point-min)))
+				    "update-filters")))
+    (set-process-sentinel (get-process "litdb-update") 'litdb-async-process-sentinel)
+    (pop-to-buffer (process-buffer proc))))
+
 (defun litdb-review (since)
   "Open a buffer to review articles SINCE a date.
 This runs asynchronously, and a review buffer appears in another frame."
   (interactive (list (read-string "Since: " "one week ago")))
-  (message "Starting a %s review process" since)
-  (async-start
-   ;; What to do in the child process
-   `(lambda ()
-      (let ((default-directory (file-name-directory ,(file-name-directory (litdb-get-db)))))
-	(shell-command-to-string (format "litdb review -s \"%s\"" ,since))))
-
-   ;; What to do when it finishes
-   `(lambda (result)
-      (message "Something got done!")
-      (let ((buf (get-buffer-create (format "*litdb review - %s*" ,since))))
-	(with-current-buffer buf
-	  (erase-buffer)
-	  (insert result))
-	(switch-to-buffer-other-frame buf)
-	(goto-char (point-min))
-	(org-mode)
-	(litdb-review-header)))))
+  (let* ((proc (async-start-process "litdb-review" "litdb"
+				    (lambda (proc)
+				      (switch-to-buffer (process-buffer proc))
+				      (org-mode)
+				      (goto-char (point-min)))
+				    "review" "-s" since)))
+    (set-process-sentinel (get-process "litdb-review") 'litdb-async-process-sentinel)
+    (pop-to-buffer (process-buffer proc))))
 
 
 (defun litdb-insert-article (doi)
