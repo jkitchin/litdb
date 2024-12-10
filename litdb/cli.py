@@ -380,11 +380,13 @@ def review(since, fmt):
         or """* {{ extra['display_name'] | replace("\n", " ") }}
 :PROPERTIES:
 :SOURCE: {{ source }}
+:OPENALEX: {{ extra.get('id') }}
+:YEAR: {{ extra.get('publication_year') }}
 :REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}
 :CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
 :END:
 
-{{ text }}
+{{ text }} litdb:{{ source }}
         """
     )
 
@@ -695,13 +697,13 @@ def gpt(prompt):
 
     richprint(f"It took  {time.time() - t0:1.1f} sec to get the top three docs")
     t0 = time.time()
-    prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
+    model_prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
 
 Respond to the prompt: {prompt}"""
     gpt = config.get('ollama', {'model': "llama2"})
     gpt_model = gpt['model']
-    richprint(f'Generating with {gpt_model}')
-    output = ollama.generate(model=gpt_model, prompt=prompt)
+    richprint(f'Generating text for "{prompt}" with {gpt_model}\n\n')
+    output = ollama.generate(model=gpt_model, prompt=model_prompt)
     richprint(output["response"])
     richprint(f"It took  {time.time() - t0:1.1f} " "sec to generate the response.")
 
