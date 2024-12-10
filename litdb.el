@@ -18,6 +18,10 @@
 ;; 
 ;; `litdb-gpt' is an interactive function to do a gpt query. This is quite slow
 ;; on my machine.
+;;
+;; You can update the filters with `litdb-update'. You need a premium OpenAlex key for that.
+;; 
+;; You should review your litdb periodically. `litdb-review' will prompt you for a time duration, and show you things that have been added since then. The duration could be something like "yesterday" or "last week" or a date.
 
 (require 'hydra)
 
