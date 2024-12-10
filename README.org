@@ -713,3 +713,5 @@ These projects require you to make an account. There are freemium levels in each
 - Keenious :: https://keenious.com/explore
   - Browser / Google Docs and Word plugin. Finds related articles to the text in your document.
   
+- scite.ai :: https://scite.ai/
+  -  Browser tool that integrates GPT with the scientific literature, integration with Zotero
