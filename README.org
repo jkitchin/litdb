@@ -494,6 +494,8 @@ Similar limitations exist for local files. There are additionally the following 
 1. The quality of document to text influences the ultimate embedding. This varies by type of document, and the library used to convert it.
 2. Local files tend to be longer documents and this can lead to hundreds of text chunks per document. These chunk embeddings are averaged into one embedding. It is not obvious this is as effective as vector search on each chunk, but it is more memory efficient.
 
+For PDF to text we use [[https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/][pymupd4fll]] which works for this proof of concept. There is a Pro version of that package which supports more file formats. It is not obvious what it would cost to use that. I used [[https://ds4sd.github.io/docling/][docling]] in an early prototype. It also worked pretty well, but it was a little slower I think, and would occasionally segfault so I stopped using it.  Spacy is integrating PDF to structured data using docling (https://explosion.ai/blog/pdfs-nlp-structured-data). There is plenty of room for improvement in this dimension, with trade offs in performance and accuracy.
+
 The embedding model we use is trained on text. It is probably not as good at finding code, and the gpt we use is also probably not good at generating code. I guess you would need another table in the database for code, and a different model for embedding and generation. This only matters if you index jupyter notebooks (and later if other code files are supported).
 
 ** sqlite + sqlite-vec vs libsql
