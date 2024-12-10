@@ -167,6 +167,7 @@ START and END are the bounds. PATH could be a comma-separated list."
   ("is" (litdb-insert-similar (litdb-path-at-point)) "Insert similar" :column "Insert")
   
   ("k" (kill-new (litdb-path-at-point)) "Copy key" :column "Copy")
+  ("l" (kill-new (format "litdb:%s" (litdb-path-at-point))) "Copy link" :column "Copy")
   ("c" (litdb-copy-citation (litdb-path-at-point)) "Copy citation" :column "Copy")
   ("b" (litdb-copy-bibtex (litdb-path-at-point)) "Copy bibtex" :column "Copy")
   ("t" litdb-edit-tags-at-point "Edit tags" :column "Copy")
@@ -335,6 +336,8 @@ Default action inserts a link"
 	      '(1
 		("o" litdb-insert-candidate "Insert link")
 		("c" (lambda (x) (kill-new (nth 0 x))) "Copy citation")
+		("b" (lambda (x) (litdb-copy-bibtex (nth 1 x))) "Copy bibtex")
+		("l" (lambda (x) (kill-new (format "litdb:%s" (nth 1 x)))) "Copy link")
 		("u" (lambda (x) (browse-url (nth 1 x))) "Open url")))))
 
 
