@@ -270,6 +270,12 @@ litdb audio -p
 
 I haven't found the transcription to be that good on technical scientific terms. This is a proof of concept capability.
 
+Note that you need to install these libraries for this feature to work:
+
+pyaudio, playsound, SpeechRecognition
+
+These are not trivial to install, and pyaudio relies on external libraries like portaudio that may not be easy to install. These are currently commented out in pyproject.toml because of these difficulties.
+
 *** search from a screenshot
 
 You can copy a screenshot to the clipboard, and then use OCR to extract text from it, and do a vector search on that text.
