@@ -1245,12 +1245,14 @@ def unpaywall(doi):
 
     resp = requests.get(url, params)
     if resp.status_code == 200:
-
-        richprint(f'{data["display_name"]}, {data.get("journal_name") or ""}')
+        data = resp.json()
+        print(data)
+        richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
         richprint(f'Is open access: {data.get("is_oa", False)}')
 
         for loc in data.get("oa_locations", []):
-            richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
+            richprint(loc.get("url_for_pdf")
+                      or loc.get("url_for_landing_page"))
     else:
         richprint(f"{doi} not found in unpaywall")
 
