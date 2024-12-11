@@ -4,6 +4,7 @@
 """
 
 import json
+import os
 import time
 
 import libsql_experimental as libsql
@@ -23,73 +24,75 @@ from rich import print
 from litdb.openalex import get_data, get_text
 from litdb.bibtex import dump_bibtex
 
-model = SentenceTransformer(config["embedding"]["model"])
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=config["embedding"]["chunk_size"],
-    chunk_overlap=config["embedding"]["chunk_overlap"],
-)
 
 DB = str(root / 'litdb.libsql')
 
 
 def get_db():
-    db = libsql.connect(DB)
-    db.execute("PRAGMA foreign_keys = ON")
-    db.execute("PRAGMA journal_mode=WAL")
+    """Get or create the database."""
+    if os.path.exists(DB):
+        db = libsql.connect(DB)
+        db.execute("PRAGMA foreign_keys = ON")
+        db.execute("PRAGMA journal_mode=WAL")
+        return db
+    else:
+        db = libsql.connect(DB)
+        model = SentenceTransformer(config["embedding"]["model"])
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=config["embedding"]["chunk_size"],
+            chunk_overlap=config["embedding"]["chunk_overlap"],
+        )
 
-    _, dim = model.encode(["test"]).shape
+        _, dim = model.encode(["test"]).shape
 
-    db.execute(
-        f"""create table if not exists
-sources(rowid integer primary key,
-source text unique,
-text text,
-extra text,
-embedding F32_BLOB({dim}),
-date_added text)"""
-    )
+        db.execute(
+            f"""create table if not exists
+    sources(rowid integer primary key,
+    source text unique,
+    text text,
+    extra text,
+    embedding F32_BLOB({dim}),
+    date_added text)"""
+        )
 
-    db.execute(
-        """create virtual table if not exists fulltext using fts5(source, text)"""
-    )
+        db.execute(
+            """create virtual table if not exists fulltext using fts5(source, text)"""
+        )
 
-    db.execute(
-        """create table if not exists
-    tags(rowid integer primary key,
-    tag text unique)"""
-    )
+        db.execute(
+            """create table if not exists
+        tags(rowid integer primary key,
+        tag text unique)"""
+        )
 
-    db.execute(
-        """create table if not exists
-    source_tag(rowid integer primary key,
-    source_id integer,
-    tag_id integer,
-    foreign key(source_id) references sources(rowid) on delete cascade,
-    foreign key(tag_id) references tags(rowid) on delete cascade)"""
-    )
+        db.execute(
+            """create table if not exists
+        source_tag(rowid integer primary key,
+        source_id integer,
+        tag_id integer,
+        foreign key(source_id) references sources(rowid) on delete cascade,
+        foreign key(tag_id) references tags(rowid) on delete cascade)"""
+        )
 
-    db.execute(
-        """create table if not exists
-queries(rowid integer primary key,
-filter text unique,
-description text,
-last_updated text)"""
-    )
-
-    db.execute(
-        """create table if not exists
-directories(rowid integer primary key,
-    path text unique,
+        db.execute(
+            """create table if not exists
+    queries(rowid integer primary key,
+    filter text unique,
+    description text,
     last_updated text)"""
-    )
+        )
 
-    db.execute(
-        """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
-    )
-    return db
+        db.execute(
+            """create table if not exists
+    directories(rowid integer primary key,
+        path text unique,
+        last_updated text)"""
+        )
 
-
-db = get_db()
+        db.execute(
+            """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
+        )
+        return db
 
 
 def add_source(source, text, extra=None):
@@ -102,7 +105,14 @@ def add_source(source, text, extra=None):
     We generate a document level embedding by averaging the embeddings of the
     document chunks.
     """
+    db = get_db()
 
+    model = SentenceTransformer(config["embedding"]["model"])
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config["embedding"]["chunk_size"],
+        chunk_overlap=config["embedding"]["chunk_overlap"],
+    )
+    
     chunks = splitter.split_text(text)
     embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
 
@@ -259,7 +269,15 @@ def update_filter(f, last_updated=None, silent=False):
     That might still lead to a lot of hits.
 
     """
+    model = SentenceTransformer(config["embedding"]["model"])
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config["embedding"]["chunk_size"],
+        chunk_overlap=config["embedding"]["chunk_overlap"],
+    )
 
+
+    db = get_db()
+    
     _filter = f  # make a copy because we modify it later.
 
     wurl = "https://api.openalex.org/works"
