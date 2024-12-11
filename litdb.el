@@ -323,6 +323,37 @@ X is a candidate (citation source) as a list."
     (insert (format "litdb:%s" (nth 1 x))))))
 
 
+(defun litdb-get-pdf (source)
+  "Try to open a PDF for SOURCE."
+  (let* ((candidates '())
+	 (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
+	 (parser (lambda ()
+		   "Parse the response from json to elisp."
+		   (let ((json-array-type 'list)
+			 (json-object-type 'plist)
+			 (json-key-type 'keyword)
+			 (json-false nil)
+			 (json-encoding-pretty-print nil))
+		     (json-read))))
+	 (resp (request unpaywall
+		 :sync t :parser parser
+		 :params '(("email" . "jkitchin@cmu.edu"))))
+	 (data (request-response-data resp)))
+    
+    (setq candidates (append
+		      candidates
+		      (with-litdb
+		       (car (sqlite-select db
+					   "select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
+					   (list source))))))
+    
+    ;; try with unpaywall
+    (cl-loop for loc in (plist-get data :oa_locations)
+	     do
+	     (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
+
+    (browse-url (completing-read "URL: " (remove nil candidates)))))
+
 (defun litdb ()
   "Entry point for litdb.
 Default action inserts a link"
@@ -338,6 +369,7 @@ Default action inserts a link"
 		("c" (lambda (x) (kill-new (nth 0 x))) "Copy citation")
 		("b" (lambda (x) (litdb-copy-bibtex (nth 1 x))) "Copy bibtex")
 		("l" (lambda (x) (kill-new (format "litdb:%s" (nth 1 x)))) "Copy link")
+		("p" (lambda (x) (litdb-get-pdf (nth 1 x))) "Open pdf")
 		("u" (lambda (x) (browse-url (nth 1 x))) "Open url")))))
 
 
@@ -528,35 +560,7 @@ working while it generates."
     ("r" . litdb-refile-to-project)
 
     ;; get / open pdf
-    ("P" . (let* ((candidates '())
-		  (source (org-entry-get (point) "SOURCE"))
-		  (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
-		  (parser (lambda ()
-			    "Parse the response from json to elisp."
-			    (let ((json-array-type 'list)
-				  (json-object-type 'plist)
-				  (json-key-type 'keyword)
-				  (json-false nil)
-				  (json-encoding-pretty-print nil))
-			      (json-read))))
-		  (resp (request unpaywall
-			  :sync t :parser parser
-			  :params '(("email" . "jkitchin@cmu.edu"))))
-		  (data (request-response-data resp)))
-	     
-	     (setq candidates (append
-			       candidates
-			       (with-litdb
-				(car (sqlite-select db
-						    "select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
-						    (list (org-entry-get (point) "SOURCE")))))))
-	     
-	     ;; try with unpaywall
-	     (cl-loop for loc in (plist-get data :oa_locations)
-		      do
-		      (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
-
-	     (browse-url (completing-read "URL: " (remove nil candidates)))))
+    ("P" . (litdb-get-pdf (org-entry-get (point) "SOURCE")))
     
     ;; get related, citing, references
     ("r" (lambda ()
