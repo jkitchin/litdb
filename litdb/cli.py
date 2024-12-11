@@ -1380,7 +1380,6 @@ def suggest_reviewers(query, n):
 
         for d in r["results"]:
 
-            
             lki = d.get("last_known_institutions")
             if lki is []:
                 affils = d.get('affiliations', [])
