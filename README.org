@@ -3,12 +3,16 @@
 #+attr_org: :width 600
 [[./litdb.png]]
 
-
 * litdb concept
 
 litdb is a tool to help you curate and us your collection of scientific literature. You use it to collect and search papers. You can use it to collect older articles, and to keep up with newer articles. litdb uses https://openalex.org for searching the scientific literature, and https://turso.tech/libsql to store results in a local database.
 
 The idea is you add papers to your database, and then you can search it with natural language queries, and interact with it via an ollama GPT application. It will show you the papers that best match your query. You can read those papers, get bibtex entries for them, or add new papers based on the references, papers that cite that paper, or related papers. You can also set up filters that you update when you want to get new papers created since the last time you checked.
+
+** videos
+
+1. https://www.youtube.com/live/e-J3Bh2Uti4 Introduction to litdb
+2. https://www.youtube.com/live/teW68WogulU local files (volume is very low for some reason)
 
 ** installation
 
