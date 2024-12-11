@@ -1228,12 +1228,12 @@ def citation(sources):
         sources = sys.stdin.read().strip().split()
 
     for i, source in enumerate(sources):
-        (citation,) = db.execute(
+        (_citation,) = db.execute(
             """select json_extract(extra, '$.citation')
         from sources where source = ?""",
             (source,),
         ).fetchone()
-        richprint(f"{i + 1:2d}. {citation}")
+        richprint(f"{i + 1:2d}. {_citation}")
 
 
 @cli.command()
