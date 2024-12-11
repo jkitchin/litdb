@@ -496,8 +496,7 @@ This is not a fast function. It goes through the litdb cli command."
           (insert (format "\nProcess %s finished with event: %s" process event))
 	  (org-mode)
 	  (goto-char (point-min))
-	  (litdb-review-header)
-          (read-only-mode 1))))))
+	  (litdb-review-header))))))
 
 
 (defun litdb-gpt (query)
