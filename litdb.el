@@ -718,7 +718,7 @@ you will be prompted to pick one."
 		 nil
 		 (plist-get candidate :position))))
     (org-refile nil nil rfloc))
-  (litdb-feed-header))
+  (litdb-review-header))
 
 ;; * extract entries to bibtex
 
