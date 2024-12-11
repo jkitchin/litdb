@@ -1377,10 +1377,24 @@ def suggest_reviewers(query, n):
         r = get_data(url, params)
 
         for d in r["results"]:
-            lki = (
-                d.get("last_known_institutions", [])[0].get("display_name")
-                or d["affiliations"][0]["institution"]["display_name"]
-            )
+
+            
+            lki = d.get("last_known_institutions")
+            if lki is []:
+                affils = d.get('affiliations', [])
+                if len(affils) >= 0:
+                    lki = affils[0]["institution"]["display_name"]
+                else:
+                    lki = 'unknown'
+            
+            else:
+
+                if len(lki) >= 1:
+                    lki = lki[0].get("display_name")
+                else:
+                    lki = 'unknown'
+                
+            
             row = [
                 d["display_name"],
                 authors[d["id"]],
