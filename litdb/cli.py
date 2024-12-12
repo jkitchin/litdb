@@ -1318,6 +1318,32 @@ def visit(source):
         webbrowser.open(f"file://{source}")
 
 
+@cli.command()
+def update_embeddings():
+    """Update all the embeddings in your db.
+
+    The only reason you would do this is if you change the embedding model, or
+    the way the chunks are sized in your config.
+    """
+    db = get_db()
+    from sentence_transformers import SentenceTransformer
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    model = SentenceTransformer(config["embedding"]["model"])
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config["embedding"]["chunk_size"],
+        chunk_overlap=config["embedding"]["chunk_overlap"],
+    )
+
+    for source, text in db.execute('select source, text from sources').fetchall():
+    
+        chunks = splitter.split_text(text)
+        embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+
+        c = db.execute('update sources set embedding=? where source=? ',
+                   (embedding, source))
+        print(c.rowcount)
+
+    
 ######################
 # Academic functions #
 ######################
