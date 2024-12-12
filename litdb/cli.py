@@ -67,14 +67,19 @@ def init():
 @click.option("--related", is_flag=True, help="Add related too.")
 @click.option("--citing", is_flag=True, help="Add citing too.")
 @click.option("--all", is_flag=True, help="Add references, related and citing.")
-@click.option("-v", "--verbose", is_flag=True, default=False)
+@click.option("-t", "--tag", "tags", multiple=True)
 def add(
-    sources, references=False, citing=False, related=False, all=False, verbose=False
+        sources, references=False, citing=False, related=False, all=False, verbose=False, tags=None
 ):
     """Add WIDS to the db.
 
+    REFERENCES, RELATED, CITING are flags to also add those for DOI sources. ALL
+    is shorthand for all of those.
+
     SOURCES can be one or more of a doi or orcid, a pdf path, a url, bibtex
     file, or other kind of file assumed to be text.
+
+    TAGS is a list of tags to add to the source.
 
     These are one time additions.
 
@@ -88,10 +93,6 @@ def add(
             if all:
                 references, citing, related = True, True, True
 
-            if verbose:
-                print(
-                    f"Adding {source}: references={references}, citing={citing}, related={related}"
-                )
             add_work(source, references, citing, related)
 
         # works from an author
@@ -157,6 +158,10 @@ def add(
             with open(source) as f:
                 text = f.read()
             add_source(source, text)
+
+    if tags:
+        with click.Context(add_tag) as ctx:
+            ctx.invoke(add_tag, sources=sources, tags=tags)
 
 
 @cli.command()
