@@ -1324,6 +1324,7 @@ def update_embeddings():
 
     The only reason you would do this is if you change the embedding model, or
     the way the chunks are sized in your config.
+    
     """
     db = get_db()
     from sentence_transformers import SentenceTransformer
@@ -1334,14 +1335,30 @@ def update_embeddings():
         chunk_overlap=config["embedding"]["chunk_overlap"],
     )
 
-    for source, text in db.execute('select source, text from sources').fetchall():
+    _, dim = model.encode(["test"]).shape
+
+
+    # The point of this is to avoid deleting the database.
+    db.execute('drop index if exists embedding_idx')
+    db.execute('alter table sources drop embedding')
+    db.execute(f'alter table sources add column embedding F32_BLOB({dim})')
+    db.commit()
+    
+    for rowid, text in db.execute('select rowid, text from sources').fetchall():
     
         chunks = splitter.split_text(text)
         embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+        
+        c = db.execute('update sources set embedding = ? where rowid = ?',
+                       (embedding, rowid))
+        print(rowid, c.rowcount)
 
-        c = db.execute('update sources set embedding=? where source=? ',
-                   (embedding, source))
-        print(c.rowcount)
+    # I don't know why this has to be here. I had it above, and no updates were
+    # happening.
+    db.execute(
+            """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
+        )
+    db.commit()
 
     
 ######################
