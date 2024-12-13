@@ -5,6 +5,7 @@ The main command is litdb. There are subcommands for the actions.
 
 import os
 import datetime
+import json
 import pathlib
 import tempfile
 import time
@@ -16,7 +17,6 @@ import click
 import dateparser
 from docx import Document
 from jinja2 import Template
-import json
 from more_itertools import batched
 import nbformat
 from nbconvert import MarkdownExporter
@@ -25,6 +25,7 @@ import ollama
 from pptx import Presentation
 import requests
 from rich import print as richprint
+from rich.console import Console
 from sentence_transformers import SentenceTransformer
 import tabulate
 from tqdm import tqdm
@@ -36,7 +37,6 @@ from .db import get_db, add_source, add_work, add_author, update_filter, add_bib
 from .openalex import get_data, get_text
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
-
 
 warnings.filterwarnings("ignore")
 
@@ -924,7 +924,6 @@ def update_filters(fmt, silent):
         results = update_filter(f, last_updated, silent)
         for result in results:
             source, text, extra = result
-
             richprint(Template(fmt).render(**locals()))
 
 
@@ -1455,19 +1454,21 @@ def suggest_reviewers(query, n):
 
     # Sort and display the results
     data.sort(key=lambda row: row[2], reverse=True)
-    print("Potential reviewers")
-    print(
-        tabulate.tabulate(
+    s = ["Potential reviewers"]
+    s += [tabulate.tabulate(
             data,
             headers=["name", "# papers", "h-index", "oaid", "institution"],
             tablefmt="orgtbl",
-        )
-    )
-
-    print("\n" + "From these papers:")
+        )]
+    s += ["\n" + "From these papers:"]
     for i, row in enumerate(results):
         source, citation, extra, distance = row
-        richprint(f"{i + 1:2d}. {citation} (source)\n\n")
+        s += [f"{i + 1:2d}. {citation} (source)\n\n"]
+
+    console = Console(color_system='truecolor')
+    with console.pager():
+        for _s in s:
+            console.print(_s)
 
 
 if __name__ == "__main__":
