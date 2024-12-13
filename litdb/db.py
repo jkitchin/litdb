@@ -335,7 +335,6 @@ def update_filter(f, last_updated=None, silent=False):
                     (source, text),
                 )
 
-            db.commit()
         
     db.execute(
         """update queries set last_updated = ? where filter = ?""",
