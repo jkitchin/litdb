@@ -24,6 +24,8 @@
 ;; You should review your litdb periodically. `litdb-review' will prompt you for a time duration, and show you things that have been added since then. The duration could be something like "yesterday" or "last week" or a date.
 
 (require 'hydra)
+(require 'request)
+(require 'counsel)
 
 ;;; Code:
 
@@ -42,8 +44,8 @@ Otherwise, we look for LITDB_ROOT as an environment variable."
 
 (defmacro with-litdb (&rest body)
   "Run BODY in the directory where `litdb-db' is and with db defined."
-  `(let* ((default-directory (file-name-directory litdb-db))
-	  (litdb-db (litdb-get-db))
+  `(let* ((litdb-db (litdb-get-db))
+	  (default-directory (file-name-directory litdb-db))
 	  (db (sqlite-open litdb-db)))
      ,@body))
 
