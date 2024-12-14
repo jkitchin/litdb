@@ -3,12 +3,16 @@
 #+attr_org: :width 600
 [[./litdb.png]]
 
-
 * litdb concept
 
 litdb is a tool to help you curate and use your collection of scientific literature. You use it to collect and search papers. You can use it to collect older articles, and to keep up with newer articles. litdb uses https://openalex.org for searching the scientific literature, and https://turso.tech/libsql to store results in a local database.
 
 The idea is you add papers to your database, and then you can search it with natural language queries, and interact with it via an ollama GPT application. It will show you the papers that best match your query. You can read those papers, get bibtex entries for them, or add new papers based on the references, papers that cite that paper, or related papers. You can also set up filters that you update when you want to get new papers created since the last time you checked.
+
+** videos
+
+1. https://www.youtube.com/live/e-J3Bh2Uti4 Introduction to litdb
+2. https://www.youtube.com/live/teW68WogulU local files (volume is very low for some reason)
 
 ** installation
 
@@ -269,6 +273,12 @@ litdb audio -p
 #+END_SRC
 
 I haven't found the transcription to be that good on technical scientific terms. This is a proof of concept capability.
+
+Note that you need to install these libraries for this feature to work:
+
+pyaudio, playsound, SpeechRecognition
+
+These are not trivial to install, and pyaudio relies on external libraries like portaudio that may not be easy to install. These are currently commented out in pyproject.toml because of these difficulties.
 
 *** search from a screenshot
 
@@ -724,4 +734,13 @@ These projects require you to make an account. There are freemium levels in each
 - Scopus AI :: https://www.scopus.com/search/form.uri?display=basic#scopus-ai
   - Sponsored by Elsevier
 
-With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no-code solutions, and if that is what you are looking for, look there! But they are not free, not extensible, and you cannot look under the hood to see what they do. In my experience, this ultimately limits what I can learn from them.
+- Dimensions AI :: https://app.dimensions.ai/discover/publication
+  - Seems similar to Scopus AI
+
+- khoj :: https://khoj.dev/
+  - This is a desktop app that can be totally local, or in the cloud. It can index your files, and then you can chat with them. There is a freemium level.
+
+- gpt4all :: https://www.nomic.ai/gpt4all
+  -  Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
+
+With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no or low-code solutions, and if that is what you are looking for, look there! If you want to hack on things yourself, look here.

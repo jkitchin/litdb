@@ -60,8 +60,10 @@ def get_coa(orcid):
 
     # sort authors alphabetically
     authors = sorted(authors, key=lambda row: (row[0].lower(), -row[1]))
-
-    # Now, get all the affiliations
+    
+    # Now, get all the affiliations. This assumes the first one is most recent.
+    # I could also use the last known institution, but this is sometimes empty
+    # too.
     oaids = set([row[2].replace("https://openalex.org/", "") for row in authors])
     affiliations = {}
     for batch in batched(oaids, 50):
@@ -71,19 +73,21 @@ def get_coa(orcid):
 
         d = requests.get(url, params=params)
 
-        for au in d.json()["results"]:
+        for au in d.json()["results"]:            
             affils = au["affiliations"]
             if len(affils) > 0:
                 affiliations[au["id"]] = affils[0]["institution"]["display_name"]
             else:
                 affiliations[au["id"]] = ""
+
     uniq = {}
     uniq_authors = []  # by openalex id
     all_authors = []
     for name, year, oa_id, pub_id in authors:
         if oa_id not in uniq:
+            
             uniq[oa_id] = 1
-            affil = affiliations[oa_id]
+            affil = affiliations.get(oa_id, 'No affiliation known')
             # now we build the tables
             uniq_authors += [["A:", name, affil, "", year]]
             all_authors += [["A:", name, affil, "", year, pub_id, oa_id]]

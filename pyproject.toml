@@ -36,9 +36,11 @@ dependencies = [
   "jinja2",
   "pytesseract",
   "pillow",
-  "pyaudio",
-  "playsound",
-  "SpeechRecognition",
+  
+#  "pyaudio",
+#  "playsound",
+#  "SpeechRecognition",
+
   # for coa
   "pandas",
   "more-itertools",
