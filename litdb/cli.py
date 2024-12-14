@@ -5,6 +5,7 @@ The main command is litdb. There are subcommands for the actions.
 
 import os
 import datetime
+import json
 import pathlib
 import tempfile
 import time
@@ -16,7 +17,6 @@ import click
 import dateparser
 from docx import Document
 from jinja2 import Template
-import json
 from more_itertools import batched
 import nbformat
 from nbconvert import MarkdownExporter
@@ -25,17 +25,18 @@ import ollama
 from pptx import Presentation
 import requests
 from rich import print as richprint
+from rich.console import Console
 from sentence_transformers import SentenceTransformer
 import tabulate
 from tqdm import tqdm
 import webbrowser
+
 
 from . import root, config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
-
 
 warnings.filterwarnings("ignore")
 
@@ -66,20 +67,24 @@ def init():
 @click.option("--related", is_flag=True, help="Add related too.")
 @click.option("--citing", is_flag=True, help="Add citing too.")
 @click.option("--all", is_flag=True, help="Add references, related and citing.")
-@click.option("-v", "--verbose", is_flag=True, default=False)
+@click.option("-t", "--tag", "tags", multiple=True)
 def add(
-    sources, references=False, citing=False, related=False, all=False, verbose=False
+        sources, references=False, citing=False, related=False, all=False, verbose=False, tags=None
 ):
     """Add WIDS to the db.
 
+    REFERENCES, RELATED, CITING are flags to also add those for DOI sources. ALL
+    is shorthand for all of those.
+
     SOURCES can be one or more of a doi or orcid, a pdf path, a url, bibtex
     file, or other kind of file assumed to be text.
+
+    TAGS is a list of tags to add to the source.
 
     These are one time additions.
 
     """
     for source in tqdm(sources):
-
         # a work
         if source.startswith("10.") or "doi.org" in source:
             if source.startswith("10."):
@@ -88,10 +93,6 @@ def add(
             if all:
                 references, citing, related = True, True, True
 
-            if verbose:
-                print(
-                    f"Adding {source}: references={references}, citing={citing}, related={related}"
-                )
             add_work(source, references, citing, related)
 
         # works from an author
@@ -104,15 +105,18 @@ def add(
 
         # pdf
         elif source.endswith(".pdf"):
+            source = os.path.abspath(source)
             add_pdf(source)
 
         # docx
         elif source.endswith(".docx"):
+            source = os.path.abspath(source)
             doc = Document(source)
             add_source(source, "\n".join([para.text for para in doc.paragraphs]))
 
         # pptx
         elif source.endswith(".pptx"):
+            source = os.path.abspath(source)
             prs = Presentation(source)
             text = []
             for slide in prs.slides:
@@ -123,6 +127,7 @@ def add(
 
         # local html
         elif not source.startswith("http") and source.endswith(".html"):
+            source = os.path.abspath(source)
             with open(source) as f:
                 text = f.read()
             soup = bs4.BeautifulSoup(text, features="lxml")
@@ -135,7 +140,8 @@ def add(
 
         # ipynb
         elif source.endswith(".ipynb"):
-            with open(source, "r", encoding="utf-8") as f:
+            source = os.path.abspath(source)
+            with open(source) as f:
                 notebook = nbformat.read(f, as_version=4)
 
             # Create a Markdown exporter
@@ -148,9 +154,14 @@ def add(
 
         # assume it is text
         else:
+            source = os.path.abspath(source)
             with open(source) as f:
                 text = f.read()
             add_source(source, text)
+
+    if tags:
+        with click.Context(add_tag) as ctx:
+            ctx.invoke(add_tag, sources=sources, tags=tags)
 
 
 @cli.command()
@@ -182,21 +193,12 @@ def index(sources):
                 ).fetchone():
                     continue
 
-                try:
+                with click.Context(add) as ctx:
+                    print(fname)
+                    ctx.invoke(add, sources=[fname])
                     print(f"Adding {fname}")
-                    add([fname])
-                    # add seems to call a SystemExit, so this line doesn't get
-                    # run. I don't know why this happens here.
-                    richprint(f"Added {fname}")
-                # I don't know why this gets called, but it does, and I catch it
-                # so we keep going
-                except SystemExit:
-                    pass
-                except:
-                    richprint("Still something worng")
-                    import sys
 
-                    richprint(sys.exc_info())
+                    richprint(f"Added {fname}")
 
         last_updated = datetime.date.today().strftime("%Y-%m-%d")
 
@@ -780,7 +782,7 @@ def hybrid_search(vector_query, text_query, n, fmt):
         # I think sqlite makes scores negative to sort them the way they want. I
         # reverse this here.
         tscores = [(result[0], -result[3]) for result in tresults]
-        
+
     # Normalize scores
     minv, maxv = min([x[1] for x in vscores]), max([x[1] for x in vscores])
     mint, maxt = min([x[1] for x in tscores]), max([x[1] for x in tscores])
@@ -922,7 +924,6 @@ def update_filters(fmt, silent):
         results = update_filter(f, last_updated, silent)
         for result in results:
             source, text, extra = result
-
             richprint(Template(fmt).render(**locals()))
 
 
@@ -990,7 +991,7 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
 
     next_cursor = "*"
     params = {
-        "email": config["openalex"]["email"],        
+        "email": config["openalex"]["email"],
         "filter": query,
         'sort': sort,
         "cursor": next_cursor,
@@ -1004,7 +1005,7 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
         del params['sort']  # incompatible param with sample
         params.update(sample=sample)
 
-   
+
     while next_cursor:
         resp = requests.get(url, params)
         if resp.status_code != 200:
@@ -1231,12 +1232,12 @@ def citation(sources):
         sources = sys.stdin.read().strip().split()
 
     for i, source in enumerate(sources):
-        (citation,) = db.execute(
+        (_citation,) = db.execute(
             """select json_extract(extra, '$.citation')
         from sources where source = ?""",
             (source,),
         ).fetchone()
-        richprint(f"{i + 1:2d}. {citation}")
+        richprint(f"{i + 1:2d}. {_citation}")
 
 
 @cli.command()
@@ -1248,12 +1249,14 @@ def unpaywall(doi):
 
     resp = requests.get(url, params)
     if resp.status_code == 200:
-
-        richprint(f'{data["display_name"]}, {data.get("journal_name") or ""}')
+        data = resp.json()
+        print(data)
+        richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
         richprint(f'Is open access: {data.get("is_oa", False)}')
 
         for loc in data.get("oa_locations", []):
-            richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
+            richprint(loc.get("url_for_pdf")
+                      or loc.get("url_for_landing_page"))
     else:
         richprint(f"{doi} not found in unpaywall")
 
@@ -1302,9 +1305,9 @@ def show(sources, fmt):
             print(f"Nothing found for {src}")
 
 
-@cli.command()
+@cli.command(name='open')
 @click.argument("source")
-def open(source):
+def visit(source):
     """Open source."""
     if source.startswith("http"):
         webbrowser.open(source, new=2)
@@ -1314,6 +1317,49 @@ def open(source):
         webbrowser.open(f"file://{source}")
 
 
+@cli.command()
+def update_embeddings():
+    """Update all the embeddings in your db.
+
+    The only reason you would do this is if you change the embedding model, or
+    the way the chunks are sized in your config.
+    
+    """
+    db = get_db()
+    from sentence_transformers import SentenceTransformer
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    model = SentenceTransformer(config["embedding"]["model"])
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=config["embedding"]["chunk_size"],
+        chunk_overlap=config["embedding"]["chunk_overlap"],
+    )
+
+    _, dim = model.encode(["test"]).shape
+
+
+    # The point of this is to avoid deleting the database.
+    db.execute('drop index if exists embedding_idx')
+    db.execute('alter table sources drop embedding')
+    db.execute(f'alter table sources add column embedding F32_BLOB({dim})')
+    db.commit()
+    
+    for rowid, text in db.execute('select rowid, text from sources').fetchall():
+    
+        chunks = splitter.split_text(text)
+        embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+        
+        c = db.execute('update sources set embedding = ? where rowid = ?',
+                       (embedding, rowid))
+        print(rowid, c.rowcount)
+
+    # I don't know why this has to be here. I had it above, and no updates were
+    # happening.
+    db.execute(
+            """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
+        )
+    db.commit()
+
+    
 ######################
 # Academic functions #
 ######################
@@ -1380,10 +1426,23 @@ def suggest_reviewers(query, n):
         r = get_data(url, params)
 
         for d in r["results"]:
-            lki = (
-                d.get("last_known_institutions", [])[0].get("display_name")
-                or d["affiliations"][0]["institution"]["display_name"]
-            )
+
+            lki = d.get("last_known_institutions")
+            if lki is []:
+                affils = d.get('affiliations', [])
+                if len(affils) >= 0:
+                    lki = affils[0]["institution"]["display_name"]
+                else:
+                    lki = 'unknown'
+            
+            else:
+
+                if len(lki) >= 1:
+                    lki = lki[0].get("display_name")
+                else:
+                    lki = 'unknown'
+                
+            
             row = [
                 d["display_name"],
                 authors[d["id"]],
@@ -1395,19 +1454,21 @@ def suggest_reviewers(query, n):
 
     # Sort and display the results
     data.sort(key=lambda row: row[2], reverse=True)
-    print("Potential reviewers")
-    print(
-        tabulate.tabulate(
+    s = ["Potential reviewers"]
+    s += [tabulate.tabulate(
             data,
             headers=["name", "# papers", "h-index", "oaid", "institution"],
             tablefmt="orgtbl",
-        )
-    )
-
-    print("\n" + "From these papers:")
+        )]
+    s += ["\n" + "From these papers:"]
     for i, row in enumerate(results):
         source, citation, extra, distance = row
-        richprint(f"{i + 1:2d}. {citation} (source)\n\n")
+        s += [f"{i + 1:2d}. {citation} (source)\n\n"]
+
+    console = Console(color_system='truecolor')
+    with console.pager():
+        for _s in s:
+            console.print(_s)
 
 
 if __name__ == "__main__":
