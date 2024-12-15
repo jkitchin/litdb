@@ -760,16 +760,16 @@ def similar(source, n, emacs, fmt):
         """select embedding from sources where source = ?""", (source,)
     ).fetchone()
 
-    rows = db.execute(
+    allrows = db.execute(
         """select sources.source, sources.text, sources.extra
     from vector_top_k('embedding_idx', ?, ?)
     join sources on sources.rowid = id""",
-        (emb, n + 1),
-    ).fetchall()[1:]
     # we do n + 1 because the first entry is always the source
-
+        (emb, n + 1),        
+    ).fetchall()
+    
     rows = [(source, text, json.loads(extra))
-            for source, text, extra in rows]
+            for source, text, extra in allrows[1:]]
 
     if emacs:
         template = Template(
