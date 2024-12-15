@@ -210,6 +210,8 @@ def add_work(workid, references=False, citing=False, related=False):
             cdata = get_data(CURL, params)
             next_cursor = cdata["meta"]["next_cursor"]
             params.update(cursor=next_cursor)
+            if next_cursor is None:
+                break
 
             # TODO: should the max citations to trigger this be configurable in litdb.toml
             trigger = config["openalex"].get("citation_count_trigger", 100)
@@ -219,7 +221,7 @@ def add_work(workid, references=False, citing=False, related=False):
                     f"Found {count} citations. Do you want to download them all? (n/y): "
                 )
                 if r.lower().startswith("n"):
-                    return
+                    break
                 else:
                     pass
 
