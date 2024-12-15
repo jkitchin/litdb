@@ -99,7 +99,7 @@ def get_coa(orcid):
             "4",
             "Name:",
             "Organizational Affiliation",
-            "Optional  (email, Department)",
+            "Optional (email, Department)",
             "Last Active",
         ],
     )
