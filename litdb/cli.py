@@ -165,6 +165,33 @@ def add(
 
 
 @cli.command()
+@click.argument('query', nargs=-1)
+@click.option('--references', is_flag=True)
+@click.option('--related', is_flag=True)
+@click.option('--citing', is_flag=True)
+def crossref(query, references, related, citing):
+    """Add entries to litdb from a crossref query."""
+    query = ' '.join(query)
+    resp = requests.get('https://api.crossref.org/works',
+                       params={'query': query})
+
+    if resp.status_code == 200:
+        data = resp.json()
+        for i, item in enumerate(data['message']['items']):
+            authors = ', '.join([f'{au["given"]} {au["family"]}' for au in item.get('author', [])])
+            richprint(f'{i}. {" ".join(item["title"])}, {authors}, {item["publisher"]}, https://doi.org/{item["DOI"]}.')
+
+        toadd = input('Enter space separated numbers to add, or return to quit. ')
+
+        if toadd:
+            toadd = [int(x) for x in toadd.split(' ')]
+            dois = ['https://doi.org/' + data['message']['items'][i]['DOI'] for i in toadd]     
+            
+            with click.Context(add) as ctx:
+                ctx.invoke(add, sources=dois, related=related, references=references, citing=citing)
+            
+
+@cli.command()
 @click.argument("sources", nargs=-1)
 def index(sources):
     """Index the directories in SOURCES.
