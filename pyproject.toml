@@ -36,6 +36,7 @@ dependencies = [
   "jinja2",
   "pytesseract",
   "pillow",
+  "bibtexparser"
   
 #  "pyaudio",
 #  "playsound",
