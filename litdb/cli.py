@@ -179,7 +179,11 @@ def crossref(query, references, related, citing):
         data = resp.json()
         for i, item in enumerate(data['message']['items']):
             authors = ', '.join([f'{au["given"]} {au["family"]}' for au in item.get('author', [])])
-            richprint(f'{i}. {" ".join(item["title"])}, {authors}, {item["publisher"]}, https://doi.org/{item["DOI"]}.')
+            source = ' '.join(item.get("container-title", ['no source']))
+            published = item.get('published', {}) or {}
+            year = published.get('date-parts',[['no year']])[0][0]
+            richprint(f'{i}. {" ".join(item["title"])}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.')
+            
 
         toadd = input('Enter space separated numbers to add, or return to quit. ')
 
