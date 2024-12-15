@@ -182,7 +182,8 @@ def crossref(query, references, related, citing):
             source = ' '.join(item.get("container-title", ['no source']))
             published = item.get('published', {}) or {}
             year = published.get('date-parts',[['no year']])[0][0]
-            richprint(f'{i}. {" ".join(item["title"])}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.')
+            title = item.get('title', ['no title'])
+            richprint(f'{i}. {" ".join(title)}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.')
             
 
         toadd = input('Enter space separated numbers to add, or return to quit. ')
