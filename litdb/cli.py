@@ -909,21 +909,25 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
 
 
 @cli.command()
-@click.argument("filter")
+@click.argument("_filter")
 @click.option("-d", "--description")
-def add_filter(filter, description=None):
-    """Add an OpenAlex FILTER."""
+def add_filter(_filter, description=None):
+    """Add an OpenAlex FILTER.
+
+    This does not run the filter right away. You need
+    to manually update the filters later.
+    """
     db.execute(
-        "insert into queries(filter, description) values (?, ?)", (filter, description)
+        "insert into queries(filter, description) values (?, ?)", (_filter, description)
     )
     db.commit()
 
 
 @cli.command()
-@click.argument("filter")
-def rm_filter(filter):
+@click.argument("_filter")
+def rm_filter(_filter):
     """Remove an OpenAlex FILTER."""
-    db.execute("delete from queries where filter = ?", (filter,))
+    db.execute("delete from queries where filter = ?", (_filter,))
     db.commit()
 
 
