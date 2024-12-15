@@ -42,7 +42,7 @@ chunk_overlap = 200
 email = "you@example.com"
 api_key = "..."
 
-[ollama]
+[gpt]
 model = "llama2"
 #+END_EXAMPLE
 
