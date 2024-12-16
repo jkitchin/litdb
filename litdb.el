@@ -490,19 +490,6 @@ This is not a fast function. It goes through the litdb cli command."
 		 "Copy citation")))))
 
 
-(defun litdb-async-process-sentinel (process event)
-  "Sentinel to keep the buffer alive after PROCESS finishes."
-  (when (memq (process-status process) '(exit signal))
-    (let ((buffer (process-buffer process)))
-      (when (buffer-live-p buffer)
-        (with-current-buffer buffer
-          (goto-char (point-max))
-          (insert (format "\nProcess %s finished with event: %s" process event))
-	  (org-mode)
-	  (goto-char (point-min))
-	  (litdb-review-header))))))
-
-
 (defun litdb-gpt (query)
   "Run litdb gpt on the QUERY.
 
@@ -635,14 +622,16 @@ working while it generates."
 Show new updated results in a buffer: *litdb-update*."
   (interactive)
   (let* ((process-environment (cons "COLUMNS=10000" process-environment))
-	 (proc (async-start-process "litdb-update" "litdb"
-				    ;; (lambda (proc)
-				    ;;   (switch-to-buffer (process-buffer proc))
-				    ;;   (org-mode)
-				    ;;   (goto-char (point-min)))
-				    nil
-				    "update-filters")))
-    (set-process-sentinel proc 'litdb-async-process-sentinel)
+	 (proc (start-process-shell-command "litdb-update" "*litdb-update*" "litdb update-filters -s")))
+    (set-process-sentinel proc (lambda (process event)
+				 "Sentinel to keep the buffer alive after PROCESS finishes."
+				 (when (memq (process-status process) '(exit signal))
+				   (let ((buffer (process-buffer process)))
+				     (when (buffer-live-p buffer)
+				       (with-current-buffer buffer
+					 (org-mode)
+					 (litdb-review-header)
+					 (goto-char (point-min))))))))
     (switch-to-buffer-other-frame (process-buffer proc))))
 
 
@@ -651,10 +640,18 @@ Show new updated results in a buffer: *litdb-update*."
 This runs asynchronously, and a review buffer appears in another frame."
   (interactive (list (read-string "Since: " "one week ago")))
   (let* ((process-environment (cons "COLUMNS=10000" process-environment))
-	 (proc (async-start-process "litdb-review" "litdb"
-				    nil
-				    "review" "-s" since)))
-    (set-process-sentinel proc 'litdb-async-process-sentinel)
+	 (proc (start-process-shell-command
+		"litdb-review" "*litdb-review*" 
+		(format "litdb review -s %s" since))))
+    (set-process-sentinel proc (lambda (process event)
+				 "Sentinel to keep the buffer alive after PROCESS finishes."
+				 (when (memq (process-status process) '(exit signal))
+				   (let ((buffer (process-buffer process)))
+				     (when (buffer-live-p buffer)
+				       (with-current-buffer buffer
+					 (org-mode)
+					 (litdb-review-header)
+					 (goto-char (point-min))))))))
     (switch-to-buffer-other-frame (process-buffer proc))))
 
 
