@@ -262,6 +262,7 @@ This function is kind of slow because it uses the cli."
     (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = '?'"
 				   (list source))))))
 
+
 (defun litdb-follow (_path)
   "Hydra for litdb-follow function"
   (interactive)
@@ -272,7 +273,6 @@ This function is kind of slow because it uses the cli."
   "Get the litdb tooltip at POSITION.
 We use the citation from litdb. That might not exist for every entry.
 Argument WIN The window."
-  (interactive)
   (with-current-buffer (window-buffer win)
     (get-text-property position 'litdb)))
 
@@ -419,6 +419,7 @@ Default action is insert link. Some other actions include:
     from fulltext
     where text match ? order by rank limit ?" (list query N))))
     (ivy-read "choose: " results
+	      :caller 'litdb
 	      :action
 	      '(1
 		("o" (lambda (x)
@@ -463,6 +464,7 @@ This is not a fast function. It goes through the litdb cli command."
 			    (format "litdb vsearch -n %s -e \"%s\"" N query)))))
     
     (ivy-read "Choose: " candidates
+	      :caller 'litdb
 	      :action
 	      '(1
 		("o" (lambda (x)
@@ -521,7 +523,7 @@ working while it generates."
     ;; (async-start-process "my-process" "*my-process-buffer*" "my-command" "arg1" "arg2")
     (set-process-sentinel (get-process "litdb-gpt") 'litdb-async-process-sentinel)
 
-    (pop-to-buffer (process-buffer proc))))
+    (switch-to-buffer-other-frame (process-buffer proc))))
 
 
 ;; * review functions
@@ -747,15 +749,16 @@ some of these are invalid."
 	 ;; use the stored bibtex entries. It is not clear this is the best
 	 ;; thing to do, but so far it works. It would be faster than trying to
 	 ;; get them all from crossref.
-	 (bibtex-entries (cl-loop for source in sources
+	 (bibtex-entries (cl-loop for source in (flatten-list sources)
 				  collect
 				  (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list source))))))
 
-    (when (file-exists-p bibtex-file)
-      (when (y-or-n-p (format "%s exists. Do you want to clobber it? (y/n):"
-			      bibtex-file))
-	(with-temp-file bibtex-file
-	  (insert (string-join bibtex-entries "\n")))))))
+    (when (and (file-exists-p bibtex-file)
+	       (not (y-or-n-p (format "%s exists. Clobber it?" bibtex-file))))
+      (error "%s exists." bibtex-file))
+    
+    (with-temp-file bibtex-file
+      (insert (string-join bibtex-entries "\n")))))
 
 
 (provide 'litdb)
