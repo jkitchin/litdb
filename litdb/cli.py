@@ -739,10 +739,10 @@ Respond to the prompt: {prompt}"""
     richprint(f'Generating text for "{prompt}" with {gpt_model}\n\n')
     output = ollama.generate(model=gpt_model, prompt=model_prompt)
     richprint(output["response"])
-    richprint(f"It took  {time.time() - t0:1.1f} " "sec to generate the response.")
+    richprint(f"\nIt took  {time.time() - t0:1.1f} " "sec to generate the response.\n")
 
-    richprint("The text was generated using these references")
-    for i, result in enumerate(data):
+    richprint("The text was generated using these references:\n")
+    for i, result in enumerate(data, 1):
         richprint(f"{i:2d}. {result[0]}\n")
 
 
