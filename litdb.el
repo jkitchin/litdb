@@ -529,7 +529,7 @@ working while it generates."
 				       (region-end)
 				       "")
 	     (litdb-review-header)))
-    ;; TODO
+    
     ;; tag entry
     ("t" . (litdb-edit-tags (org-entry-get (point) "SOURCE")))
 
