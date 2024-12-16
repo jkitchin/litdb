@@ -259,7 +259,7 @@ This function is kind of slow because it uses the cli."
   "Copy a bibtex for SOURCE."
   (interactive "sSource: ")
   (let* ((db (sqlite-open (litdb-get-db))))
-    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = '?'"
+    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
 				   (list source))))))
 
 
