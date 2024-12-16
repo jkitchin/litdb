@@ -520,9 +520,15 @@ working while it generates."
 				      (org-mode)
 				      (goto-char (point-min)))
 				    "gpt" query)))
-    ;; (async-start-process "my-process" "*my-process-buffer*" "my-command" "arg1" "arg2")
-    (set-process-sentinel (get-process "litdb-gpt") 'litdb-async-process-sentinel)
 
+    (set-process-sentinel proc (lambda (process event)
+				 "Sentinel to keep the buffer alive after PROCESS finishes."
+				 (when (memq (process-status process) '(exit signal))
+				   (let ((buffer (process-buffer process)))
+				     (when (buffer-live-p buffer)
+				       (with-current-buffer buffer
+					 (org-mode)
+					 (goto-char (point-min))))))))
     (switch-to-buffer-other-frame (process-buffer proc))))
 
 
