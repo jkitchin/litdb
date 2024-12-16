@@ -14,6 +14,7 @@ The idea is you add papers to your database, and then you can search it with nat
 1. https://www.youtube.com/live/e-J3Bh2Uti4 Introduction to litdb
 2. https://www.youtube.com/live/teW68WogulU local files (volume is very low for some reason)
 3. https://youtube.com/live/3LltpiiQaR8 CrossRef, reviewer suggestions, COA
+4. https://youtube.com/live/ZkKKuvVUWkE litdb and Emacs
 
 ** installation
 
