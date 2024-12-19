@@ -721,7 +721,10 @@ https://www.sbert.net/examples/applications/cross-encoder/README.html
 - paper-qa :: https://github.com/Future-House/paper-qa
   - This project by Andrew White uses LLM+RAG to explore a paper.
 
-These projects require you to make an account. There are freemium levels in each one.
+- ColBERT :: https://github.com/stanford-futuredata/ColBERT
+  - ColBERT is a fast retrieval model for large text collections. In theory it can probably be integrated with litdb. litdb is so simple, and works well enough so far without it. 
+
+Many of these projects require you to make an account. There are freemium levels in each one.
 
 - ResearchRabbit :: https://www.researchrabbit.ai/
   - This is a browser tool to navigate the scientific literature graphically. You can make collections, and papers that are related by citations are shown in a graph
@@ -730,7 +733,7 @@ These projects require you to make an account. There are freemium levels in each
   - Another browser tool to graphically interact with scientific literature
 
 - Keenious :: https://keenious.com/explore
-  - Browser / Google Docs and Word plugin. Finds related articles to the text in your document.
+  - Browser / Google Docs and Word plugin. Finds related articles to the text in your document. I like Keenious when in Google Docs.
   
 - scite.ai :: https://scite.ai/
   - Browser tool that integrates GPT with the scientific literature, integration with Zotero
@@ -744,7 +747,10 @@ These projects require you to make an account. There are freemium levels in each
 - khoj :: https://khoj.dev/
   - This is a desktop app that can be totally local, or in the cloud. It can index your files, and then you can chat with them. There is a freemium level.
 
+- AnythingLLM :: https://anythingllm.com/
+  - Another tool that runs LLMs locally, and says it can index your files so you can chat with them. 
+
 - gpt4all :: https://www.nomic.ai/gpt4all
-  -  Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
+  - Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
 
 With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no or low-code solutions, and if that is what you are looking for, look there! If you want to hack on things yourself, look here.
