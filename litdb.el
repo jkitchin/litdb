@@ -26,6 +26,7 @@
 (require 'hydra)
 (require 'request)
 (require 'counsel)
+(require 'openalex)  			; in org-ref
 
 ;;; Code:
 
@@ -134,7 +135,7 @@ START and END are the bounds. PATH could be a comma-separated list."
   "litdb actions
 "
   ("o" (browse-url (litdb-path-at-point)) "Open" :column "Open")
-  ("a" (litdb-openalex (litdb-path-at-point)) "OpenAlex" :column "Open")
+  ("a" (litdb-open-in-openalex (litdb-path-at-point)) "OpenAlex" :column "Open")
   ("p" (let* ((candidates '())
 	      (source (litdb-path-at-point))
 	      (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
@@ -165,10 +166,10 @@ START and END are the bounds. PATH could be a comma-separated list."
 
 	 (browse-url (completing-read "URL: " (remove nil candidates))))"pdf")
   
-  ("il" litdb "Insert new link" :column "Insert")
-  ("is" (litdb-insert-similar (litdb-path-at-point)) "Insert similar" :column "Insert")
+  ("i" litdb "Insert new link" :column "Insert")
+  ("s" (litdb-insert-similar (litdb-path-at-point)) "Similar" :column "Insert")
   
-  ("k" (kill-new (litdb-path-at-point)) "Copy key" :column "Copy")
+  ("k" (kill-new (litdb-path-at-point)) "Copy source" :column "Copy")
   ("l" (kill-new (format "litdb:%s" (litdb-path-at-point))) "Copy link" :column "Copy")
   ("c" (litdb-copy-citation (litdb-path-at-point)) "Copy citation" :column "Copy")
   ("b" (litdb-copy-bibtex (litdb-path-at-point)) "Copy bibtex" :column "Copy")
@@ -234,10 +235,24 @@ This function is kind of slow because it uses the cli."
 		       ;; not a cons
 		       (litdb-insert-candidate (list (car x)
 						     (cdr x))))
-		 "Insert")))))
+		 "Insert in current link")
+		("k" (lambda (x)
+		       ;; this is kind of dumb but the function takes a list,
+		       ;; not a cons
+		       (kill-new (format "litdb:%s" (cdr x))))
+		 "Copy link")
+		("c" (lambda (x)
+		       ;; this is kind of dumb but the function takes a list,
+		       ;; not a cons
+		       (let* ((db (sqlite-open (litdb-get-db)))
+			      (source (cdr x))
+			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
+							     (list source)))))
+			 (kill-new (format "%s %s" citation (format "litdb:%s" source)))))
+		 "Copy citation + link")))))
 
 
-(defun litdb-openalex (source)
+(defun litdb-open-in-openalex (source)
   "Open source in OpenAlex."
   (interactive "sSource: ")
   (let* ((db (sqlite-open (litdb-get-db))))
@@ -534,7 +549,7 @@ working while it generates."
     ("t" . (litdb-edit-tags (org-entry-get (point) "SOURCE")))
 
     ;; open in OpenAlex
-    ("a" . (progn
+    ("x" . (progn
 	     (with-litdb
 	      (browse-url
 	       (caar
@@ -557,6 +572,11 @@ working while it generates."
 
     ;; get / open pdf
     ("P" . (litdb-get-pdf (org-entry-get (point) "SOURCE")))
+
+    ;; insert in litdb
+    ("a" . (let ((source (org-entry-get (point) "SOURCE")))
+	     (shell-command (format "litdb add \"%s\"" source))
+	     (message "added %s" source)))
     
     ;; get related, citing, references
     ("r" (lambda ()
@@ -726,6 +746,101 @@ you will be prompted to pick one."
 		 (plist-get candidate :position))))
     (org-refile nil nil rfloc))
   (litdb-review-header))
+
+
+(defun litdb-openalex (filter &optional cursor)
+"Run a query with FILTER in OpenAlex.
+Results are shown in an org-buffer.
+
+CURSOR is optional, and used to make a link to the next page of results.
+
+The idea in this function is to use speed keys to add items.
+
+Example filters:
+fulltext.search:yeast,publication_year:>2020
+"
+(interactive "sFilter: ")
+
+(when (null cursor)
+  (setq cursor "*"))
+
+(let* ((url "https://api.openalex.org/works")
+       (parser (lambda ()
+		 "Parse the response from json to elisp."
+		 (let ((json-array-type 'list)
+		       (json-object-type 'plist)
+		       (json-key-type 'keyword)
+		       (json-false nil)
+		       (json-encoding-pretty-print nil))
+		   (json-read))))
+       (req (request url
+	      :sync t
+	      :parser parser
+	      :params `(("cursor" . ,cursor)
+			("filter" . ,filter))))
+       (data (request-response-data req))
+       (metadata (plist-get data :meta))
+       (results (plist-get data :results))
+       (next-page (format "[[elisp:(litdb-openalex \"%s\" \"%s\")][Next page]]"
+			  filter
+			  (plist-get metadata :next_cursor)))
+       (buf (get-buffer-create "*litdb-openalex*")))
+  
+  (with-current-buffer buf
+    (erase-buffer)
+    (org-mode)
+    (insert (s-format "#+title: OpenAlex search: ${filter} (${count} results)
+
+${next-page}
+
+Speed keys:
+| d | delete heading    |
+| a | open in Open Alex |
+| r | get related items |
+| f | get references    |
+| c | get citing papers |
+| P | get pdf           |
+
+"
+		      'aget
+		      `(("filter" . ,filter)
+			("next-page" . ,next-page)
+			("count" . ,(plist-get metadata :count)))))
+
+    (insert
+     (cl-loop for result in results concat 
+	      (s-format "* ${title}
+:PROPERTIES:
+:JOURNAL: ${primary_location.source.display_name}
+:AUTHOR: ${authors}
+:YEAR: ${publication_year}
+:OPENALEX: ${id}
+:SOURCE: ${ids.doi}
+:REFERENCE_COUNT: ${referenced_works_count}
+:CITED_BY_COUNT: ${cited_by_count}
+:END:
+
+${abstract}
+
+" (lambda (key data)
+    (or (cdr (assoc key data)) ""))
+
+`(("title" . ,(oa--title result))
+  ("primary_location.source.display_name" . ,(oa-get result "primary_location.source.display_name"))
+  ("authors" . ,(oa--authors result))
+  ("publication_year" . ,(oa-get result "publication_year"))
+  ("id" . ,(oa-get result "id"))
+  ("ids.doi" . ,(oa-get result "ids.doi"))
+  ("cited_by_count" . ,(oa-get result "cited_by_count"))
+  ("referenced_works_count" . ,(oa-get result "referenced_works_count"))
+  ("abstract" . ,(oa--abstract result))))))
+
+    (insert (format "* %s" next-page))
+    
+    (goto-char (point-min)))
+  (pop-to-buffer buf)
+  (org-next-visible-heading 1)))
+
 
 ;; * extract entries to bibtex
 
