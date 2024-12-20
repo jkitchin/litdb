@@ -718,6 +718,9 @@ https://www.sbert.net/examples/applications/cross-encoder/README.html
 
 * Related projects
 
+- LitSuggest :: https://www.ncbi.nlm.nih.gov/research/litsuggest/
+  - Browser tool that suggests literature for you based on positive and negative PMIDs. Hosted by NIH.
+  
 - paper-qa :: https://github.com/Future-House/paper-qa
   - This project by Andrew White uses LLM+RAG to explore a paper.
 
