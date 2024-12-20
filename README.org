@@ -529,6 +529,12 @@ libsql is a fork of sqlite with integrated vector search, and potential for usin
 
 These are ideas for future expansion.
 
+** PDFs and notes
+
+I am not sure what the best way to do this is. The records in litdb are stored by the source, often a url, or path. The PDFs would be stored outside the database, and we would need some way to link them. The keys aren't suitable for naming, but maybe a hash of the keys would be suitable. This would add a fuller opportunity to search larger, local documents too. In org-ref, I only had one pdf per entry. I guess here I would have a new table, so you could have multiple documents linked to an entry, although it won't be easy to tell what they are from the hash-based filenames.
+
+Notes on the other hand, might be small enough that they could be stored in the database. Then they would be easily searchable. They could also be stored externally to make them easy to edit. I haven't found the notes feature in org-ref that helpful, and usually I take notes in various places. What I should do is add a search to find the litdb links in your org-files. This is already a feature of org-db.
+
 ** Jupyter lab integration
 
 An alternative to the CLI and Emacs would be to run this in Jupyter Lab with magic commands and rich output. 
