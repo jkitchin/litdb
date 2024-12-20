@@ -936,7 +936,7 @@ def rm_filter(_filter):
     db.commit()
 
 
-update_filter_fmt = """* {{ extra['display_name'] | replace("\n", "") | replace("\r", "") }}
+update_filter_fmt = """** {{ extra['display_name'] | replace("\n", "") | replace("\r", "") }}
 :PROPERTIES:
 :SOURCE: {{ source }}
 :REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}
@@ -955,9 +955,11 @@ litdb:{{ source }}
 @click.option('-s', '--silent', is_flag=True, default=False)
 def update_filters(fmt, silent):
     """Update litdb using a filter with works from a created date."""
-    filters = db.execute("""select filter, last_updated from queries""")
-    for f, last_updated in filters.fetchall():
+    filters = db.execute("""select filter, description, last_updated from queries""")
+    for f, description, last_updated in filters.fetchall():
         results = update_filter(f, last_updated, silent)
+        if results:
+            richprint(f'* {description}')
         for result in results:
             source, text, extra = result
             richprint(Template(fmt).render(**locals()))
