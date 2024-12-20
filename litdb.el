@@ -174,6 +174,16 @@ START and END are the bounds. PATH could be a comma-separated list."
   ("c" (litdb-copy-citation (litdb-path-at-point)) "Copy citation" :column "Copy")
   ("b" (litdb-copy-bibtex (litdb-path-at-point)) "Copy bibtex" :column "Copy")
   ("t" litdb-edit-tags-at-point "Edit tags" :column "Copy")
+
+  ("wg" (browse-url
+	 (url-encode-url
+	  (format
+	   "http://scholar.google.com/scholar?q=%s"
+	   (with-litdb
+	    (car (sqlite-select db
+				"select json_extract(extra, '$.title') from sources where source = ?"
+				(list (litdb-path-at-point))))))))
+   "Google Scholar" :column "Web")
   
   ("gf" (let* ((default-directory (file-name-directory (litdb-get-db))))
 	  (message "%s" (shell-command-to-string
