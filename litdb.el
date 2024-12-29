@@ -72,8 +72,12 @@ where source_tag.tag_id = ?" (list tag-id)))))
   "Show a buffer with information about your litdb."
   (interactive)
   (let* ((default-directory (file-name-directory (litdb-get-db)))
-	 (proc (start-process-shell-command "litdb about" "*litdb-about*"
-					    "litdb about")))
+	 (buf (get-buffer-create "*litdb-about*"))
+	 
+	 (proc))
+    (with-current-buffer buf (erase-buffer))
+    (setq proc (start-process-shell-command "litdb about" buf
+					    "litdb about"))
     (pop-to-buffer (process-buffer proc))
     (org-mode)
     (goto-char (point-min))))
