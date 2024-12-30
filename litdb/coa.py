@@ -5,10 +5,6 @@ import datetime
 
 import pandas as pd
 from nameparser import HumanName
-import time
-from urllib.parse import quote
-import os
-
 import requests
 
 
@@ -60,7 +56,7 @@ def get_coa(orcid):
 
     # sort authors alphabetically
     authors = sorted(authors, key=lambda row: (row[0].lower(), -row[1]))
-    
+
     # Now, get all the affiliations. This assumes the first one is most recent.
     # I could also use the last known institution, but this is sometimes empty
     # too.
@@ -73,7 +69,7 @@ def get_coa(orcid):
 
         d = requests.get(url, params=params)
 
-        for au in d.json()["results"]:            
+        for au in d.json()["results"]:
             affils = au["affiliations"]
             if len(affils) > 0:
                 affiliations[au["id"]] = affils[0]["institution"]["display_name"]
@@ -85,9 +81,8 @@ def get_coa(orcid):
     all_authors = []
     for name, year, oa_id, pub_id in authors:
         if oa_id not in uniq:
-            
             uniq[oa_id] = 1
-            affil = affiliations.get(oa_id, 'No affiliation known')
+            affil = affiliations.get(oa_id, "No affiliation known")
             # now we build the tables
             uniq_authors += [["A:", name, affil, "", year]]
             all_authors += [["A:", name, affil, "", year, pub_id, oa_id]]
@@ -111,7 +106,6 @@ def get_coa(orcid):
     xw = pd.ExcelWriter(coa_file, engine="xlsxwriter")
     df.to_excel(xw, index=False, sheet_name="Table 4")
 
-    wb = xw.book
     sheet = xw.sheets["Table 4"]
 
     for column in df:
