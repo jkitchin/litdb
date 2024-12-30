@@ -16,6 +16,8 @@ import bs4
 import click
 import dateparser
 from docx import Document
+from IPython import get_ipython
+from IPython.display import display, HTML
 from jinja2 import Template
 from more_itertools import batched
 import nbformat
@@ -31,8 +33,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
-
-from . import root, config, init_litdb
+from . import find_root_directory, get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
@@ -612,6 +613,7 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
     better is found, or you reach the number.
 
     """
+    config = get_config()
     query = " ".join(query)
     model = SentenceTransformer(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
@@ -728,6 +730,7 @@ def fulltext(query, n, fmt):
 @click.argument("prompt", nargs=-1)
 def gpt(prompt):
     """Run an ollama query with PROMPT."""
+    config = get_config()
     t0 = time.time()
     prompt = " ".join(prompt)
     model = SentenceTransformer(config["embedding"]["model"])
@@ -1036,6 +1039,7 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
     litdb openalex -e sources -f "display_name.search:Digital Discovery"
 
     """
+    config = get_config()
     url = f"https://api.openalex.org/{endpoint}"
 
     query = " ".join(query)
@@ -1290,13 +1294,13 @@ def citation(sources):
 @click.argument("doi")
 def unpaywall(doi):
     """Use unpaywall to find PDFs for doi."""
+    config = get_config()
     url = f"https://api.unpaywall.org/v2/{doi}"
     params = {"email": config["openalex"]["email"]}
 
     resp = requests.get(url, params)
     if resp.status_code == 200:
         data = resp.json()
-        print(data)
         richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
         richprint(f'Is open access: {data.get("is_oa", False)}')
 
@@ -1309,7 +1313,7 @@ def unpaywall(doi):
 @cli.command()
 def about():
     """Summary statistics of your db."""
-    dbf = root / "litdb.libsql"
+    dbf = find_root_directory() / "litdb.libsql"
     richprint(f"Your database is located at {dbf}")
     kb = 1024
     mb = 1024 * kb
@@ -1370,6 +1374,7 @@ def update_embeddings():
     the way the chunks are sized in your config.
 
     """
+    config = get_config()
     db = get_db()
     from sentence_transformers import SentenceTransformer
     from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -1432,6 +1437,7 @@ def suggest_reviewers(query, n):
     Use up to N similar documents. This is an iterative function, you will be
     prompted to expand the search.
     """
+    config = get_config()
     query = " ".join(query)
 
     # This is a surprise. You can't just call the functions above! This is
@@ -1496,23 +1502,39 @@ def suggest_reviewers(query, n):
 
     # Sort and display the results
     data.sort(key=lambda row: row[2], reverse=True)
-    s = ["Potential reviewers"]
-    s += [
-        tabulate.tabulate(
-            data,
-            headers=["name", "# papers", "h-index", "oaid", "institution"],
-            tablefmt="orgtbl",
-        )
-    ]
-    s += ["\n" + "From these papers:"]
-    for i, row in enumerate(results):
-        source, citation, extra, distance = row
-        s += [f"{i + 1:2d}. {citation} (source)\n\n"]
 
-    console = Console(color_system="truecolor")
-    with console.pager():
-        for _s in s:
-            console.print(_s)
+    if get_ipython():
+        display(
+            HTML(
+                tabulate.tabulate(
+                    data,
+                    headers=["name", "# papers", "h-index", "oaid", "institution"],
+                    tablefmt="html",
+                )
+            )
+        )
+        for i, row in enumerate(results):
+            source, citation, extra, distance = row
+            richprint(f"{i + 1:2d}. {citation} (source)\n\n")
+
+    else:
+        s = ["Potential reviewers"]
+        s += [
+            tabulate.tabulate(
+                data,
+                headers=["name", "# papers", "h-index", "oaid", "institution"],
+                tablefmt="orgtbl",
+            )
+        ]
+        s += ["\n" + "From these papers:"]
+        for i, row in enumerate(results):
+            source, citation, extra, distance = row
+            s += [f"{i + 1:2d}. {citation} (source)\n\n"]
+
+        console = Console(color_system="truecolor")
+        with console.pager():
+            for _s in s:
+                console.print(_s)
 
 
 if __name__ == "__main__":
