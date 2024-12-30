@@ -1,5 +1,4 @@
-"""OpenAlex plugin for litdb.
-"""
+"""OpenAlex plugin for litdb."""
 
 from bs4 import BeautifulSoup
 import requests
@@ -7,7 +6,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 
 from ratelimit import limits
-from tqdm import tqdm
 
 
 # limit openalex calls to 10 per second
