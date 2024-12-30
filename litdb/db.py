@@ -5,7 +5,7 @@ import os
 
 import libsql_experimental as libsql
 
-from litdb import get_config, find_root_directory
+from .utils import get_config, find_root_directory
 
 import numpy as np
 from sentence_transformers import SentenceTransformer

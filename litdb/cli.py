@@ -33,7 +33,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
-from . import find_root_directory, get_config, init_litdb
+from .utils import find_root_directory, get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
