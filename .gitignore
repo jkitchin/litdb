@@ -8,7 +8,7 @@ __pycache__
 /*.libsql-shm
 /*.libsql-wal
 /build/
-/.ipynb_checkpoints/
+*.ipynb_checkpoints/
 /.virtual_documents/
 /*.xlsx
 /litdb.toml
