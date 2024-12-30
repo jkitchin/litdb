@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
-
+import sys
 import toml
 import tomlkit
+import litdb.lab  # noqa: F401
 
 
-def find_root_directory(rootfile):
+def find_root_directory(rootfile="litdb.toml"):
     """Search upwards for rootfile.
     Returns the root directory, or the current directory if one is not found."""
     wd = Path.cwd()
@@ -15,17 +16,6 @@ def find_root_directory(rootfile):
         wd = wd.parent
 
     return Path.cwd()
-
-
-CONFIG = "litdb.toml"
-root = find_root_directory(CONFIG)
-
-# if you don't find a litdb.toml you might not be in a litdb root. We check for
-# an env var next so that litdb works everywhere.
-if not (root / CONFIG).exists():
-    litdb_root = os.environ.get("LITDB_ROOT")
-    if litdb_root:
-        root = Path(litdb_root)
 
 
 def init_litdb():
@@ -50,16 +40,24 @@ def init_litdb():
         toml.dump(d, f)
 
 
-# If you aren't in a litdb project, and there is no env var, we might have to
-# make a new one. We ask for confirmation before doing this.
-if not (root / CONFIG).exists():
-    if input("No config found. Do you want to make one here? (y/n)") == "n":
-        import sys
+def get_config():
+    "Return the config dictionary."
 
-        sys.exit()
+    root = os.environ.get("LITDB_ROOT")
+    if root:
+        root = Path(root)
     else:
-        init_litdb()
+        root = find_root_directory()
 
-# This file should exist if you get here.
-with open(root / CONFIG) as f:
-    config = tomlkit.parse(f.read())
+    CONFIG = "litdb.toml"
+
+    # if you don't find a litdb.toml you might not be in a litdb root. We check for
+    # an env var next so that litdb works everywhere.
+    if not (root / CONFIG).exists():
+        print('No config found. You need to run "litdb init"')
+        sys.exit()
+
+    with open(root / CONFIG) as f:
+        config = tomlkit.parse(f.read())
+
+    return config

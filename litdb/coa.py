@@ -2,10 +2,12 @@
 
 from more_itertools import batched
 import datetime
-
+from IPython import get_ipython
+from IPython.display import HTML, display
 import pandas as pd
 from nameparser import HumanName
 import requests
+import base64
 
 
 def get_coa(orcid):
@@ -137,4 +139,10 @@ def get_coa(orcid):
     # Save the Excel file
     xw.close()
 
-    print(f"Created {coa_file}")
+    if get_ipython():
+        with open(coa_file, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+            uri = f'<pre>{coa_file}</pre><br><a href="data:text/plain;base64,{b64}" download="{coa_file}">Download COA</a>'
+            display(HTML(uri))
+    else:
+        print(f"Created {coa_file}")

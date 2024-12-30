@@ -5,7 +5,7 @@ import os
 
 import libsql_experimental as libsql
 
-from litdb import root, config
+from litdb import get_config, find_root_directory
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -20,11 +20,13 @@ from litdb.openalex import get_data, get_text
 from litdb.bibtex import dump_bibtex
 
 
-DB = str(root / "litdb.libsql")
-
-
 def get_db():
     """Get or create the database."""
+
+    root = find_root_directory()
+    DB = str(root / "litdb.libsql")
+    config = get_config()
+
     if os.path.exists(DB):
         db = libsql.connect(DB)
         db.execute("PRAGMA foreign_keys = ON")
@@ -97,7 +99,7 @@ def add_source(source, text, extra=None):
     document chunks.
     """
     db = get_db()
-
+    config = get_config()
     model = SentenceTransformer(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
@@ -129,6 +131,7 @@ def add_source(source, text, extra=None):
 
 def get_citation(doi):
     """Get a citation string for doi."""
+    config = get_config()
     citeas = "https://api.citeas.org/product/"
     cp = {"email": config["openalex"]["email"]}
 
@@ -152,7 +155,7 @@ def add_work(workid, references=False, citing=False, related=False):
     if related is truthy, also add them.
 
     """
-
+    config = get_config()
     params = {"email": config["openalex"]["email"], "per_page": 200}
     if config["openalex"].get("api_key"):
         params.update(api_key=config["openalex"].get("api_key"))
@@ -231,6 +234,7 @@ def add_author(oaid):
     "id": "https://openalex.org/A5003442464",
     "orcid": "https://orcid.org/0000-0003-2625-9232",
     """
+    config = get_config()
     aurl = "https://api.openalex.org/authors/" + oaid
 
     params = {
@@ -264,6 +268,7 @@ def update_filter(f, last_updated=None, silent=False):
     That might still lead to a lot of hits.
 
     """
+    config = get_config()
     model = SentenceTransformer(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
