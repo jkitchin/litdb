@@ -1,11 +1,7 @@
-"""Setup and add things to the database.
-
-
-"""
+"""Setup and add things to the database."""
 
 import json
 import os
-import time
 
 import libsql_experimental as libsql
 
@@ -14,7 +10,6 @@ from litdb import root, config
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import numpy as np
 from tqdm import tqdm
 import datetime
 import requests
@@ -25,7 +20,7 @@ from litdb.openalex import get_data, get_text
 from litdb.bibtex import dump_bibtex
 
 
-DB = str(root / 'litdb.libsql')
+DB = str(root / "litdb.libsql")
 
 
 def get_db():
@@ -38,10 +33,6 @@ def get_db():
     else:
         db = libsql.connect(DB)
         model = SentenceTransformer(config["embedding"]["model"])
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=config["embedding"]["chunk_size"],
-            chunk_overlap=config["embedding"]["chunk_overlap"],
-        )
 
         _, dim = model.encode(["test"]).shape
 
@@ -112,7 +103,7 @@ def add_source(source, text, extra=None):
         chunk_size=config["embedding"]["chunk_size"],
         chunk_overlap=config["embedding"]["chunk_overlap"],
     )
-    
+
     chunks = splitter.split_text(text)
     embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
 
@@ -140,11 +131,13 @@ def get_citation(doi):
     """Get a citation string for doi."""
     citeas = "https://api.citeas.org/product/"
     cp = {"email": config["openalex"]["email"]}
-    try:
-        cdata = requests.get(citeas + doi, cp).json()
+
+    resp = requests.get(citeas + doi, cp)
+    if resp.status_code == 200:
+        cdata = resp.json()
         citations = cdata.get("citations", [])
         return citations[0]["citation"]
-    except:
+    else:
         return None
 
 
@@ -277,9 +270,8 @@ def update_filter(f, last_updated=None, silent=False):
         chunk_overlap=config["embedding"]["chunk_overlap"],
     )
 
-
     db = get_db()
-    
+
     _filter = f  # make a copy because we modify it later.
 
     wurl = "https://api.openalex.org/works"
@@ -306,7 +298,6 @@ def update_filter(f, last_updated=None, silent=False):
         data = get_data(wurl, params)
         next_cursor = data["meta"]["next_cursor"]
         params.update(cursor=next_cursor)
-        tot = data["meta"]["count"]
 
         for work in tqdm(data["results"], disable=silent):
             source = work.get("doi") or work.get("id")
@@ -317,7 +308,7 @@ def update_filter(f, last_updated=None, silent=False):
             work["bibtex"] = bibtex
 
             text = get_text(work)
-            
+
             chunks = splitter.split_text(text)
             embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
 
@@ -337,7 +328,6 @@ def update_filter(f, last_updated=None, silent=False):
                     (source, text),
                 )
 
-        
     db.execute(
         """update queries set last_updated = ? where filter = ?""",
         (datetime.date.today().strftime("%Y-%m-%d"), f),
