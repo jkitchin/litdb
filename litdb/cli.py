@@ -1021,10 +1021,9 @@ def list_filters(fmt):
 @click.argument("query", nargs=-1)
 @click.option("-f", "--filter", "_filter", is_flag=True, default=False)
 @click.option("-e", "--endpoint", default="works")
-@click.option("--sort", default="publication_year:desc")
 @click.option("--sample", default=-1)
 @click.option("--per-page", default=5)
-def openalex(query, _filter, endpoint, sort, sample, per_page):
+def openalex(query, _filter, endpoint, sample, per_page):
     """Run an openalex query on FILTER.
 
     ENDPOINT should be one of works, authors, or another entity.
@@ -1042,15 +1041,17 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
     config = get_config()
     url = f"https://api.openalex.org/{endpoint}"
 
-    query = " ".join(query)
+    if isinstance(query, tuple):
+        query = " ".join(query)
     if not _filter:
         query = f"default.search:{query}"
+
+    print(query)
 
     next_cursor = "*"
     params = {
         "email": config["openalex"]["email"],
         "filter": query,
-        "sort": sort,
         "cursor": next_cursor,
         "per_page": per_page,
     }
