@@ -69,7 +69,13 @@ def init():
 @click.option("--all", is_flag=True, help="Add references, related and citing.")
 @click.option("-t", "--tag", "tags", multiple=True)
 def add(
-        sources, references=False, citing=False, related=False, all=False, verbose=False, tags=None
+    sources,
+    references=False,
+    citing=False,
+    related=False,
+    all=False,
+    verbose=False,
+    tags=None,
 ):
     """Add WIDS to the db.
 
@@ -165,36 +171,46 @@ def add(
 
 
 @cli.command()
-@click.argument('query', nargs=-1)
-@click.option('--references', is_flag=True)
-@click.option('--related', is_flag=True)
-@click.option('--citing', is_flag=True)
+@click.argument("query", nargs=-1)
+@click.option("--references", is_flag=True)
+@click.option("--related", is_flag=True)
+@click.option("--citing", is_flag=True)
 def crossref(query, references, related, citing):
     """Add entries to litdb from a crossref query."""
-    query = ' '.join(query)
-    resp = requests.get('https://api.crossref.org/works',
-                       params={'query': query})
+    query = " ".join(query)
+    resp = requests.get("https://api.crossref.org/works", params={"query": query})
 
     if resp.status_code == 200:
         data = resp.json()
-        for i, item in enumerate(data['message']['items']):
-            authors = ', '.join([f'{au["given"]} {au["family"]}' for au in item.get('author', [])])
-            source = ' '.join(item.get("container-title", ['no source']))
-            published = item.get('published', {}) or {}
-            year = published.get('date-parts',[['no year']])[0][0]
-            title = item.get('title', ['no title'])
-            richprint(f'{i}. {" ".join(title)}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.')
-            
+        for i, item in enumerate(data["message"]["items"]):
+            authors = ", ".join(
+                [f'{au["given"]} {au["family"]}' for au in item.get("author", [])]
+            )
+            source = " ".join(item.get("container-title", ["no source"]))
+            published = item.get("published", {}) or {}
+            year = published.get("date-parts", [["no year"]])[0][0]
+            title = item.get("title", ["no title"])
+            richprint(
+                f'{i}. {" ".join(title)}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.'
+            )
 
-        toadd = input('Enter space separated numbers to add, or return to quit. ')
+        toadd = input("Enter space separated numbers to add, or return to quit. ")
 
         if toadd:
-            toadd = [int(x) for x in toadd.split(' ')]
-            dois = ['https://doi.org/' + data['message']['items'][i]['DOI'] for i in toadd]     
-            
+            toadd = [int(x) for x in toadd.split(" ")]
+            dois = [
+                "https://doi.org/" + data["message"]["items"][i]["DOI"] for i in toadd
+            ]
+
             with click.Context(add) as ctx:
-                ctx.invoke(add, sources=dois, related=related, references=references, citing=citing)
-            
+                ctx.invoke(
+                    add,
+                    sources=dois,
+                    related=related,
+                    references=references,
+                    citing=citing,
+                )
+
 
 @cli.command()
 @click.argument("sources", nargs=-1)
@@ -539,7 +555,6 @@ def audio(playback=False):
     import speech_recognition as sr
 
     while True:
-
         afile = record()
         audio_file = sr.AudioFile(afile)
         r = sr.Recognizer()
@@ -607,7 +622,6 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
         steps = 0
 
         while True:
-
             results = db.execute(
                 """select
             sources.source, sources.text,
@@ -734,8 +748,8 @@ def gpt(prompt):
     model_prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
 
 Respond to the prompt: {prompt}"""
-    gpt = config.get('gpt', {'model': "llama2"})
-    gpt_model = gpt['model']
+    gpt = config.get("gpt", {"model": "llama2"})
+    gpt_model = gpt["model"]
     richprint(f'Generating text for "{prompt}" with {gpt_model}\n\n')
     output = ollama.generate(model=gpt_model, prompt=model_prompt)
     richprint(output["response"])
@@ -765,12 +779,11 @@ def similar(source, n, emacs, fmt):
         """select sources.source, sources.text, sources.extra
     from vector_top_k('embedding_idx', ?, ?)
     join sources on sources.rowid = id""",
-    # we do n + 1 because the first entry is always the source
-        (emb, n + 1),        
+        # we do n + 1 because the first entry is always the source
+        (emb, n + 1),
     ).fetchall()
-    
-    rows = [(source, text, json.loads(extra))
-            for source, text, extra in allrows[1:]]
+
+    rows = [(source, text, json.loads(extra)) for source, text, extra in allrows[1:]]
 
     if emacs:
         template = Template(
@@ -951,28 +964,30 @@ litdb:{{ source }}
 
 
 @cli.command()
-@click.option('-f', '--fmt', default=update_filter_fmt)
-@click.option('-s', '--silent', is_flag=True, default=False)
+@click.option("-f", "--fmt", default=update_filter_fmt)
+@click.option("-s", "--silent", is_flag=True, default=False)
 def update_filters(fmt, silent):
     """Update litdb using a filter with works from a created date."""
     filters = db.execute("""select filter, description, last_updated from queries""")
     for f, description, last_updated in filters.fetchall():
         results = update_filter(f, last_updated, silent)
         if results:
-            richprint(f'* {description}')
+            richprint(f"* {description}")
         for result in results:
             source, text, extra = result
             richprint(Template(fmt).render(**locals()))
 
 
-list_filter_fmt = ('{{ "{:3d}".format(rowid) }}.'
-                   ' {{ "{:30s}".format(description'
-                   ' or "None") }} {{ f }}'
-                   ' ({{ last_updated }})')
+list_filter_fmt = (
+    '{{ "{:3d}".format(rowid) }}.'
+    ' {{ "{:30s}".format(description'
+    ' or "None") }} {{ f }}'
+    " ({{ last_updated }})"
+)
 
 
 @cli.command()
-@click.option('-f', '--fmt', default=list_filter_fmt)
+@click.option("-f", "--fmt", default=list_filter_fmt)
 def list_filters(fmt):
     """List the filters.
 
@@ -1003,9 +1018,9 @@ def list_filters(fmt):
 @click.argument("query", nargs=-1)
 @click.option("-f", "--filter", "_filter", is_flag=True, default=False)
 @click.option("-e", "--endpoint", default="works")
-@click.option('--sort', default='publication_year:desc')
-@click.option('--sample', default=-1)
-@click.option('--per-page', default=5)
+@click.option("--sort", default="publication_year:desc")
+@click.option("--sample", default=-1)
+@click.option("--per-page", default=5)
 def openalex(query, _filter, endpoint, sort, sample, per_page):
     """Run an openalex query on FILTER.
 
@@ -1031,18 +1046,17 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
     params = {
         "email": config["openalex"]["email"],
         "filter": query,
-        'sort': sort,
+        "sort": sort,
         "cursor": next_cursor,
-        'per_page': per_page
+        "per_page": per_page,
     }
 
-    if api_key:=config["openalex"].get("api_key"):
+    if api_key := config["openalex"].get("api_key"):
         params.update(api_key=api_key)
 
     if sample > 0:
-        del params['sort']  # incompatible param with sample
+        del params["sort"]  # incompatible param with sample
         params.update(sample=sample)
-
 
     while next_cursor:
         resp = requests.get(url, params)
@@ -1055,20 +1069,14 @@ def openalex(query, _filter, endpoint, sort, sample, per_page):
         next_cursor = data["meta"]["next_cursor"]
         params.update(cursor=next_cursor)
 
-        s = []
         for result in data["results"]:
-            try:
-                richprint(get_text(result))
-                print()
-            except:
-                # Probably this is a richprint syntax error
-                print(f'{result["id"]}: {result["display_name"]}')
-                print()
+            # Note sometimes there is an exception from bad markup in strings
+            richprint(get_text(result))
+            print()
 
         if next_cursor:
-            if input('Continue? (y/n)').lower().startswith('n'):
+            if input("Continue? (y/n)").lower().startswith("n"):
                 return
-
 
 
 ########################################
@@ -1293,8 +1301,7 @@ def unpaywall(doi):
         richprint(f'Is open access: {data.get("is_oa", False)}')
 
         for loc in data.get("oa_locations", []):
-            richprint(loc.get("url_for_pdf")
-                      or loc.get("url_for_landing_page"))
+            richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
     else:
         richprint(f"{doi} not found in unpaywall")
 
@@ -1302,7 +1309,7 @@ def unpaywall(doi):
 @cli.command()
 def about():
     """Summary statistics of your db."""
-    dbf = root / 'litdb.libsql'
+    dbf = root / "litdb.libsql"
     richprint(f"Your database is located at {dbf}")
     kb = 1024
     mb = 1024 * kb
@@ -1343,7 +1350,7 @@ def show(sources, fmt):
             print(f"Nothing found for {src}")
 
 
-@cli.command(name='open')
+@cli.command(name="open")
 @click.argument("source")
 def visit(source):
     """Open source."""
@@ -1361,11 +1368,12 @@ def update_embeddings():
 
     The only reason you would do this is if you change the embedding model, or
     the way the chunks are sized in your config.
-    
+
     """
     db = get_db()
     from sentence_transformers import SentenceTransformer
     from langchain.text_splitter import RecursiveCharacterTextSplitter
+
     model = SentenceTransformer(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
@@ -1374,30 +1382,29 @@ def update_embeddings():
 
     _, dim = model.encode(["test"]).shape
 
-
     # The point of this is to avoid deleting the database.
-    db.execute('drop index if exists embedding_idx')
-    db.execute('alter table sources drop embedding')
-    db.execute(f'alter table sources add column embedding F32_BLOB({dim})')
+    db.execute("drop index if exists embedding_idx")
+    db.execute("alter table sources drop embedding")
+    db.execute(f"alter table sources add column embedding F32_BLOB({dim})")
     db.commit()
-    
-    for rowid, text in db.execute('select rowid, text from sources').fetchall():
-    
+
+    for rowid, text in db.execute("select rowid, text from sources").fetchall():
         chunks = splitter.split_text(text)
         embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
-        
-        c = db.execute('update sources set embedding = ? where rowid = ?',
-                       (embedding, rowid))
+
+        c = db.execute(
+            "update sources set embedding = ? where rowid = ?", (embedding, rowid)
+        )
         print(rowid, c.rowcount)
 
     # I don't know why this has to be here. I had it above, and no updates were
     # happening.
     db.execute(
-            """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
-        )
+        """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
+    )
     db.commit()
 
-    
+
 ######################
 # Academic functions #
 ######################
@@ -1464,23 +1471,20 @@ def suggest_reviewers(query, n):
         r = get_data(url, params)
 
         for d in r["results"]:
-
-            lki = d.get("last_known_institutions")
-            if lki is []:
-                affils = d.get('affiliations', [])
+            lki = d.get("last_known_institutions", [])
+            if lki == []:
+                affils = d.get("affiliations", [])
                 if len(affils) >= 0:
                     lki = affils[0]["institution"]["display_name"]
                 else:
-                    lki = 'unknown'
-            
-            else:
+                    lki = "unknown"
 
+            else:
                 if len(lki) >= 1:
                     lki = lki[0].get("display_name")
                 else:
-                    lki = 'unknown'
-                
-            
+                    lki = "unknown"
+
             row = [
                 d["display_name"],
                 authors[d["id"]],
@@ -1493,17 +1497,19 @@ def suggest_reviewers(query, n):
     # Sort and display the results
     data.sort(key=lambda row: row[2], reverse=True)
     s = ["Potential reviewers"]
-    s += [tabulate.tabulate(
+    s += [
+        tabulate.tabulate(
             data,
             headers=["name", "# papers", "h-index", "oaid", "institution"],
             tablefmt="orgtbl",
-        )]
+        )
+    ]
     s += ["\n" + "From these papers:"]
     for i, row in enumerate(results):
         source, citation, extra, distance = row
         s += [f"{i + 1:2d}. {citation} (source)\n\n"]
 
-    console = Console(color_system='truecolor')
+    console = Console(color_system="truecolor")
     with console.pager():
         for _s in s:
             console.print(_s)
