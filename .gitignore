@@ -4,3 +4,11 @@
 *.sqlite
 rdb*
 __pycache__
+/*.libsql
+/*.libsql-shm
+/*.libsql-wal
+/build/
+/.ipynb_checkpoints/
+/.virtual_documents/
+/*.xlsx
+/litdb.toml
