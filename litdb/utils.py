@@ -59,4 +59,6 @@ def get_config():
     with open(root / CONFIG) as f:
         config = tomlkit.parse(f.read())
 
+    config["root"] = str(root)
+
     return config

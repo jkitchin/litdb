@@ -2,10 +2,11 @@
 
 import json
 import os
+from pathlib import Path
 
 import libsql_experimental as libsql
 
-from .utils import get_config, find_root_directory
+from .utils import get_config
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -23,9 +24,11 @@ from litdb.bibtex import dump_bibtex
 def get_db():
     """Get or create the database."""
 
-    root = find_root_directory()
-    DB = str(root / "litdb.libsql")
     config = get_config()
+
+    root = Path(config["root"])
+
+    DB = str(root / "litdb.libsql")
 
     if os.path.exists(DB):
         db = libsql.connect(DB)

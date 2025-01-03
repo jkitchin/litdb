@@ -33,7 +33,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
-from .utils import find_root_directory, get_config, init_litdb
+from .utils import get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
 from .pdf import add_pdf
@@ -1314,12 +1314,15 @@ def unpaywall(doi):
 @cli.command()
 def about():
     """Summary statistics of your db."""
-    dbf = find_root_directory() / "litdb.libsql"
+    config = get_config()
+    dbf = os.path.join(config["root"], "litdb.libsql")
+
     richprint(f"Your database is located at {dbf}")
     kb = 1024
     mb = 1024 * kb
     gb = 1024 * mb
     richprint(f"Database size: {os.path.getsize(dbf) / gb:1.2f} GB")
+    db = get_db()
     (nsources,) = db.execute("select count(source) from sources").fetchone()
     richprint(f"You have {nsources} sources")
 
