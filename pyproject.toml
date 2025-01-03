@@ -46,7 +46,8 @@ dependencies = [
   "pandas",
   "more-itertools",
   "nameparser",
-  "tabulate"
+  "tabulate",
+  "IPython"
 ]
 
 [project.scripts]
