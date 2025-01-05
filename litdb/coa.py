@@ -49,20 +49,24 @@ def get_coa(orcid):
 
     for pub in pubs:
         year = int(pub.get("publication_year", -1))
+        last_active = datetime.datetime.strptime(
+            pub.get("publication_date", f"{year}-01-01"), "%Y-%m-%d"
+        ).strftime("%m/%m/%Y")
+
         aus = pub["authorships"]
         for au in aus:
             hn = HumanName(au["author"]["display_name"])
             name = f'{hn.last}, {hn.first} {hn.middle or ""}'
 
-            authors += [[name, year, au["author"]["id"], pub["id"]]]
+            authors += [[name, year, last_active, au["author"]["id"], pub["id"]]]
 
-    # sort authors alphabetically
+    # sort authors alphabetically, then by year descending
     authors = sorted(authors, key=lambda row: (row[0].lower(), -row[1]))
 
     # Now, get all the affiliations. This assumes the first one is most recent.
     # I could also use the last known institution, but this is sometimes empty
     # too.
-    oaids = set([row[2].replace("https://openalex.org/", "") for row in authors])
+    oaids = set([row[3].replace("https://openalex.org/", "") for row in authors])
     affiliations = {}
     for batch in batched(oaids, 50):
         url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
@@ -81,13 +85,13 @@ def get_coa(orcid):
     uniq = {}
     uniq_authors = []  # by openalex id
     all_authors = []
-    for name, year, oa_id, pub_id in authors:
+    for name, year, last_active, oa_id, pub_id in authors:
         if oa_id not in uniq:
             uniq[oa_id] = 1
             affil = affiliations.get(oa_id, "No affiliation known")
             # now we build the tables
-            uniq_authors += [["A:", name, affil, "", year]]
-            all_authors += [["A:", name, affil, "", year, pub_id, oa_id]]
+            uniq_authors += [["A:", name, affil, "", last_active]]
+            all_authors += [["A:", name, affil, "", last_active, pub_id, oa_id]]
 
     # unique authors
     df = pd.DataFrame(
