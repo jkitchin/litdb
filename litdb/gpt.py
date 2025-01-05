@@ -1,3 +1,5 @@
+"""The gpt command for litdb."""
+
 import os
 import subprocess
 
@@ -21,7 +23,6 @@ def gpt():
     !save it will save the chat to a file.
     !restart will reset the messages and restart the chat
     """
-
     config = get_config()
     db = get_db()
     model = SentenceTransformer(config["embedding"]["model"])
@@ -35,17 +36,19 @@ def gpt():
         rag_content = ""
 
         if prompt == "!help":
-            print("""If the prompt starts with >, run the rest as a shell command, e.g.
+            print("""\
+If the prompt starts with >, run the rest as a shell command, e.g.
 > litdb add doi
 then continue to a new prompt.
 
-If the prompt starts with < run the shell command but capture the output as context for the next prompt.               
+If the prompt starts with < run the shell command but capture the output as
+context for the next prompt.
 
 The following subcommands can be used:
 
 !save to save the chat to a file
 !restart to reset the chat
-!help for this message                
+!help for this message
 """)
             continue
 
@@ -99,7 +102,8 @@ The following subcommands can be used:
             {
                 "role": "system",
                 "content": (
-                    "Only use the following information to respond"
+                    "Only use the following information and previously provided "
+                    "information to respond"
                     " to the prompt. Do not use anything else:"
                     f" {rag_content}"
                 ),
