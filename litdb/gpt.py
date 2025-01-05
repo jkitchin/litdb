@@ -72,7 +72,7 @@ The following subcommands can be used:
 
         elif prompt == "!messages":
             for message in messages:
-                f.write(f'{message["role"]}: {message["content"]}\n\n')
+                richprint(f'{message["role"]}: {message["content"]}\n\n')
             continue
 
         # Run shell command to get rag content
@@ -117,6 +117,7 @@ The following subcommands can be used:
         for chunk in response:
             output += chunk["message"]["content"]
             richprint(chunk["message"]["content"], end="", flush=True)
+        richprint()
 
         messages += [{"role": "assistant", "content": output}]
 
