@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import numpy as np
 import ollama
@@ -31,24 +32,14 @@ def gpt():
     messages = []
 
     while prompt := input("LitGPT (Ctrl-d to quit)> "):
-        if prompt.startswith(">"):
-            # This means run the rest of the prompt as a shell command
-            # > litdb add some-id
-            os.system(prompt[1:].strip())
+        rag_content = ""
 
-        elif prompt.startswith("!"):
-            # a little sub-language of commands
-            if prompt == "!save":
-                with open(input("Filename (chat.txt): ") or "chat.txt", "w") as f:
-                    for message in messages:
-                        f.write(f'{message["role"]}: {message["content"]}\n\n')
-            elif prompt == "!restart":
-                messages = []
-                print("Reset the chat.")
+        if prompt == "!help":
+            print("""If the prompt starts with >, run the rest as a shell command, e.g.
+> litdb add doi
+then continue to a new prompt.
 
-            elif prompt == "!help":
-                print("""If the prompt starts with >, run the rest as a shell command, e.g.
-> litdb fulltext kitchin
+If the prompt starts with < run the shell command but capture the output as context for the next prompt.               
 
 The following subcommands can be used:
 
@@ -56,8 +47,43 @@ The following subcommands can be used:
 !restart to reset the chat
 !help for this message                
 """)
+            continue
 
-        else:
+        elif prompt.startswith(">"):
+            # This means run the rest of the prompt as a shell command
+            # > litdb add some-id
+            os.system(prompt[1:].strip())
+            continue
+
+            # a little sub-language of commands
+        elif prompt == "!save":
+            with open(input("Filename (chat.txt): ") or "chat.txt", "w") as f:
+                for message in messages:
+                    f.write(f'{message["role"]}: {message["content"]}\n\n')
+            continue
+
+        elif prompt == "!restart":
+            messages = []
+            print("Reset the chat.")
+            continue
+
+        elif prompt == "!messages":
+            for message in messages:
+                f.write(f'{message["role"]}: {message["content"]}\n\n')
+            continue
+
+        # Run shell command to get rag content
+        elif prompt.startswith("<"):
+            # Some command that outputs text to stdout
+            result = subprocess.run(
+                prompt[1:].strip(), shell=True, text=True, capture_output=True
+            )
+            rag_content = result.stdout
+            prompt = input("LitGPT (Ctrl-d to quit)> ")
+
+        data = None
+        if not rag_content:
+            # RAG by vector search
             emb = model.encode([prompt]).astype(np.float32).tobytes()
             data = db.execute(
                 """select sources.text, json_extract(sources.extra, '$.citation')
@@ -66,31 +92,32 @@ The following subcommands can be used:
                 (emb,),
             ).fetchall()
 
-            rag_content = ""
             for doc, citation in data:
                 rag_content += f"\n\n{doc}"
 
-            messages += [
-                {
-                    "role": "system",
-                    "content": (
-                        "Only use the following information to respond"
-                        " to the prompt. Do not use anything else:"
-                        f" {rag_content}"
-                    ),
-                }
-            ]
+        messages += [
+            {
+                "role": "system",
+                "content": (
+                    "Only use the following information to respond"
+                    " to the prompt. Do not use anything else:"
+                    f" {rag_content}"
+                ),
+            }
+        ]
 
-            messages += [{"role": "user", "content": prompt}]
+        messages += [{"role": "user", "content": prompt}]
 
-            output = ""
-            response = ollama.chat(model=gpt_model, messages=messages, stream=True)
-            for chunk in response:
-                output += chunk["message"]["content"]
-                richprint(chunk["message"]["content"], end="", flush=True)
+        output = ""
+        response = ollama.chat(model=gpt_model, messages=messages, stream=True)
+        for chunk in response:
+            output += chunk["message"]["content"]
+            richprint(chunk["message"]["content"], end="", flush=True)
 
-            messages += [{"role": "assistant", "content": output}]
+        messages += [{"role": "assistant", "content": output}]
 
+        # We don't always have data here, if you use your own rag data
+        if data:
             richprint("The text was generated using these references:\n")
             for i, (text, citation) in enumerate(data, 1):
                 richprint(f"{i:2d}. {citation}\n")
