@@ -8,7 +8,6 @@ import datetime
 import json
 import pathlib
 import tempfile
-import time
 import sys
 import warnings
 
@@ -23,7 +22,7 @@ from more_itertools import batched
 import nbformat
 from nbconvert import MarkdownExporter
 import numpy as np
-import ollama
+
 from pptx import Presentation
 import requests
 from rich import print as richprint
@@ -38,6 +37,7 @@ from .db import get_db, add_source, add_work, add_author, update_filter, add_bib
 from .openalex import get_data, get_text
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
+from .gpt import gpt
 
 warnings.filterwarnings("ignore")
 
@@ -725,42 +725,7 @@ def fulltext(query, n, fmt):
     return results
 
 
-# Adapted from https://www.arsturn.com/blog/understanding-ollamas-embedding-models
-@cli.command()
-@click.argument("prompt", nargs=-1)
-def gpt(prompt):
-    """Run an ollama query with PROMPT."""
-    config = get_config()
-    t0 = time.time()
-    prompt = " ".join(prompt)
-    model = SentenceTransformer(config["embedding"]["model"])
-    emb = model.encode([prompt]).astype(np.float32).tobytes()
-    richprint(f"It took {time.time() - t0:1.1f} sec to embed the prompt")
-    t0 = time.time()
-
-    # This is the RAG
-    data = db.execute(
-        """select sources.text
-    from vector_top_k('embedding_idx', ?, 3)
-    join sources on sources.rowid = id""",
-        (emb,),
-    ).fetchall()
-
-    richprint(f"It took  {time.time() - t0:1.1f} sec to get the top three docs")
-    t0 = time.time()
-    model_prompt = f"""You are a helpful assistant that is knowledgable about the scientific literature. Using this information: {data}.
-
-Respond to the prompt: {prompt}"""
-    gpt = config.get("gpt", {"model": "llama2"})
-    gpt_model = gpt["model"]
-    richprint(f'Generating text for "{prompt}" with {gpt_model}\n\n')
-    output = ollama.generate(model=gpt_model, prompt=model_prompt)
-    richprint(output["response"])
-    richprint(f"\nIt took  {time.time() - t0:1.1f} " "sec to generate the response.\n")
-
-    richprint("The text was generated using these references:\n")
-    for i, result in enumerate(data, 1):
-        richprint(f"{i:2d}. {result[0]}\n")
+gpt = cli.command(gpt)
 
 
 @cli.command()
