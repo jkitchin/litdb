@@ -15,9 +15,6 @@
 ;; `litdb-fulltext' is an interactive function to do a full text search
 ;; 
 ;; `litdb-vsearch' is an interactive function to do a vector search
-;; 
-;; `litdb-gpt' is an interactive function to do a gpt query. This is quite slow
-;; on my machine.
 ;;
 ;; You can update the filters with `litdb-update'. You need a premium OpenAlex key for that.
 ;; 
@@ -517,35 +514,6 @@ This is not a fast function. It goes through the litdb cli command."
 			 
 			 (kill-new citation)))
 		 "Copy citation")))))
-
-
-(defun litdb-gpt (query)
-  "Run litdb gpt on the QUERY.
-
-This is done in an async process because it goes through the litdb cli
-command, and it is slow (it can be minutes to generate depending on what
-else the computer is going). I don't have GPU acceleration on this. It
-is here as a proof of concept. With the async process you can keep
-working while it generates."
-  (interactive (list (if (region-active-p)
-			 (buffer-substring-no-properties (region-beginning) (region-end))
-		       (read-string "Query: "))))
-  (let* ((proc (async-start-process "litdb-gpt" "litdb"
-				    (lambda (proc)
-				      (switch-to-buffer (process-buffer proc))
-				      (org-mode)
-				      (goto-char (point-min)))
-				    "gpt" query)))
-
-    (set-process-sentinel proc (lambda (process event)
-				 "Sentinel to keep the buffer alive after PROCESS finishes."
-				 (when (memq (process-status process) '(exit signal))
-				   (let ((buffer (process-buffer process)))
-				     (when (buffer-live-p buffer)
-				       (with-current-buffer buffer
-					 (org-mode)
-					 (goto-char (point-min))))))))
-    (switch-to-buffer-other-frame (process-buffer proc))))
 
 
 ;; * review functions
