@@ -1,6 +1,7 @@
 """The gpt command for litdb."""
 
 import os
+import readline
 import subprocess
 
 import numpy as np
@@ -11,17 +12,29 @@ from sentence_transformers import SentenceTransformer
 from .utils import get_config
 from .db import get_db
 
+# Enable command history
+readline.parse_and_bind("tab: complete")
+readline.parse_and_bind("set editing-mode emacs")
+
+# Disable parallelism in tokenizers
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 def gpt():
-    """Start a LitGPT chat session.
+    """Start a LitGPT chat session. The prompt is interactive.
 
     If the prompt starts with > the rest of the prompt will be run as a shell
     command. Use this to add references, citations, etc, during the chat.
 
-    If the prompt is
+    If the prompt starts with < the rest of the prompt will be run as a shell
+    command and the output used for RAG.
 
     !save it will save the chat to a file.
     !restart will reset the messages and restart the chat
+    !messages will output the current chat history to the shell
+    !help to print a help message
+
+    Use Ctrl-d to exit.
     """
     config = get_config()
     db = get_db()
@@ -102,8 +115,8 @@ The following subcommands can be used:
             {
                 "role": "system",
                 "content": (
-                    "Only use the following information and previously provided "
-                    "information to respond"
+                    "Only use the following information and previously"
+                    " provided information to respond"
                     " to the prompt. Do not use anything else:"
                     f" {rag_content}"
                 ),
@@ -123,6 +136,6 @@ The following subcommands can be used:
 
         # We don't always have data here, if you use your own rag data
         if data:
-            richprint("The text was generated using these references:\n")
+            richprint("\nThe text was generated using these references:\n")
             for i, (text, citation) in enumerate(data, 1):
                 richprint(f"{i:2d}. {citation}\n")
