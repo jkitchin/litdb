@@ -704,7 +704,7 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
 @click.argument("query", nargs=-1)
 @click.option("-n", default=3)
 @click.option(
-    "-f", "--fmt", default="{{ source }} ({{ score | round(3) }})\n{{ text }}"
+    "-f", "--fmt", default="{{ source }} ({{ score | round(3) }})\n{{ snippet }}"
 )
 def fulltext(query, n, fmt):
     """Perform a fulltext search on litdb."""
@@ -712,14 +712,14 @@ def fulltext(query, n, fmt):
 
     results = db.execute(
         """select
-    sources.source, snippet(fulltext, 1, '', '', '', 16), sources.extra, bm25(fulltext)
+    sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16), sources.extra, bm25(fulltext)
     from fulltext
     inner join sources on fulltext.source = sources.source
     where fulltext.text match ? order by rank limit ?""",
         (query, n),
     ).fetchall()
 
-    for source, text, extra, score in results:
+    for source, text, snippet, extra, score in results:
         richprint(Template(fmt).render(**locals()))
 
     return results
