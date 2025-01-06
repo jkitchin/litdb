@@ -19,7 +19,7 @@ maintainers = [
 ]
 description = "A literature database tool with GPT integration."
 license = {text = "MIT License"}
-readme = {file = "README.org", content-type = "text/org"}
+readme = {file = "README.org", content-type = "text/plain"}
 dependencies = [
   "toml",
   "tomlkit",
