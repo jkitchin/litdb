@@ -23,7 +23,6 @@ from litdb.bibtex import dump_bibtex
 
 def get_db():
     """Get or create the database."""
-
     config = get_config()
 
     root = Path(config["root"])
