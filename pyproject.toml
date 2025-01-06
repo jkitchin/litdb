@@ -2,15 +2,12 @@
 requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.dynamic]
-version = {attr = "litdb.__version__"}
-
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [project]
 name = "litdb"
-dynamic = ["version"]
+version = "2.0.0"
 authors = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"},
 ]
@@ -18,7 +15,7 @@ maintainers = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"}
 ]
 description = "A literature database tool with GPT integration."
-license = {text = "MIT License"}
+license = {text = "MIT"}
 readme = {file = "README.org", content-type = "text/plain"}
 dependencies = [
   "toml",
@@ -58,3 +55,6 @@ dependencies = [
 
 [project.scripts]
 litdb = "litdb.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/jkitchin/litdb"
