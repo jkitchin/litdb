@@ -54,7 +54,9 @@ def cli():
 def init():
     """Initialize a litdb directory in the current working directory."""
     init_litdb()
-    print(f"Initialized in {os.getcwd()}")
+    with click.Context(about) as ctx:
+        ctx.invoke(about)
+    return db
 
 
 #################
