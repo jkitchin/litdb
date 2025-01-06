@@ -1,0 +1,2 @@
+[console_scripts]
+litdb = litdb.cli:cli
