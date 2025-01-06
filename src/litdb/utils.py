@@ -40,18 +40,26 @@ def init_litdb():
 
 
 def get_config():
-    "Return the config dictionary."
+    """Return the config dictionary.
 
-    root = os.environ.get("LITDB_ROOT")
-    if root:
-        root = Path(root)
-    else:
-        root = find_root_directory()
+    Priority:
+    1. There is a root / litdb.toml
+    2. There is a LITDB_ROOT/litdb.toml
+    """
 
     CONFIG = "litdb.toml"
+    root = find_root_directory()
+    if (root / CONFIG).exists():
+        pass
+    else:
+        root = os.environ.get("LITDB_ROOT")
+        if root:
+            root = Path(root)
+            if (root / CONFIG).exists():
+                pass
 
-    # if you don't find a litdb.toml you might not be in a litdb root. We check for
-    # an env var next so that litdb works everywhere.
+    # if you don't find a litdb.toml you might not be in a litdb root. We check
+    # for an env var next so that litdb works everywhere.
     if not (root / CONFIG).exists():
         print('No config found. You need to run "litdb init"')
         sys.exit()
