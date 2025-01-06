@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "litdb"
-version = "2.0.0"
+version = "2.0.1"
 authors = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"},
 ]
@@ -58,3 +58,6 @@ litdb = "litdb.cli:cli"
 
 [project.urls]
 Homepage = "https://github.com/jkitchin/litdb"
+
+
+# uv build & uv publish
