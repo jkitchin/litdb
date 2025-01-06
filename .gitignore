@@ -12,3 +12,4 @@ __pycache__
 /.virtual_documents/
 /*.xlsx
 /litdb.toml
+archive
