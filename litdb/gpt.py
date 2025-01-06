@@ -94,7 +94,7 @@ The following subcommands can be used:
             result = subprocess.run(
                 prompt[1:].strip(), shell=True, text=True, capture_output=True
             )
-            rag_content = result.stdout
+            rag_content = f"{prompt[1:]}\n\n" + result.stdout
             prompt = input("LitGPT (Ctrl-d to quit)> ")
 
         data = None
@@ -123,13 +123,22 @@ The following subcommands can be used:
             }
         ]
 
+        # I think we need to send this before we can use it for the user.
+        response = ollama.chat(model=gpt_model, messages=messages, stream=True)
+        for chunk in response:
+            richprint(chunk["message"]["content"], end="", flush=True)
+
         messages += [{"role": "user", "content": prompt}]
 
         output = ""
-        response = ollama.chat(model=gpt_model, messages=messages, stream=True)
-        for chunk in response:
-            output += chunk["message"]["content"]
-            richprint(chunk["message"]["content"], end="", flush=True)
+        # This lets you Ctrl-c to stop streaming if it has gone way off.
+        try:
+            response = ollama.chat(model=gpt_model, messages=messages, stream=True)
+            for chunk in response:
+                output += chunk["message"]["content"]
+                richprint(chunk["message"]["content"], end="", flush=True)
+        except KeyboardInterrupt:
+            response.close()
         richprint()
 
         messages += [{"role": "assistant", "content": output}]
