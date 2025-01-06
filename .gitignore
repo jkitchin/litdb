@@ -1,6 +1,6 @@
 /.DS_Store
 /.projectile
-/litdb.egg-info/
+src/litdb.egg-info
 *.sqlite
 rdb*
 __pycache__
