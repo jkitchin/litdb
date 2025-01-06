@@ -20,7 +20,14 @@ The idea is you add papers to your database, and then you can search it with nat
 
 ** installation
 
-Eventually there will be a package on pypi. Until then, you should be able to install litdb with this command.
+litdb is on PyPi.
+
+#+BEGIN_SRC sh
+pip install litdb
+#+END_SRC
+
+
+To get the cutting edge package, you can install it directly from GitHUB.
 
 #+BEGIN_SRC sh
 pip install git+https://github.com/jkitchin/litdb
