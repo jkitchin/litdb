@@ -18,6 +18,8 @@ def find_root_directory(rootfile="litdb.toml"):
 
 
 def init_litdb():
+    """Initialize litdb in the current directory.
+    This just creates the config."""
     email = input("Email address: ")
     api_key = input("OpenAlex API key (Enter if None): ")
 
