@@ -7,7 +7,6 @@ import os
 import datetime
 import json
 import pathlib
-import tempfile
 import sys
 import warnings
 
@@ -37,11 +36,24 @@ from .db import get_db, add_source, add_work, add_author, update_filter, add_bib
 from .openalex import get_data, get_text
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
-from .gpt import gpt
-from .chat import chat
 from .youtube import get_youtube_doc
+from .audio import is_audio_url, get_audio_text, record
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+    from .gpt import gpt
+    from .chat import chat
+
+import logging
+from transformers.utils import logging as tulogging
+
+# Disable all Transformers logging
+tulogging.set_verbosity_error()
+
+logging.getLogger("pydantic").setLevel(logging.CRITICAL)
 
 warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=UserWarning)
 
 db = get_db()
 
@@ -140,8 +152,15 @@ def add(
             add_source(source, "\n".join(text))
 
         # YouTube
-        elif source.startswith("https://youtube.com"):
-            add_source(source, get_youtube_doc(source))
+        elif source.startswith("https") and "youtube" in source:
+            text = get_youtube_doc(source)
+            add_source(source, text)
+
+        # audio sources
+        elif (source.startswith("http") and is_audio_url(source)) or source.endswith(
+            ".mp3"
+        ):
+            add_source(source, get_audio_text(source))
 
         # local html
         elif not source.startswith("http") and source.endswith(".html"):
@@ -180,6 +199,14 @@ def add(
     if tags:
         with click.Context(add_tag) as ctx:
             ctx.invoke(add_tag, sources=sources, tags=tags)
+
+
+@cli.command()
+@click.argument("sources", nargs=-1)
+def remove(sources):
+    for source in sources:
+        db.execute("delete from sources where source = ?", (source,))
+        db.commit()
 
 
 @cli.command()
@@ -485,77 +512,6 @@ def screenshot():
         print("No image found in clipboard.")
 
 
-def record():
-    """Make a recording to a tempfile.
-
-    Returns the audio filename it is recorded in.
-    """
-    import pyaudio
-    import wave
-    import threading
-
-    # Parameters for recording
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 2
-    RATE = 44100
-    CHUNK = 1024
-
-    _, audio_file = tempfile.mkstemp(suffix=".wav")
-
-    # Initialize PyAudio
-    audio = pyaudio.PyAudio()
-
-    # Function to record audio
-    def record_audio():
-        # Open stream
-        stream = audio.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=RATE,
-            input=True,
-            frames_per_buffer=CHUNK,
-        )
-        print("Recording... Press Enter to stop.")
-
-        frames = []
-
-        # Record until Enter is pressed
-        while not stop_recording.is_set():
-            data = stream.read(CHUNK)
-            frames.append(data)
-
-        # Stop and close the stream
-        stream.stop_stream()
-        stream.close()
-
-        # Save the recorded data as a WAV file
-        wf = wave.open(audio_file, "wb")
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(audio.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-        wf.close()
-
-    # Event to signal when to stop recording
-    stop_recording = threading.Event()
-
-    # Start recording in a separate thread
-    recording_thread = threading.Thread(target=record_audio)
-    recording_thread.start()
-
-    # Wait for Enter key press to stop recording
-    input()
-    stop_recording.set()
-
-    # Wait for the recording thread to finish
-    recording_thread.join()
-
-    # Terminate PyAudio
-    audio.terminate()
-
-    return audio_file
-
-
 @cli.command()
 @click.option("-p", "--playback", is_flag=True, help="Play audio back")
 def audio(playback=False):
@@ -564,19 +520,11 @@ def audio(playback=False):
     The idea is nice, but the quality of transcription for scientific words is
     not that great. A better transcription library might make this more useful.
     """
-    import speech_recognition as sr
 
     while True:
         afile = record()
-        audio_file = sr.AudioFile(afile)
-        r = sr.Recognizer()
-        with audio_file as source:
-            audio = r.listen(source)
-            try:
-                text = r.recognize_sphinx(audio)
-                print("\n" + text + "\n")
-            except sr.UnknownValueError:
-                print("Could not understand audio.")
+        text = get_audio_text(afile)
+        print("\n" + text + "\n")
 
         if playback:
             import playsound
@@ -593,7 +541,7 @@ def audio(playback=False):
             # move on to searching
             break
 
-    vsearch(text)
+    vsearch([text])
 
 
 @cli.command()

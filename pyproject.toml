@@ -27,6 +27,7 @@ dependencies = [
   "tqdm",
   "libsql-experimental",
   "sentence-transformers",
+  "transformers",
   "click",
   "rich",
   "beautifulsoup4",
