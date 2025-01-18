@@ -251,7 +251,11 @@ def chat(model=None, debug=False):
 
     rag = True  # default to using this
 
-    while prompt := input("LitGPT (Ctrl-d to quit)> "):
+    while True:
+        prompt = input("LitGPT (Ctrl-d to quit, enter for mic)> ")
+        if debug:
+            print(f"Starting with prompt: {prompt}")
+
         db.execute("""insert into prompt_history(prompt) values (?)""", (prompt,))
         db.commit()
 
@@ -280,6 +284,8 @@ The following subcommands can be used:
             # another window
             #
             # > litdb add some-id
+            if debug:
+                print(f'Running "{prompt[1:].strip()}"')
             os.system(prompt[1:].strip())
             continue
 
@@ -299,9 +305,13 @@ The following subcommands can be used:
                 richprint(f'{message["role"]}: {message["content"]}\n\n')
             continue
 
-        elif prompt == "a":
+        elif prompt == "":
+            if debug:
+                print("Recording")
+
             while True:
-                prompt = get_audio_text(record())
+                afile = record()
+                prompt = get_audio_text(afile)
                 print(f"Prompt:\n{prompt}")
                 response = input("Is that what you want to search? ([y]/n/q): ")
                 if response.lower().startswith("q"):
