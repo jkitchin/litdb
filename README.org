@@ -37,7 +37,7 @@ pip install git+https://github.com/jkitchin/litdb
 
 You have to create a toml configuration file. This file is called litdb.toml. The directory this file is in is considered the root directory. All commands will start in the current working directory and look up to find this file. You can put this file in your home directory, or you can have sub-directories, e.g. a per project litdb.
 
-There are a few choices you have to make. You have to choose a SentenceTransformer model, and specify the size of the vectors it makes. You also have to specify the chunk_size and chunk_overlap settings that are used to break documents up to compute document level embedding vectors. 
+There are a few choices you have to make. You have to choose a SentenceTransformer model, and specify the size of the vectors it makes. You also have to specify the chunk_size and chunk_overlap settings that are used to break documents up to compute document level embedding vectors.
 
 You will need an OpenAlex premium key if you want to use the update-filters feature.
 
@@ -55,6 +55,9 @@ api_key = "..."
 
 [gpt]
 model = "llama2"
+
+[llm]
+model = "ollama/llama2"
 #+END_EXAMPLE
 
 You can define an environment variable to the root of your default litdb project. This should be a directory with a litdb.toml file in it.
@@ -65,7 +68,7 @@ export LITDB_ROOT="/path/to/your/default/litdb"
 
 When you run a litdb command, it will look for a dominating litdb.toml file, which means you are running the command in a litdb project. If one is not found, it will check for the LITDB_ROOT environment variable and use that if it is found. Finally, if that does not exist, it will prompt you to make a new project in the current directory.
 
-* Using litdb 
+* Using litdb
 
 Your litdb starts out empty. You have to add articles that are relevant to you. It is an open question of the best way to build a litdb. The answer surely depends on what your aim is. You have to compromise on breadth and depth with the database size. The CLI makes it pretty easy to do this
 
@@ -119,7 +122,7 @@ litdb openalex -e sources -f display_name.search:discovery
 
 ** One-time additions of articles to litdb
 
-You add an article by its DOI. There are optional arguments to also add references, citing and related articles. 
+You add an article by its DOI. There are optional arguments to also add references, citing and related articles.
 
 #+BEGIN_SRC sh
 litdb add doi --references --citing --related
@@ -144,6 +147,8 @@ litdb add doi1 doi2 orcid
 #+END_SRC
 
 These are all one-time additions.
+
+You can also add things like YouTube videos and podcasts. We use ML to extract the audio from these to text so they become searchable!
 
 ** Adding filters
 
@@ -207,7 +212,7 @@ litdb rm-filter "filter-string"
 
 ** Review your litdb
 
-I find it helpful to review your litdb. To get a list of articles added in the last week, you can run this command. 
+I find it helpful to review your litdb. To get a list of articles added in the last week, you can run this command.
 
 #+BEGIN_SRC sh
 litdb review -s "1 week ago"
@@ -217,14 +222,14 @@ This works best when you update your litdb regularly. You might want to redirect
 
 ** Searching litdb
 
-There are several search options. 
+There are several search options.
 
 *** vector search
 
 The main way litdb was designed to be searched is with by natural language queries. The way this works is your query is converted to a vector using SentenceTransformers, and then a vector search identifies entries in the database that are similar to your query.
 
 #+BEGIN_SRC sh
-litdb vsearch "natural language query" 
+litdb vsearch "natural language query"
 #+END_SRC
 
 The default number of entries returned is 3. You can change that with an optional argument
@@ -274,6 +279,31 @@ You can use litdb as a RAG source for ollama. This looks up the three most relat
 #+BEGIN_SRC sh
 litdb gpt "what is the state of the art in automated laboratories for soft materials"
 #+END_SRC
+
+*** Integration with litellm
+
+litdb supports litellm so you can use almost any LLM provider you want: OpenAI, Anthropic, Gemini, whatever you have an API key for.
+
+The free tier of the API includes 1,500 requests per day with Gemini 1.5 Flash.
+
+It uses a different command than the ollama gpt command.
+
+#+BEGIN_SRC sh
+litdb chat "what is the state of the art in automated laboratories for soft materials"
+#+END_SRC
+
+There are some fancy things you can do with the prompt:
+
+1. Avoid using RAG if --norag is in your prompt.
+2. If you surround python objects with backticks, it will try expanding that to the documentation from Python.
+3. A line that starts with < indicates a shell command to run and the output will be expanded into the prompt.
+4. A prompt of !save will save the current chat to a file.
+5. You can use this syntax to expand a file or url in the prompt for context:
+#+BEGIN_EXAMPLE
+[[file/url]]
+#+END_EXAMPLE
+
+Your prompt history is saved in your litdb, so you can go back to them if you want.
 
 *** search with audio
 
@@ -404,7 +434,7 @@ litdb sql "select source, json_extract(extra, '$.citation') as citation from sou
 
 * Adding local files
 
-The idea of using local files is that it is likely you have collected information in the form of files on your hard drive, and you want to be able to find information in those files. 
+The idea of using local files is that it is likely you have collected information in the form of files on your hard drive, and you want to be able to find information in those files.
 
 It is possible to add any file that can be turned into text to litdb. That includes:
 
@@ -419,11 +449,11 @@ It is possible to add any file that can be turned into text to litdb. That inclu
 
 This limits portability because you need a path if you want to be able to open that file.
 
-The same vector, fulltext and gpt search commands are available for local file entries. These tend to be longer documents than the OpenAlex entries, and I am not sure how well the search works at the document level embeddings. Search at a chunk level is very precise; odds are you want paragraph level similarity to your query. 
+The same vector, fulltext and gpt search commands are available for local file entries. These tend to be longer documents than the OpenAlex entries, and I am not sure how well the search works at the document level embeddings. Search at a chunk level is very precise; odds are you want paragraph level similarity to your query.
 
-An early version of litdb stored each chunk. This is possible, but I used another table for it. You could munge the source to be something like f.pdf::chunk-1 so each one is unique, but that seems more complicated and you would need to do some experiments to see if it is warranted. 
+An early version of litdb stored each chunk. This is possible, but I used another table for it. You could munge the source to be something like f.pdf::chunk-1 so each one is unique, but that seems more complicated and you would need to do some experiments to see if it is warranted.
 
-You can combine this with the OpenAlex entries in a single database. 
+You can combine this with the OpenAlex entries in a single database.
 
 You can walk a directory and add files from it with this command.
 
@@ -447,19 +477,19 @@ Of course there is some Emacs integration. I made a new link for litdb.
 
 [[litdb:https://doi.org/10.1021/jp047349j]]
 
-The links export as \cite{source}, and there is a function ~litdb-generate-bibtex~ to export bibtex entries for all links in the buffer. These entries are not certain to be valid, most likely from the keys (some DOIs are probably invalid keys). 
+The links export as \cite{source}, and there is a function ~litdb-generate-bibtex~ to export bibtex entries for all links in the buffer. These entries are not certain to be valid, most likely from the keys (some DOIs are probably invalid keys).
 
 You can easily insert a link like this:
 
 M-x litdb
 
-See [[./litdb.el]] for details. This is not a package on MELPA yet. You should just load the .el file in your config. You can also use ~litdb-fulltext~, ~litdb-vsearch~, and ~litdb-gpt~ from Emacs to interact with your litdb. 
+See [[./litdb.el]] for details. This is not a package on MELPA yet. You should just load the .el file in your config. You can also use ~litdb-fulltext~, ~litdb-vsearch~, and ~litdb-gpt~ from Emacs to interact with your litdb.
 
-litdb.el is under active development, and will be an alternative UI to the terminal eventually. It is too early to tell if it will replace org-ref. It has potential, but that would be a very large undertaking. 
+litdb.el is under active development, and will be an alternative UI to the terminal eventually. It is too early to tell if it will replace org-ref. It has potential, but that would be a very large undertaking.
 
 * Database design
 
-litdb uses a sqlite database with libsql. libsql is a sqlite fork with additional capabilities, most notably integrated vector search. 
+litdb uses a sqlite database with libsql. libsql is a sqlite fork with additional capabilities, most notably integrated vector search.
 
 The main table in litdb is called sources.
 - sources
@@ -514,7 +544,7 @@ Similar limitations exist for local files. There are additionally the following 
 1. The quality of document to text influences the ultimate embedding. This varies by type of document, and the library used to convert it.
 2. Local files tend to be longer documents and this can lead to hundreds of text chunks per document. These chunk embeddings are averaged into one embedding. It is not obvious this is as effective as vector search on each chunk, but it is more memory efficient.
 
-For PDF to text we use [[https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/][pymupd4fll]] which works for this proof of concept. There is a Pro version of that package which supports more file formats. It is not obvious what it would cost to use that. I used [[https://ds4sd.github.io/docling/][docling]] in an early prototype. It also worked pretty well, but it was a little slower I think, and would occasionally segfault so I stopped using it.  Spacy is integrating PDF to structured data using docling (https://explosion.ai/blog/pdfs-nlp-structured-data). There is plenty of room for improvement in this dimension, with trade offs in performance and accuracy. 
+For PDF to text we use [[https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/][pymupd4fll]] which works for this proof of concept. There is a Pro version of that package which supports more file formats. It is not obvious what it would cost to use that. I used [[https://ds4sd.github.io/docling/][docling]] in an early prototype. It also worked pretty well, but it was a little slower I think, and would occasionally segfault so I stopped using it.  Spacy is integrating PDF to structured data using docling (https://explosion.ai/blog/pdfs-nlp-structured-data). There is plenty of room for improvement in this dimension, with trade offs in performance and accuracy.
 
 There is a new package from Microsoft to convert Office files to Markdown (https://github.com/microsoft/markitdown) that they specifically mention using in the context of LLMs.
 
@@ -532,7 +562,7 @@ vectorlite aims to be faster than sqlite-vec, but it relies on hnsw for vector s
 
 sqlite-vec is nice, and early versions of litdb used it and its precursor. This approach requires a virtual table for the embeddings. This is installed as an extension, and is still considered in early stages of adoption.
 
-libsql is a fork of sqlite with integrated vector search, and potential for using it as a cloud database. It is supported by a company, with freemium cloud services. In libsql you store the vectors in a regular table, and search on an embedding index. The code is on GitHUB, and can also be used locally. 
+libsql is a fork of sqlite with integrated vector search, and potential for using it as a cloud database. It is supported by a company, with freemium cloud services. In libsql you store the vectors in a regular table, and search on an embedding index. The code is on GitHUB, and can also be used locally.
 
 * Roadmap
 
@@ -546,7 +576,7 @@ Notes on the other hand, might be small enough that they could be stored in the 
 
 ** Jupyter lab integration
 
-An alternative to the CLI and Emacs would be to run this in Jupyter Lab with magic commands and rich output. 
+An alternative to the CLI and Emacs would be to run this in Jupyter Lab with magic commands and rich output.
 
 ** graph visualization
 
@@ -618,7 +648,7 @@ The first version of litdb with libsql used a fully remote db on their cloud. Th
 
 ** image and text models
 
-One day it might be possible to include images in this (https://www.sbert.net/docs/sentence_transformer/pretrained_models.html#image-text-models). At the moment, OpenAlex entries do not have any images, but other web resources and local files could. I have an image database in org-db, but I don't use it a lot. 
+One day it might be possible to include images in this (https://www.sbert.net/docs/sentence_transformer/pretrained_models.html#image-text-models). At the moment, OpenAlex entries do not have any images, but other web resources and local files could. I have an image database in org-db, but I don't use it a lot.
 
 ** DONE combine full text and vector search
 CLOSED: [2024-12-09 Mon 13:59]
@@ -700,11 +730,11 @@ print(text)
 #+RESULTS:
 : ++RESULTS:
 : ; Selected region: (26, 332, 473, 69)
-: 
+:
 
 This might be nice later when we have image embeddings.
 
-** DONE review process 
+** DONE review process
 
 #+BEGIN_SRC sh
 litdb review --since '1 week ago'
@@ -724,7 +754,7 @@ select source, date_added from sources where date(date_added) > '2024-11-28' lim
 | https://doi.org/10.1088/1361-648x/aa680e      | 2024-11-29 17:21:53 |
 | https://doi.org/10.1103/physrevlett.93.156801 | 2024-11-29 17:21:54 |
 
-** DONE semantic similarity 
+** DONE semantic similarity
 CLOSED: [2024-12-04 Wed 13:12]
 
 litdb uses cosine similarity as the distance metric for the nearest neighbors. It might be useful to re-rank these with cross-encoding.
@@ -735,12 +765,12 @@ https://www.sbert.net/examples/applications/cross-encoder/README.html
 
 - LitSuggest :: https://www.ncbi.nlm.nih.gov/research/litsuggest/
   - Browser tool that suggests literature for you based on positive and negative PMIDs. Hosted by NIH.
-  
+
 - paper-qa :: https://github.com/Future-House/paper-qa
   - This project by Andrew White uses LLM+RAG to explore a paper.
 
 - ColBERT :: https://github.com/stanford-futuredata/ColBERT
-  - ColBERT is a fast retrieval model for large text collections. In theory it can probably be integrated with litdb. litdb is so simple, and works well enough so far without it. 
+  - ColBERT is a fast retrieval model for large text collections. In theory it can probably be integrated with litdb. litdb is so simple, and works well enough so far without it.
 
 Many of these projects require you to make an account. There are freemium levels in each one.
 
@@ -752,7 +782,7 @@ Many of these projects require you to make an account. There are freemium levels
 
 - Keenious :: https://keenious.com/explore
   - Browser / Google Docs and Word plugin. Finds related articles to the text in your document. I like Keenious when in Google Docs.
-  
+
 - scite.ai :: https://scite.ai/
   - Browser tool that integrates GPT with the scientific literature, integration with Zotero
 
@@ -766,7 +796,7 @@ Many of these projects require you to make an account. There are freemium levels
   - This is a desktop app that can be totally local, or in the cloud. It can index your files, and then you can chat with them. There is a freemium level.
 
 - AnythingLLM :: https://anythingllm.com/
-  - Another tool that runs LLMs locally, and says it can index your files so you can chat with them. 
+  - Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
 
 - gpt4all :: https://www.nomic.ai/gpt4all
   - Another tool that runs LLMs locally, and says it can index your files so you can chat with them.

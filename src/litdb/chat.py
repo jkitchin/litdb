@@ -20,7 +20,7 @@ import logging
 
 from .utils import get_config
 from .db import get_db
-
+from .audio import record, get_audio_text
 
 warnings.filterwarnings("ignore")
 
@@ -148,7 +148,7 @@ def get_rag_content(prompt):
     emb = model.encode([prompt]).astype(np.float32).tobytes()
     data = db.execute(
         """\
-    select sources.text, json_extract(sources.extra, '$.citation')
+    select sources.source, sources.text, json_extract(sources.extra, '$.citation')
     from vector_top_k('embedding_idx', ?, 3)
     join sources on sources.rowid = id""",
         (emb,),
@@ -157,9 +157,9 @@ def get_rag_content(prompt):
     rag_content = ""
     references = ""
 
-    for i, (doc, citation) in enumerate(data, 1):
+    for i, (source, doc, citation) in enumerate(data, 1):
         rag_content += f"\n\n<citation>{citation}</citation>\n\n{doc}"
-        references += f"{i:2d}. {citation}\n"
+        references += f"{i:2d}. {citation or source}\n"
 
     return rag_content, references
 
@@ -192,15 +192,6 @@ def get_completion(model, messages):
 def chat(model=None, debug=False):
     """Start a LitGPT chat session using LiteLLM.
 
-    You should ensure the API_KEYS are stored in your environment.
-
-    Usually in your .bash_profile something like this:
-
-    export OPENAI_API_KEY=...
-    export GEMINI_API_KEY=...
-    export ANTHROPIC_API_KEY=...
-    You don't need to do anything special for ollama.
-
     Use these string to specify the model
     (https://docs.litellm.ai/docs/providers).
 
@@ -212,6 +203,15 @@ def chat(model=None, debug=False):
     (https://docs.litellm.ai/docs/providers/gemini)
     gemini: gemini/gemini-pro
     anthropic: claude-3-haiku-20240307, claude-3-sonnet-20240229
+
+    You should ensure the API_KEYS are stored in your environment.
+
+    Usually in your .bash_profile something like this:
+
+    export OPENAI_API_KEY=...
+    export GEMINI_API_KEY=...
+    export ANTHROPIC_API_KEY=...
+    You don't need to do anything special for ollama.
 
     The prompt is interactive. If the prompt starts with > the rest of the
     prompt will be run as a shell command. Use this to add references,
@@ -229,12 +229,14 @@ def chat(model=None, debug=False):
 
     Use Ctrl-d to exit.
 
+    if debug
+
     """
     config = get_config()
     db = get_db()
 
     if model is None:
-        gpt = config.get("gpt", {"model": "ollama/llama2"})
+        gpt = config.get("llm", {"model": "ollama/llama2"})
         gpt_model = gpt["model"]
     else:
         # You can override this at the cli if you want, e.g.
@@ -296,6 +298,20 @@ The following subcommands can be used:
             for message in messages:
                 richprint(f'{message["role"]}: {message["content"]}\n\n')
             continue
+
+        elif prompt == "a":
+            while True:
+                prompt = get_audio_text(record())
+                print(f"Prompt:\n{prompt}")
+                response = input("Is that what you want to search? ([y]/n/q): ")
+                if response.lower().startswith("q"):
+                    return
+                elif response.lower().startswith("n"):
+                    # record a new audio
+                    continue
+                else:
+                    # move on to chat
+                    break
 
         if "--norag" in prompt:
             rag = False
