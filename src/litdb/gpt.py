@@ -71,7 +71,7 @@ The following subcommands can be used:
             os.system(prompt[1:].strip())
             continue
 
-            # a little sub-language of commands
+        # a little sub-language of commands
         elif prompt == "!save":
             with open(input("Filename (chat.txt): ") or "chat.txt", "w") as f:
                 for message in messages:
@@ -102,7 +102,8 @@ The following subcommands can be used:
             # RAG by vector search
             emb = model.encode([prompt]).astype(np.float32).tobytes()
             data = db.execute(
-                """select sources.text, json_extract(sources.extra, '$.citation')
+                """\
+    select sources.text, json_extract(sources.extra, '$.citation')
     from vector_top_k('embedding_idx', ?, 3)
     join sources on sources.rowid = id""",
                 (emb,),
