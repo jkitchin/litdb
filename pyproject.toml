@@ -22,6 +22,7 @@ dependencies = [
   "tomlkit",
   "requests",
   "pymupdf4llm",
+  "docling",
   "langchain",
   "tqdm",
   "libsql-experimental",
@@ -35,12 +36,13 @@ dependencies = [
   "nbconvert",
   "nbformat",
   "ollama",
+  "litellm",
   "dateparser",
   "jinja2",
   "pytesseract",
   "pillow",
   "bibtexparser",
-  
+
 #  "pyaudio",
 #  "playsound",
 #  "SpeechRecognition",
@@ -50,7 +52,11 @@ dependencies = [
   "more-itertools",
   "nameparser",
   "tabulate",
-  "IPython"
+  "IPython",
+
+  # youtube
+  "yt_dlp",
+  "webvtt"
 ]
 
 [project.scripts]

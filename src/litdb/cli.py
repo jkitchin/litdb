@@ -38,6 +38,8 @@ from .openalex import get_data, get_text
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
 from .gpt import gpt
+from .chat import chat
+from .youtube import get_youtube_doc
 
 warnings.filterwarnings("ignore")
 
@@ -136,6 +138,10 @@ def add(
                     if hasattr(shape, "text"):
                         text.append(shape.text)
             add_source(source, "\n".join(text))
+
+        # YouTube
+        elif source.startswith("https://youtube.com"):
+            add_source(source, get_youtube_doc(source))
 
         # local html
         elif not source.startswith("http") and source.endswith(".html"):
@@ -731,6 +737,16 @@ def fulltext(query, n, fmt):
 
 
 gpt = cli.command(gpt)
+
+
+@click.command(help="LiteLLM chat")
+@click.option("--model", default=None, help="The LiteLLM model to use.")
+@click.option("--debug", is_flag=True, default=False)
+def chat_command(model, debug):
+    chat(model, debug)
+
+
+cli.add_command(chat_command, name="chat")
 
 
 @cli.command()
