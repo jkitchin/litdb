@@ -85,7 +85,14 @@ def get_db():
         )
 
         db.execute(
-            """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
+            """create index if not exists embedding_idx
+            ON sources (libsql_vector_idx(embedding))"""
+        )
+
+        db.execute(
+            """create table if not exists
+            prompt_history(rowid integer primary key,
+            prompt text)"""
         )
         return db
 
