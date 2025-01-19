@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "litdb"
-version = "2.1.0"
+version = "2.1.1"
 authors = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"},
 ]
@@ -44,9 +44,10 @@ dependencies = [
   "pillow",
   "bibtexparser",
 
+# these are sort of hard to install, and rely on other libraries
+# I document them here, but consider it optional
 #  "pyaudio",
 #  "playsound",
-#  "SpeechRecognition",
 
   # for coa
   "pandas",
