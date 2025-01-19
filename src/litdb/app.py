@@ -6,16 +6,32 @@ example.
 
 from litellm import completion
 import streamlit as st
+
 from litdb.utils import get_config
 from litdb.db import get_db
 from litdb.chat import get_rag_content
+import os
 
 config = get_config()
 db = get_db()
 
 gpt = config.get("llm", {"model": "ollama/llama2"})
 
+
+dbf = os.path.join(config["root"], "litdb.libsql")
+
+
+kb = 1024
+mb = 1024 * kb
+gb = 1024 * mb
+
+(nsources,) = db.execute("select count(source) from sources").fetchone()
+
 st.title("LitGPT")
+st.header("Database")
+st.markdown(f"""Path: {dbf}
+
+Database size: {os.path.getsize(dbf) / gb:1.2f} GB ({nsources} sources)""")
 
 if "openai_model" not in st.session_state:
     st.session_state["model"] = gpt["model"]
