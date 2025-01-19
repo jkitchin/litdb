@@ -57,7 +57,10 @@ dependencies = [
 
   # youtube
   "yt_dlp",
-  "webvtt-py"
+  "webvtt-py",
+
+  # the streamlit app
+  "streamlit"	  
 ]
 
 [project.scripts]

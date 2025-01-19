@@ -1475,5 +1475,13 @@ def suggest_reviewers(query, n):
                 console.print(_s)
 
 
+@cli.command()
+def app():
+    """Launch the Streamlit app in the default web browser."""
+    dirname = os.path.dirname(__file__)
+    app = os.path.join(dirname, "app.py")
+    os.system(f"streamlit run {app}")
+
+
 if __name__ == "__main__":
     cli()
