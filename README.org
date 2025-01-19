@@ -305,6 +305,16 @@ There are some fancy things you can do with the prompt:
 
 Your prompt history is saved in your litdb, so you can go back to them if you want.
 
+*** Web app for litdb
+
+If you prefer a browser, you can now launch a streamlit app for litdb:
+
+#+BEGIN_SRC sh
+litdb app
+#+END_SRC
+
+This should launch the app in your browser and you can search litdb from it. The terminal application is more advanced in terms of prompt expansion.
+
 *** search with audio
 
 This command will record audio, transcribe that audio to text, and then do a vector search on that text. You will be prompted when the recording starts, and you press return to stop it. litdb will show you what it heard, and ask if you want to do a vector search on it.
