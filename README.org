@@ -17,6 +17,7 @@ The idea is you add papers to your database, and then you can search it with nat
 4. https://youtube.com/live/ZkKKuvVUWkE litdb and Emacs
 5. https://youtube.com/live/j7rItPwWDaY litdb and Jupyter Lab
 6. https://youtube.com/live/SUtvtc7l6y0 litdb + GPT enhancements
+7. https://youtube.com/live/3FZ1ROnCC6Y litdb + LiteLLM and streamlit
 
 ** installation
 
