@@ -133,7 +133,9 @@ def expand_prompt(prompt):
     pattern = r"(^<(.+)$)"
     matches = re.findall(pattern, prompt, re.MULTILINE)
     for _match, cmd in matches:
+        print(f"running {cmd}")
         result = subprocess.run(cmd.strip(), shell=True, text=True, capture_output=True)
+        print(result)
         prompt = prompt.replace(_match, result.stdout)
 
     return prompt
@@ -192,7 +194,7 @@ def get_completion(model, messages):
 def chat(model=None, debug=False):
     """Start a LitGPT chat session using LiteLLM.
 
-    Use these string to specify the model
+    Use these strings to specify the model
     (https://docs.litellm.ai/docs/providers).
 
     ollama: ollama/llama3.3
@@ -227,9 +229,19 @@ def chat(model=None, debug=False):
     !messages will output the current chat history to the shell.
     !help to print a help message.
 
+    There is also some prompt expansion. [[file/url]] will be expanded to the
+    text in the file or url. We use docling for this, and otherwise assume they
+    are text to be read in.
+
+    You can have text in backticks, e.g. `np.linspace` which is expanded with
+    docstrings from Python where possible.
+
+    a line that starts with < is treated like a shell command. That command will
+    be run, and the output expanded into the prompt.
+
     Use Ctrl-d to exit.
 
-    if debug
+    if debug is True, it will print some extra info.
 
     """
     config = get_config()
@@ -249,10 +261,16 @@ def chat(model=None, debug=False):
     # I assume you don't want to start there.
     messages = []
 
-    rag = True  # default to using this
-
     while True:
+        rag = True  # default to using this
+
         prompt = input("LitGPT (Ctrl-d to quit, enter for mic)> ")
+
+        # line continuation
+        if prompt.endswith("\\"):
+            while next := input():
+                prompt += "\n" + next
+
         if debug:
             print(f"Starting with prompt: {prompt}")
 
@@ -315,11 +333,15 @@ The following subcommands can be used:
         if "--norag" in prompt:
             rag = False
             prompt = prompt.replace("--norag", "")
+            if debug:
+                print("--norag found in prompt. Turned RAG off.")
 
         match = re.search(r"--n=(\d+)", prompt)
         if match:
             n = int(match.group(1))
             prompt = prompt.replace(match.group(0), "")
+            if debug:
+                print(f"Found {match.group(0)}, set n={n}")
         else:
             n = 3
 

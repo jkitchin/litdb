@@ -687,7 +687,7 @@ def fulltext(query, n, fmt):
 gpt = cli.command(gpt)
 
 
-@click.command(help="LiteLLM chat")
+@click.command(help=chat.__doc__)
 @click.option("--model", default=None, help="The LiteLLM model to use.")
 @click.option("--debug", is_flag=True, default=False)
 def chat_command(model, debug):
