@@ -57,7 +57,7 @@ dependencies = [
 
   # youtube
   "yt_dlp",
-  "webvtt"
+  "webvtt-py"
 ]
 
 [project.scripts]
