@@ -133,9 +133,7 @@ def expand_prompt(prompt):
     pattern = r"(^<(.+)$)"
     matches = re.findall(pattern, prompt, re.MULTILINE)
     for _match, cmd in matches:
-        print(f"running {cmd}")
         result = subprocess.run(cmd.strip(), shell=True, text=True, capture_output=True)
-        print(result)
         prompt = prompt.replace(_match, result.stdout)
 
     return prompt
