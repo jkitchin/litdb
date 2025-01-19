@@ -7,8 +7,14 @@ import tempfile
 
 
 def get_youtube_doc(url):
-    """Return a descriptive string for the YouTube video at URL."""
-    # Create a low-level temporary file
+    """Return a descriptive string and citation for thea YouTube video.
+
+    Args:
+       URL: string url to the video.
+
+    Returns:
+       doc, citation
+    """
     fd, path = tempfile.mkstemp()
 
     ydl_opts = {
@@ -39,4 +45,4 @@ def get_youtube_doc(url):
     doc += f"Description: {description}\n\n"
     doc += f"Transcript: {transcript}"
 
-    return doc
+    return doc, f"{title}. {url}."
