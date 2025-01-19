@@ -97,7 +97,7 @@ def record():
             input=True,
             frames_per_buffer=CHUNK,
         )
-        print("Recording... Press Enter to stop.")
+        print("    Recording... Press Enter to stop.")
 
         frames = []
 
@@ -117,6 +117,7 @@ def record():
         wf.setframerate(RATE)
         wf.writeframes(b"".join(frames))
         wf.close()
+        print("    Done recording. Transcribing...")
 
     # Event to signal when to stop recording
     stop_recording = threading.Event()

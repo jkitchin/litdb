@@ -1,4 +1,4 @@
-"""The gpt command for litdb."""
+"""LitGPT using litellm."""
 
 import os
 import readline
@@ -139,7 +139,7 @@ def expand_prompt(prompt):
     return prompt
 
 
-def get_rag_content(prompt):
+def get_rag_content(prompt, n):
     """Return data from litdb using prompt."""
     config = get_config()
     db = get_db()
@@ -147,9 +147,9 @@ def get_rag_content(prompt):
 
     emb = model.encode([prompt]).astype(np.float32).tobytes()
     data = db.execute(
-        """\
+        f"""\
     select sources.source, sources.text, json_extract(sources.extra, '$.citation')
-    from vector_top_k('embedding_idx', ?, 3)
+    from vector_top_k('embedding_idx', ?, {n})
     join sources on sources.rowid = id""",
         (emb,),
     ).fetchall()
@@ -309,27 +309,23 @@ The following subcommands can be used:
             if debug:
                 print("Recording")
 
-            while True:
-                afile = record()
-                prompt = get_audio_text(afile)
-                print(f"Prompt:\n{prompt}")
-                response = input("Is that what you want to search? ([y]/n/q): ")
-                if response.lower().startswith("q"):
-                    return
-                elif response.lower().startswith("n"):
-                    # record a new audio
-                    continue
-                else:
-                    # move on to chat
-                    break
+            prompt = get_audio_text(record())
+            print(prompt + "\n\n")
 
         if "--norag" in prompt:
             rag = False
             prompt = prompt.replace("--norag", "")
 
+        match = re.search(r"--n=(\d+)", prompt)
+        if match:
+            n = int(match.group(1))
+            prompt = prompt.replace(match.group(0), "")
+        else:
+            n = 3
+
         # Now we do RAG on litdb if needed.
         if rag:
-            rag_content, references = get_rag_content(prompt)
+            rag_content, references = get_rag_content(prompt, n)
         else:
             rag_content, references = (None, None)
 

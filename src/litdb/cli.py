@@ -153,8 +153,8 @@ def add(
 
         # YouTube
         elif source.startswith("https") and "youtube" in source:
-            text = get_youtube_doc(source)
-            add_source(source, text)
+            text, citation = get_youtube_doc(source)
+            add_source(source, text, {"citation": citation})
 
         # audio sources
         elif (source.startswith("http") and is_audio_url(source)) or source.endswith(
