@@ -1,3 +1,5 @@
+"""Utility functions used in litdb."""
+
 import os
 from pathlib import Path
 import sys
@@ -7,7 +9,9 @@ import tomlkit
 
 def find_root_directory(rootfile="litdb.toml"):
     """Search upwards for rootfile.
-    Returns the root directory, or the current directory if one is not found."""
+
+    Returns the root directory, or the current directory if one is not found.
+    """
     wd = Path.cwd()
     while wd != Path("/"):
         if (wd / rootfile).exists():
@@ -19,7 +23,9 @@ def find_root_directory(rootfile="litdb.toml"):
 
 def init_litdb():
     """Initialize litdb in the current directory.
-    This just creates the config."""
+
+    This just creates the config.
+    """
     email = input("Email address: ")
     api_key = input("OpenAlex API key (Enter if None): ")
 
@@ -48,7 +54,6 @@ def get_config():
     1. There is a root / litdb.toml
     2. There is a LITDB_ROOT/litdb.toml
     """
-
     CONFIG = "litdb.toml"
     root = find_root_directory()
     if (root / CONFIG).exists():
