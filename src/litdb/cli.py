@@ -1486,5 +1486,14 @@ def app():
     os.system(f"streamlit run {app}")
 
 
+@cli.command()
+def version():
+    """Print the version of litdb."""
+    import pkg_resources
+
+    version = pkg_resources.get_distribution("litdb").version
+    print(f"Litdb: version {version}")
+
+
 if __name__ == "__main__":
     cli()
