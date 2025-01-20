@@ -1203,10 +1203,13 @@ def bibtex(sources):
         sources = sys.stdin.read().strip().split()
 
     for source in sources:
-        (work,) = db.execute(
+        work = db.execute(
             """select extra from sources where source = ?""", (source,)
         ).fetchone()
-        richprint(dump_bibtex(json.loads(work)))
+        if work:
+            richprint(dump_bibtex(json.loads(work[0])))
+        else:
+            print(f"No entry found for {source}")
 
 
 @cli.command()
