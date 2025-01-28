@@ -38,6 +38,7 @@ from .pdf import add_pdf
 from .bibtex import dump_bibtex
 from .youtube import get_youtube_doc
 from .audio import is_audio_url, get_audio_text, record
+from .images import add_image, image_query
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -110,6 +111,7 @@ def add(
     These are one time additions.
 
     """
+    print(sources)
     for source in tqdm(sources):
         # a work
         if source.startswith("10.") or "doi.org" in source:
@@ -120,6 +122,13 @@ def add(
                 references, citing, related = True, True, True
 
             add_work(source, references, citing, related)
+
+        elif (
+            source.endswith(".png")
+            or source.endswith(".jpg")
+            or source.endswith(".jpeg")
+        ):
+            add_image(source)
 
         # works from an author
         elif "orcid" in source or source.lower().startswith("https://openalex.org/a"):
@@ -550,7 +559,11 @@ def audio(playback=False):
 @click.option("-e", "--emacs", is_flag=True, default=False)
 @click.option("-i", "--iterative", is_flag=True, default=False)
 @click.option("-m", "--max-steps", default=None)
-@click.option("-f", "--fmt", default=" {{ i }}. ({{ score|round(3) }}) {{ text }}\n\n")
+@click.option(
+    "-f",
+    "--fmt",
+    default=(" {{ i }}. ({{ score|round(3) }})" " {{ source }}\n{{ text[:200] }}\n\n"),
+)
 @click.option("-x", "--cross-encode", is_flag=True, default=False)
 def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
     """Do a vector search on QUERY.
@@ -695,6 +708,14 @@ def chat_command(model, debug):
 
 
 cli.add_command(chat_command, name="chat")
+
+
+@cli.command()
+@click.argument("query", nargs=-1)
+@click.option("-c", "--clipboard", is_flag=True, default=False)
+@click.option("-n", default=1, help="Number of hits to retrieve")
+def image_search(query, clipboard, n):
+    image_query(" ".join(query), clipboard, n)
 
 
 @cli.command()
@@ -1421,7 +1442,7 @@ def suggest_reviewers(query, n):
             lki = d.get("last_known_institutions", [])
             if lki == []:
                 affils = d.get("affiliations", [])
-                if len(affils) >= 0:
+                if len(affils) >= 1:
                     lki = affils[0]["institution"]["display_name"]
                 else:
                     lki = "unknown"

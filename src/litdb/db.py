@@ -51,7 +51,8 @@ def get_db():
         )
 
         db.execute(
-            """create virtual table if not exists fulltext using fts5(source, text)"""
+            """create virtual table if not exists
+            fulltext using fts5(source, text)"""
         )
 
         db.execute(
@@ -94,6 +95,24 @@ def get_db():
             prompt_history(rowid integer primary key,
             prompt text)"""
         )
+
+        # For images
+        model = SentenceTransformer("clip-ViT-B-32")
+        _, dim = model.encode(["test"]).shape
+
+        db.execute(
+            f"""create table if not exists
+            images(rowid integer primary key,
+            source text unique,
+            embedding F32_BLOB({dim}),
+            date_added text)"""
+        )
+
+        db.execute(
+            """create index if not exists image_idx
+            ON images (libsql_vector_idx(embedding))"""
+        )
+
         return db
 
 
