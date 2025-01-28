@@ -344,14 +344,17 @@ The following subcommands can be used:
             n = 3
 
         # Now we do RAG on litdb if needed.
+        # I don't use the references below, so we do not assign them.
         if rag:
-            rag_content, references = get_rag_content(prompt, n)
+            rag_content, _ = get_rag_content(prompt, n)
         else:
-            rag_content, references = (None, None)
+            rag_content, _ = (None, None)
 
         if rag and rag_content:
-            prompt = f"""Use the following retrieved information to respond to
-        the user prompt. Reference the citations if you use that information.
+            prompt = f"""You are a professional scientist. Use the following
+        retrieved information to respond to the user prompt. Reference the
+        citations if you use that information. Each reference is surrounded by
+        <citation> tags. If the information is not relevent, do not use it.
 
         <retrieved information>
         {rag_content}
@@ -373,5 +376,5 @@ The following subcommands can be used:
 
         # We don't always have data here, if you use your own rag data
 
-        if references:
-            richprint("References:\n\n" + references)
+        # if references:
+        #    richprint("References:\n\n" + references)
