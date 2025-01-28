@@ -152,7 +152,9 @@ def _author(work):
 
 
 def _journal_name(work):
-    return (work.get("host_venue") or {}).get("publisher")
+    pl = work.get("primary_location") or {}
+    src = pl.get("source") or {}
+    return src.get("display_name", "Unknown")
 
 
 def _publisher(work):
