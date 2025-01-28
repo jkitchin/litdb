@@ -2,6 +2,11 @@
 
 #+attr_org: :width 600
 [[./litdb.png]]
+#+BEGIN_EXPORT html
+<a href="https://github.com/jkitchin/litdb/actions/workflows/build.yml">
+  <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Test installation">
+</a>
+#+END_EXPORT
 
 * litdb concept
 
