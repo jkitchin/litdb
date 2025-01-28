@@ -31,6 +31,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
+
 from .utils import get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
 from .openalex import get_data, get_text
@@ -38,7 +39,7 @@ from .pdf import add_pdf
 from .bibtex import dump_bibtex
 from .youtube import get_youtube_doc
 from .audio import is_audio_url, get_audio_text, record
-from .images import add_image, image_query
+from .images import add_image, image_query, image_extensions
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -111,7 +112,7 @@ def add(
     These are one time additions.
 
     """
-    print(sources)
+
     for source in tqdm(sources):
         # a work
         if source.startswith("10.") or "doi.org" in source:
@@ -123,11 +124,7 @@ def add(
 
             add_work(source, references, citing, related)
 
-        elif (
-            source.endswith(".png")
-            or source.endswith(".jpg")
-            or source.endswith(".jpeg")
-        ):
+        elif os.path.splitext(source)[1].lower() in image_extensions:
             add_image(source)
 
         # works from an author
