@@ -76,4 +76,5 @@ litdb = "litdb.cli:cli"
 Homepage = "https://github.com/jkitchin/litdb"
 
 
-# (shell-command "uv build & uv publish")
+# (shell-command "uv build")
+# (shell-command "uv publish")
