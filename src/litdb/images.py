@@ -8,19 +8,23 @@ search the images either by textual descriptions, or by using similar images.
 from .db import get_db
 from sentence_transformers import SentenceTransformer
 from PIL import Image, ImageGrab
+from pillow_heif import register_heif_opener
 import numpy as np
 import datetime
 import os
 import pyperclip
 
+register_heif_opener()
+
+image_extensions = Image.registered_extensions().keys()
 
 model = SentenceTransformer("clip-ViT-B-32")
-
 db = get_db()
 
 
 def add_image(path):
     """Embed and add the image in path to db."""
+
     emb = model.encode(Image.open(path))
 
     q = """insert or ignore into
