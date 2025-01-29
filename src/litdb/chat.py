@@ -262,7 +262,7 @@ def chat(model=None, debug=False):
     while True:
         rag = True  # default to using this
 
-        prompt = input("LitGPT (Ctrl-d to quit, enter for mic)> ")
+        prompt = input("\033[1;34mLitGPT (Ctrl-d to quit, enter for mic)> \033[0m")
 
         # line continuation
         if prompt.endswith("\\"):
