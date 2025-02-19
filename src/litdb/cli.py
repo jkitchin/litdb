@@ -124,9 +124,6 @@ def add(
 
             add_work(source, references, citing, related)
 
-        elif os.path.splitext(source)[1].lower() in image_extensions:
-            add_image(source)
-
         # works from an author
         elif "orcid" in source or source.lower().startswith("https://openalex.org/a"):
             add_author(source)
@@ -194,6 +191,11 @@ def add(
             (body, resources) = markdown_exporter.from_notebook_node(notebook)
 
             add_source(source, body)
+
+        # There are a lot of image extensions. I put this near the end so the
+        # specific extensions are matched first.
+        elif os.path.splitext(source)[1].lower() in image_extensions:
+            add_image(source)
 
         # assume it is text
         else:
