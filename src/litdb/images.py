@@ -24,7 +24,6 @@ db = get_db()
 
 def add_image(path):
     """Embed and add the image in path to db."""
-
     emb = model.encode(Image.open(path))
 
     q = """insert or ignore into
