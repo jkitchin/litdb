@@ -1,9 +1,9 @@
 ;;; litdb.el --- litdb and emacs
 
 ;;; Commentary:
-;; 
+;;
 ;; We define a new link: litdb
-;; 
+;;
 ;; litdb:https://doi.org/10.1002/cssc.202200362
 ;;
 ;; These links are functional, and can export to \cite commands in LaTeX, and
@@ -11,13 +11,13 @@
 ;;
 ;; `litdb' is an ivy entry-point with selection on citation strings. The default
 ;; action inserts a link.
-;; 
+;;
 ;; `litdb-fulltext' is an interactive function to do a full text search
-;; 
+;;
 ;; `litdb-vsearch' is an interactive function to do a vector search
 ;;
 ;; You can update the filters with `litdb-update'. You need a premium OpenAlex key for that.
-;; 
+;;
 ;; You should review your litdb periodically. `litdb-review' will prompt you for a time duration, and show you things that have been added since then. The duration could be something like "yesterday" or "last week" or a date.
 
 (require 'hydra)
@@ -70,7 +70,7 @@ where source_tag.tag_id = ?" (list tag-id)))))
   (interactive)
   (let* ((default-directory (file-name-directory (litdb-get-db)))
 	 (buf (get-buffer-create "*litdb-about*"))
-	 
+
 	 (proc))
     (with-current-buffer buf (erase-buffer))
     (setq proc (start-process-shell-command "litdb about" buf
@@ -152,24 +152,24 @@ START and END are the bounds. PATH could be a comma-separated list."
 		      :sync t :parser parser
 		      :params '(("email" . "jkitchin@cmu.edu"))))
 	      (data (request-response-data resp)))
-	 
+
 	 (setq candidates (append
 			   candidates
 			   (with-litdb
 			    (car (sqlite-select db
 						"select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
 						(list (org-entry-get (point) "SOURCE")))))))
-	 
+
 	 ;; try with unpaywall
 	 (cl-loop for loc in (plist-get data :oa_locations)
 		  do
 		  (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
 
 	 (browse-url (completing-read "URL: " (remove nil candidates))))"pdf")
-  
+
   ("i" litdb "Insert new link" :column "Insert")
   ("s" (litdb-insert-similar (litdb-path-at-point)) "Similar" :column "Insert")
-  
+
   ("k" (kill-new (litdb-path-at-point)) "Copy source" :column "Copy")
   ("l" (kill-new (format "litdb:%s" (litdb-path-at-point))) "Copy link" :column "Copy")
   ("c" (litdb-copy-citation (litdb-path-at-point)) "Copy citation" :column "Copy")
@@ -185,7 +185,7 @@ START and END are the bounds. PATH could be a comma-separated list."
 				"select json_extract(extra, '$.title') from sources where source = ?"
 				(list (litdb-path-at-point))))))))
    "Google Scholar" :column "Web")
-  
+
   ("gf" (let* ((default-directory (file-name-directory (litdb-get-db))))
 	  (message "%s" (shell-command-to-string
 			 (format "litdb add %s --references" (litdb-path-at-point)))))
@@ -329,7 +329,7 @@ Use a cache if possible, and generate if not."
 
 (defun litdb-insert-candidate (x)
   "Insert a link with X.
-X is a candidate (citation source) as a list." 
+X is a candidate (citation source) as a list."
   (cond
    ;; on a source in a link. add to end
    ((get-text-property (point) 'litdb)
@@ -367,14 +367,14 @@ X is a candidate (citation source) as a list."
 		 :sync t :parser parser
 		 :params '(("email" . "jkitchin@cmu.edu"))))
 	 (data (request-response-data resp)))
-    
+
     (setq candidates (append
 		      candidates
 		      (with-litdb
 		       (car (sqlite-select db
 					   "select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
 					   (list source))))))
-    
+
     ;; try with unpaywall
     (cl-loop for loc in (plist-get data :oa_locations)
 	     do
@@ -388,7 +388,7 @@ Default action inserts a link"
   (interactive)
   (let* ((db (sqlite-open (litdb-get-db)))
 	 (candidates (litdb-candidates)))
-    
+
     (ivy-read "choose: " candidates
 	      :caller 'litdb
 	      :action
@@ -408,14 +408,14 @@ This transformer allows org syntax in the candidate strings and wraps it to a ni
 	 (shr-width width)
 	 (idx (get-text-property 1 'idx candidate))
 	 (entry (cdr (nth idx (ivy-state-collection ivy-last)))))
-    
-    (with-temp-buffer 
+
+    (with-temp-buffer
       (insert
-       (s-concat 
+       (s-concat
 	(if (s-starts-with-p ivy-mark-prefix candidate)
 	    ivy-mark-prefix "")
 	candidate))
-      
+
       (shr-render-region (point-min) (point-max))
       (string-trim-right (buffer-string)))))
 
@@ -462,14 +462,14 @@ Default action is insert link. Some other actions include:
 		       "Copy bibtex string."
 		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (nth 1 x))))))
-			 
+
 			 (kill-new bibtex)))
 		 "Insert bibtex")
 		("c" (lambda (x)
 		       "Copy citation string."
 		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (nth 1 x))))))
-			 
+
 			 (kill-new citation)))
 		 "Copy citation")))))
 
@@ -488,7 +488,7 @@ This is not a fast function. It goes through the litdb cli command."
 	 (N (or N 5))
 	 (candidates (read (shell-command-to-string
 			    (format "litdb vsearch -n %s -e \"%s\"" N query)))))
-    
+
     (ivy-read "Choose: " candidates
 	      :caller 'litdb
 	      :action
@@ -504,14 +504,14 @@ This is not a fast function. It goes through the litdb cli command."
 		       "Copy bibtex string."
 		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (cdr x))))))
-			 
+
 			 (kill-new bibtex)))
 		 "Copy bibtex")
 		("c" (lambda (x)
 		       "Copy bibtex string."
 		       (let* ((db (sqlite-open (litdb-get-db)))
 			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (cdr x))))))
-			 
+
 			 (kill-new citation)))
 		 "Copy citation")))))
 
@@ -526,7 +526,7 @@ This is not a fast function. It goes through the litdb cli command."
 				       (region-end)
 				       "")
 	     (litdb-review-header)))
-    
+
     ;; tag entry
     ("t" . (litdb-edit-tags (org-entry-get (point) "SOURCE")))
 
@@ -548,7 +548,7 @@ This is not a fast function. It goes through the litdb cli command."
 				       (region-end)
 				       "")
 	     (litdb-review-header)))
-    
+
     ;; refile the heading to somewhere
     ("r" . litdb-refile-to-project)
 
@@ -559,7 +559,7 @@ This is not a fast function. It goes through the litdb cli command."
     ("a" . (let ((source (org-entry-get (point) "SOURCE")))
 	     (shell-command (format "litdb add \"%s\"" source))
 	     (message "added %s" source)))
-    
+
     ;; get related, citing, references
     ("r" (lambda ()
 	   (let* ((default-directory (file-name-directory (litdb-get-db)))
@@ -624,7 +624,7 @@ This is not a fast function. It goes through the litdb cli command."
 Show new updated results in a buffer: *litdb-update*."
   (interactive)
   (let* ((process-environment (cons "COLUMNS=10000" process-environment))
-	 (proc (start-process-shell-command "litdb-update" "*litdb-update*" "litdb update-filters -s")))
+	 (proc (start-process-shell-command "litdb-update" "*litdb-update*" "COLUMNS=10000 litdb update-filters -s | cat")))
     (set-process-sentinel proc (lambda (process event)
 				 "Sentinel to keep the buffer alive after PROCESS finishes."
 				 (when (memq (process-status process) '(exit signal))
@@ -632,9 +632,9 @@ Show new updated results in a buffer: *litdb-update*."
 				     (when (buffer-live-p buffer)
 				       (with-current-buffer buffer
 					 (org-mode)
-					 (litdb-review-header)
-					 (goto-char (point-min))))))))
-    (switch-to-buffer-other-frame (process-buffer proc))))
+					 (litdb-review-header)))))))
+    (switch-to-buffer-other-frame (process-buffer proc))
+    (goto-char (point-min))))
 
 
 (defun litdb-review (since)
@@ -643,7 +643,7 @@ This runs asynchronously, and a review buffer appears in another frame."
   (interactive (list (read-string "Since: " "one week ago")))
   (let* ((process-environment (cons "COLUMNS=10000" process-environment))
 	 (proc (start-process-shell-command
-		"litdb-review" "*litdb-review*" 
+		"litdb-review" "*litdb-review*"
 		(format "litdb review -s %s" since))))
     (set-process-sentinel proc (lambda (process event)
 				 "Sentinel to keep the buffer alive after PROCESS finishes."
@@ -675,9 +675,9 @@ This runs asynchronously, and a review buffer appears in another frame."
 		       (read-string "DOI: ")))))
   (let ((default-directory (file-name-directory (litdb-get-db)))
 	(db (sqlite-open (litdb-get-db))))
-    
+
     (shell-command (format "litdb add \"%s\"" doi))
-    (insert 
+    (insert
      (caar
       (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi))))
     (insert (format " litdb:%s\n\n" doi))))
@@ -701,7 +701,7 @@ you will be prompted to pick one."
 	 (headlines (cl-loop for file in org-files
 			     append
 			     (let ((hl '()))
-			       
+
 			       (when (file-exists-p file)
 				 (with-temp-buffer
 				   (insert-file-contents file)
@@ -767,7 +767,7 @@ fulltext.search:yeast,publication_year:>2020
 			  filter
 			  (plist-get metadata :next_cursor)))
        (buf (get-buffer-create "*litdb-openalex*")))
-  
+
   (with-current-buffer buf
     (erase-buffer)
     (org-mode)
@@ -790,7 +790,7 @@ Speed keys:
 			("count" . ,(plist-get metadata :count)))))
 
     (insert
-     (cl-loop for result in results concat 
+     (cl-loop for result in results concat
 	      (s-format "* ${title}
 :PROPERTIES:
 :JOURNAL: ${primary_location.source.display_name}
@@ -818,7 +818,7 @@ ${abstract}
   ("abstract" . ,(oa--abstract result))))))
 
     (insert (format "* %s" next-page))
-    
+
     (goto-char (point-min)))
   (pop-to-buffer buf)
   (org-next-visible-heading 1)))
@@ -833,7 +833,7 @@ Note it is not certain all the bibtex entries are correct and valid.
 Notably, the DOI or OpenAlex id is used as a key, and almost certainly
 some of these are invalid."
   (interactive "fBibtex file: ")
-  
+
   ;; get all the paths from litdb links
   (let* ((db (sqlite-open (litdb-get-db)))
 	 (sources (org-element-map (org-element-parse-buffer) 'link
@@ -856,7 +856,7 @@ some of these are invalid."
     (when (and (file-exists-p bibtex-file)
 	       (not (y-or-n-p (format "%s exists. Clobber it?" bibtex-file))))
       (error "%s exists." bibtex-file))
-    
+
     (with-temp-file bibtex-file
       (insert (string-join bibtex-entries "\n")))))
 
