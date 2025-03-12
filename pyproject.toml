@@ -66,7 +66,10 @@ dependencies = [
   # image clip search
   "pyperclip",
   "pillow",
-  "pillow_heif"
+  "pillow_heif",
+
+  "scrapy",
+  "backoff"
 ]
 
 [project.scripts]
