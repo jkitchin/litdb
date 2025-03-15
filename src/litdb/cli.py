@@ -42,6 +42,8 @@ from .audio import is_audio_url, get_audio_text, record
 from .images import add_image, image_query, image_extensions
 
 from .crawl import spider
+from .research import deep_research
+
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
     from .gpt import gpt
@@ -714,6 +716,64 @@ cli.add_command(chat_command, name="chat")
 @click.argument("root")
 def crawl(root):
     spider(root)
+
+
+@cli.command()
+@click.argument("query", nargs=-1)
+@click.option(
+    "--report-type", default="research_report", help="The type of report to generate."
+)
+@click.option("--doc-path", default=None, help="Path to local documents")
+@click.option("-o", "--output", default=None, help="output file")
+@click.option("-v", "--verbose", is_flag=True, default=False)
+def research(query, report_type, doc_path, output, verbose):
+    """Run a deep research query.
+
+    QUERY: the topic to do research on
+
+    REPORT_TYPE: one of the supported types in gpt_researcher
+    DOC_PATH: a directory path for local files
+    OUTPUT: a filename to write output to, defaults to printing to stdout
+    VERBOSE: if truthy the output is more verbose.
+
+    Based on gpt_researcher. You need to have some configuration setup in advance.
+    API keys for the LLM in environment variables.
+    """
+    if doc_path:
+        os.environ["DOC_PATH"] = doc_path
+
+    report, result, context, costs, images, sources = deep_research(
+        query, report_type, verbose
+    )
+
+    s = f"""Report:
+{report}
+
+---------------------------------------------------
+Research costs:
+{costs}
+
+Result:
+{result}
+
+Context:
+{context}
+
+Images:
+{images}
+
+Research sources:
+{sources}
+"""
+    if output:
+        with open(output, "w") as f:
+            f.write(s)
+
+    console = Console(color_system="truecolor")
+    with console.pager():
+        console.print(s)
+
+
 @cli.command()
 @click.argument("query", nargs=-1)
 @click.option("-c", "--clipboard", is_flag=True, default=False)

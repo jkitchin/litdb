@@ -68,8 +68,16 @@ dependencies = [
   "pillow",
   "pillow_heif",
 
+  # web crawling
   "scrapy",
-  "backoff"
+  "backoff",
+
+  # deep research
+  "gpt_researcher",
+  "duckduckgo-search",
+  "langchain_ollama",
+  "langchain_google_genai",
+  "langchain_anthropic"
 ]
 
 [project.scripts]
