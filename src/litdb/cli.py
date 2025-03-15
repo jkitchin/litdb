@@ -41,6 +41,7 @@ from .youtube import get_youtube_doc
 from .audio import is_audio_url, get_audio_text, record
 from .images import add_image, image_query, image_extensions
 
+from .crawl import spider
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
     from .gpt import gpt
@@ -709,6 +710,10 @@ def chat_command(model, debug):
 cli.add_command(chat_command, name="chat")
 
 
+@cli.command(help=spider.__doc__)
+@click.argument("root")
+def crawl(root):
+    spider(root)
 @cli.command()
 @click.argument("query", nargs=-1)
 @click.option("-c", "--clipboard", is_flag=True, default=False)
