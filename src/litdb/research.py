@@ -31,14 +31,12 @@ os.environ["EMBEDDING"] = gpt_researcher.get("EMBEDDING", "ollama:nomic-embed-te
 retrievers = "arxiv"
 
 # API keys
-if "NCBI_API_KEY" not in os.environ and "NCBI_API_KEY" in gpt_researcher:
-    os.environ["NCBI_API_KEY"] = gpt_researcher.get("NCBI_API_KEY")
+if "NCBI_API_KEY" in os.environ:
     print("Adding pubmed search")
     retrievers += ",pubmed_central"
 
 
-if "GOOGLE_CX_KEY" not in os.environ and "GOOGLE_CX_KEY" in gpt_researcher:
-    os.environ["GOOGLE_CX_KEY"] = gpt_researcher.get("GOOGLE_CX_KEY")
+if "GOOGLE_CX_KEY" in os.environ:
     print("Adding google search")
     retrievers += ",google"
 
@@ -54,6 +52,20 @@ async def get_report(query: str, report_type: str, verbose: bool):
     Adapted from https://docs.gptr.dev/docs/gpt-researcher/gptr/pip-package.
     """
     researcher = GPTResearcher(query, report_type, verbose)
+
+    if verbose:
+        c = researcher.cfg
+        print(f"""CONFIG:
+        retrievers:    {c.retrievers}
+
+        fast_llm:      {c.fast_llm}
+        smart_llm:     {c.smart_llm}
+        strategic_llm: {c.strategic_llm}
+        embedding:     {c.embedding}
+
+        doc_path:      {c.doc_path}
+        """)
+
     research_result = await researcher.conduct_research()
     report = await researcher.write_report()
 
@@ -91,6 +103,7 @@ def deep_research(query, report_type="research_report", verbose=False):
     methods used.
 
     """
+
     report, result, context, costs, images, sources = asyncio.run(
         get_report(query, report_type, verbose)
     )
