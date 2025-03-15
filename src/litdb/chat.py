@@ -17,6 +17,7 @@ import importlib
 from docling.document_converter import DocumentConverter
 from docling.exceptions import ConversionError
 import logging
+import backoff
 
 from .utils import get_config
 from .db import get_db
@@ -164,6 +165,12 @@ def get_rag_content(prompt, n):
     return rag_content, references
 
 
+@backoff.on_exception(
+    backoff.expo,  # Exponential backoff strategy
+    Exception,  # Exception(s) to catch
+    max_tries=5,  # Maximum number of retries
+    jitter=backoff.full_jitter,  # Helps distribute retry attempts
+)
 def get_completion(model, messages):
     """Return the output from model for the list of messages.
 
