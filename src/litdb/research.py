@@ -261,13 +261,6 @@ async def get_report(query: str, report_type: str, verbose: bool):
         documents=litdb_documents(query),
     )
 
-    # This is where we get information from your litdb in the process. It is a
-    # little janky, and relies on a local file mechanism. I haven't figured out
-    # if there is a way to do this with the documents argument instead, and I
-    # don't know if there is a mechanism to define your own retriever yet for
-    # gpt_researcher.
-    # researcher.cfg.doc_path =
-
     if verbose:
         c = researcher.cfg
         print(f"""CONFIG:
