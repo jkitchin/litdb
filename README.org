@@ -25,6 +25,7 @@ The idea is you add papers to your database, and then you can search it with nat
 7. https://youtube.com/live/3FZ1ROnCC6Y litdb + LiteLLM and streamlit
 8. https://www.youtube.com/live/IKKTQSTXQmc litdb + Youtube and audio
 9. https://youtube.com/live/MEf9rPI0Z1M  litdb + Image search with text and image queries using CLIP
+10.https://youtube.com/live/C4qCam0shf8  litdb + deep research
 
 ** installation
 
