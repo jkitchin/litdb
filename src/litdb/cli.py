@@ -26,6 +26,7 @@ from pptx import Presentation
 import requests
 from rich import print as richprint
 from rich.console import Console
+from rich.markdown import Markdown
 from sentence_transformers import SentenceTransformer
 import tabulate
 from tqdm import tqdm
@@ -770,8 +771,9 @@ Research sources:
             f.write(s)
 
     console = Console(color_system="truecolor")
+
     with console.pager():
-        console.print(s)
+        console.print(Markdown(s))
 
 
 @cli.command()
