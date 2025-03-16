@@ -14,11 +14,11 @@ import numpy as np
 import asyncio
 import json
 import os
-import tempfile
 
 from sentence_transformers import SentenceTransformer
 from gpt_researcher import GPTResearcher
 from litellm import completion
+from langchain.schema import Document
 
 from .utils import get_config
 from .db import get_db
@@ -98,7 +98,7 @@ def oa_query(query):
 def litdb_documents(query):
     """Create the litdb documents.
 
-    Returns a document path."""
+    Returns a list of langchain Documents."""
 
     config = get_config()
     query = " ".join(query)
@@ -115,11 +115,12 @@ def litdb_documents(query):
         (emb, emb, 5),
     ).fetchall()
 
-    tdir = tempfile.mkdtemp()
+    documents = []
+
     for i, (source, text, extra, d) in enumerate(results):
-        fname = os.path.join(tdir, f"v-{i}.md")
-        with open(fname, "w") as f:
-            f.write(f"{source}\n\n{text}\n\n{extra}")
+        documents += [
+            Document(page_content=text, metadata={"source": source, "extra": extra})
+        ]
 
     # Full text search - Ideally I would use litellm for enforcing json, but not
     # all models support that, notably gemini doesn't seem to support it, and I
@@ -170,18 +171,18 @@ relevant. The queries will be used with sqlite fts5.
         ).fetchall()
 
         for j, (source, text, snippet, extra, score) in enumerate(results):
-            fname = os.path.join(tdir, f"ft-{i}-{j}.md")
-            with open(fname, "w") as f:
-                f.write(f"{source}\n\n{text}\n\n{extra}")
+            documents += [
+                Document(page_content=text, metadata={"source": source, "extra": extra})
+            ]
 
         # OpenAlex queries
         oa = oa_query(q)
         for j, result in enumerate(oa["results"][0:5]):
-            fname = os.path.join(tdir, f"oa-{i}-{j}.md")
-            with open(fname, "w") as f:
-                f.write(get_text(result))
+            documents += [
+                Document(page_content=get_text(result), metadata={"extra": result})
+            ]
 
-    return tdir
+    return documents
 
 
 def refine_query(query):
@@ -253,14 +254,19 @@ async def get_report(query: str, report_type: str, verbose: bool):
 
     query = refine_query(query)
 
-    researcher = GPTResearcher(query=query, report_type=report_type, verbose=verbose)
+    researcher = GPTResearcher(
+        query=query,
+        report_type=report_type,
+        verbose=verbose,
+        documents=litdb_documents(query),
+    )
 
     # This is where we get information from your litdb in the process. It is a
     # little janky, and relies on a local file mechanism. I haven't figured out
     # if there is a way to do this with the documents argument instead, and I
     # don't know if there is a mechanism to define your own retriever yet for
     # gpt_researcher.
-    researcher.cfg.doc_path = litdb_documents(query)
+    # researcher.cfg.doc_path =
 
     if verbose:
         c = researcher.cfg
@@ -272,6 +278,7 @@ async def get_report(query: str, report_type: str, verbose: bool):
         strategic_llm: {c.strategic_llm}
         embedding:     {c.embedding}
 
+        ndocs:         {len(researcher.documents)}
         doc_path:      {c.doc_path}
         """)
 
