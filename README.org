@@ -498,6 +498,14 @@ The default is to print the report to stdout. To write to a file instead use:
 litdb research "some query" -o report.md
 #+END_SRC
 
+You specify other output formats, anything pandoc can convert to. However, I found pdf a challenge for pypandoc, and use md2pdf for that instead. On Mac, if you see errors related to gobject, you probably have do run something like this to fix it.
+
+#+BEGIN_SRC sh
+brew list pango gobject-introspection
+export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
+#+END_SRC
+
+
 
 * Adding local files
 
