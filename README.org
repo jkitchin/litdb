@@ -450,6 +450,54 @@ You might also use this for very specific queries. For example, here I search th
 litdb sql "select source, json_extract(extra, '$.citation') as citation from sources where citation like '%kitchin%'"
 #+END_SRC
 
+** Deep research
+
+Deep research is one of the newer ideas in LLMs. It is a combination of web and other searches to find relevant information, coupled with an LLM to synthesize that information into a textual response. Litdb supports deep research with your database using [[https://docs.gptr.dev/][gpt-researcher]] with this command:
+
+#+BEGIN_SRC sh
+litdb research "some query"
+#+END_SRC
+
+litdb will generate some documents from your database from your query, and use this in a research task with gpt_researcher. This takes longer than a simple chat, but is often much richer in detail, and summarizes across documents.
+
+The default setup is to use a local ollama model, with arxiv as a search tool. You will get better results most likely if you use a cloud LLM. To use these you can add this new section to litdb.toml:
+
+#+BEGIN_SRC text
+[gpt-researcher]
+
+FAST_LLM = "google_genai:gemini-2.0-flash"
+SMART_LLM = "google_genai:gemini-2.0-flash"
+STRATEGIC_LLM = "google_genai:gemini-2.0-flash"
+EMBEDDING = "google_genai:models/text-embedding-004"
+#+END_SRC
+
+See https://docs.gptr.dev/docs/gpt-researcher/llms/llms  for other configurations.
+
+The default search engine in litdb for deep research is DuckDuckGo and arxiv. If you setup these API keys you can also use pubmed (https://www.ncbi.nlm.nih.gov/account/), google (https://developers.google.com/custom-search/v1/overview), and  [[https://app.tavily.com/home][Tavily]] for search.
+
+#+BEGIN_SRC sh
+export NCBI_API_KEY=
+export GOOGLE_CX_KEY=
+export TAVILY_API_KEY=
+#+END_SRC
+
+I have not tried the other retrievers at https://github.com/assafelovic/gpt-researcher/tree/master/gpt_researcher/retrievers.
+
+You can do research on local documents with this command:
+
+#+BEGIN_SRC sh
+litdb research "some query" --doc-path=/path/to/documents
+#+END_SRC
+
+It is not currently possible to use litdb do research with and use a local directory full of documents at the same time.
+
+The default is to print the report to stdout. To write to a file instead use:
+
+#+BEGIN_SRC sh
+litdb research "some query" -o report.md
+#+END_SRC
+
+
 * Adding local files
 
 The idea of using local files is that it is likely you have collected information in the form of files on your hard drive, and you want to be able to find information in those files.
