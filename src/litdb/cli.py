@@ -767,13 +767,52 @@ Research sources:
 {sources}
 """
     if output:
-        with open(output, "w") as f:
-            f.write(s)
+        base, ext = os.path.splitext(output)
+        # I found pypandoc was not good at pdf. lots of bad latex commands that
+        # make the pdf build fail.
+        # pdfkit relies on wkhtmltopdf which appears discontinued
+        # weasyprint and m2pdf has some gobject dependency
+        # These are adapted from gpt_researcher / multi_agents
 
-    console = Console(color_system="truecolor")
+        if ext == ".pdf":
+            from md2pdf.core import md2pdf
 
-    with console.pager():
-        console.print(Markdown(s))
+            md2pdf(output, md_content=s)
+
+        elif ext == ".docx":
+            import mistune
+            from htmldocx import HtmlToDocx
+            from docx import Document
+
+            html = mistune.html(s)
+            doc = Document()
+            HtmlToDocx().add_html_to_document(html, doc)
+            doc.save(output)
+
+        elif ext == ".html":
+            import mistune
+
+            html = mistune.html(s)
+            with open(output, "w") as f:
+                f.write(html)
+
+        elif ext == ".md":
+            with open(output, "w") as f:
+                f.write(s)
+        else:
+            print(f"I do not know how to make {output}.")
+
+        import webbrowser
+
+        if os.path.exists(output):
+            print(f"Opening {output}")
+            webbrowser.open(f"file://{os.path.abspath(output)}")
+
+    else:
+        console = Console(color_system="truecolor")
+
+        with console.pager():
+            console.print(Markdown(s))
 
 
 @cli.command()

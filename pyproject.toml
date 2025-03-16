@@ -77,7 +77,11 @@ dependencies = [
   "duckduckgo-search",
   "langchain_ollama",
   "langchain_google_genai",
-  "langchain_anthropic"
+  "langchain_anthropic",
+  "mistune",
+  "htmldocx",
+  "docx",
+  "md2pdf"
 ]
 
 [project.scripts]
