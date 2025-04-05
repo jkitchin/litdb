@@ -8,6 +8,15 @@ This is mostly a wrapper around gpt_researcher with the following additions:
 4. OpenAlex queries are used to provide related content
 
 The whole thing is wrapped into the litdb cli for convenience.
+
+TODO:
+1. Store results in litdb. This mitigates the need to remember to store the
+results in an output file. It would also enable you to continue doing research
+that builds on itself. This needs some kind of tag / label capability to enable
+you to bring up related items to continue.
+
+2. Wrap the research function in a loop so a chat stays alive and you can
+continue it.
 """
 
 import numpy as np
@@ -29,7 +38,7 @@ db = get_db()
 
 
 def research_env():
-    """Setup the environment variables.
+    """Set up the environment variables.
 
     Use litdb.toml to specify the models used.
 
@@ -42,16 +51,15 @@ def research_env():
     Others from gpt_researcher could be supported, but I haven't used them
     myself.
     """
-
     gr_config = config.get("gpt-researcher", {})
 
     # You won't always need this, but it is harmless to set here.
     os.environ["OLLAMA_BASE_URL"] = "http://localhost:11434"
 
     # This may be too clever. You can setup gpt_researcher with environment
-    # variables. If those exist, you might override them from litdb.toml. But, if
-    # they are not set here, I use defaults. I want this to require as little as
-    # possible to just work, but remain flexible to get what you want.
+    # variables. If those exist, you might override them from litdb.toml. But,
+    # if they are not set here, I use defaults. I want this to require as little
+    # as possible to just work, but remain flexible to get what you want.
 
     # see https://docs.gptr.dev/docs/gpt-researcher/llms/llms for examples
     os.environ["FAST_LLM"] = gr_config.get("FAST_LLM", "ollama:llama3.3")
@@ -81,7 +89,6 @@ def research_env():
 
 def oa_query(query):
     """Get data from OpenAlex for query."""
-
     url = "https://api.openalex.org/works"
 
     params = {
@@ -98,13 +105,16 @@ def oa_query(query):
 def litdb_documents(query):
     """Create the litdb documents.
 
-    Returns a list of langchain Documents."""
+    Query should be a string.
 
+    Returns a list of langchain Documents.
+    """
     config = get_config()
-    query = " ".join(query)
     model = SentenceTransformer(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
+    # vector search
+    # TODO: 5 is hard-coded here
     results = db.execute(
         """select
             sources.source, sources.text,
@@ -119,7 +129,10 @@ def litdb_documents(query):
 
     for i, (source, text, extra, d) in enumerate(results):
         documents += [
-            Document(page_content=text, metadata={"source": source, "extra": extra})
+            Document(
+                page_content=text,
+                metadata={"source": source, "type": "vector search", "query": query},
+            )
         ]
 
     # Full text search - Ideally I would use litellm for enforcing json, but not
@@ -157,29 +170,37 @@ relevant. The queries will be used with sqlite fts5.
     except json.decoder.JSONDecodeError:
         print("Generating full text queries failed on")
         print(content)
-        print("Proceeding without full text queries. Please report this message")
+        print("Proceeding without full text queries." " Please report this message")
         queries = []
 
+    # TODO: 5 is hard coded here
     for i, q in enumerate(queries):
         results = db.execute(
             """select
-    sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16), sources.extra, bm25(fulltext)
-    from fulltext
-    inner join sources on fulltext.source = sources.source
-    where fulltext.text match ? order by rank limit ?""",
+            sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
+            sources.extra, bm25(fulltext)
+            from fulltext
+            inner join sources on fulltext.source = sources.source
+            where fulltext.text match ? order by rank limit ?""",
             (f'"{q}"', 5),
         ).fetchall()
 
         for j, (source, text, snippet, extra, score) in enumerate(results):
             documents += [
-                Document(page_content=text, metadata={"source": source, "extra": extra})
+                Document(
+                    page_content=text,
+                    metadata={"source": source, "type": "full-text", "query": q},
+                )
             ]
 
         # OpenAlex queries
         oa = oa_query(q)
         for j, result in enumerate(oa["results"][0:5]):
             documents += [
-                Document(page_content=get_text(result), metadata={"extra": result})
+                Document(
+                    page_content=get_text(result),
+                    metadata={"source": result["id"], "type": "openalex", "query": q},
+                )
             ]
 
     return documents
@@ -213,32 +234,37 @@ focus the response and ask them what they would like.""",
         print(out, end="")
         output += out
 
-    # Now get the user response
-    msgs += [
-        {
-            "role": "system",
-            "content": """Use the reply from the user to modify the original
-           prompt. You should only return the new prompt with no additional
-           explanation""",
-        },
-        {
-            "role": "user",
-            "content": f"<reply>{input('(Enter for no change > ') or 'Make no changes'}</reply>",
-        },
-    ]
+    reply = input("Enter for no change > ")
 
-    response = completion(model=model, messages=msgs, stream=True)
+    if reply.strip():
+        # Now get the user response
+        msgs += [
+            {
+                "role": "system",
+                "content": """Use the reply from the user to modify the original
+               prompt. You should only return the new prompt with no additional
+               explanation""",
+            },
+            {
+                "role": "user",
+                "content": f"<reply>{reply}</reply>",
+            },
+        ]
 
-    print("New query: ")
-    output = ""
-    for chunk in response:
-        out = chunk.choices[0].delta.content or ""
-        print(out, end="")
-        output += out
+        response = completion(model=model, messages=msgs, stream=True)
 
-    print()
+        print("New query: ")
+        output = ""
+        for chunk in response:
+            out = chunk.choices[0].delta.content or ""
+            print(out)
+            output += out
 
-    return output
+        query = output
+
+    print(f"Doing research on:\n\n{query}\n\n")
+
+    return query
 
 
 async def get_report(query: str, report_type: str, verbose: bool):
@@ -249,16 +275,23 @@ async def get_report(query: str, report_type: str, verbose: bool):
     Adapted from https://docs.gptr.dev/docs/gpt-researcher/gptr/pip-package.
     """
     research_env()
-
-    query = " ".join(query)
-
     query = refine_query(query)
+
+    docs = litdb_documents(query)
+
+    # for doc in docs:
+    #     print(doc)
+    #     print('\n-----------\n')
+
+    # if not 'y' in input('continue? ').lower():
+    #     import sys
+    #     sys.exit()
 
     researcher = GPTResearcher(
         query=query,
         report_type=report_type,
         verbose=verbose,
-        documents=litdb_documents(query),
+        documents=docs,
     )
 
     if verbose:
