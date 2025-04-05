@@ -44,6 +44,7 @@ from .images import add_image, image_query, image_extensions
 
 from .crawl import spider
 from .research import deep_research
+from .lsearch import llm_oa_search
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -216,6 +217,7 @@ def add(
 @cli.command()
 @click.argument("sources", nargs=-1)
 def remove(sources):
+    """Remove sources from litdb."""
     for source in sources:
         db.execute("delete from sources where source = ?", (source,))
         db.commit()
@@ -714,9 +716,37 @@ cli.add_command(chat_command, name="chat")
 
 
 @cli.command(help=spider.__doc__)
-@click.argument("root")
+@click.argument("root", help="Root url to crawl.")
 def crawl(root):
     spider(root)
+
+
+@cli.command()
+@click.argument("query", nargs=-1)
+@click.option("-q", default=5, help="The number of queries to generate")
+@click.option("-n", default=25, help="The number of results to get for each query")
+@click.option("-k", default=5, help="The number of results to return")
+def lsearch(query, q, n, k):
+    """LLM enhances search of OpenAlex.
+
+    QUERY: string, an natural language query
+    Q: int, number of keyword searches to generate
+    N: int, number of results to retrieve for each keyword query
+    K: int, number of results to finally return
+
+    Internally, it generates Q keyword queries based on the original QUERY using
+    an LLM. For each keyword query several searches are run sorted on citations
+    and publication year both ascending and descending, and a random sample is
+    searched. Then these are combined and sorted by vector similarity to the
+    query. Finally the top k results are printed.
+
+    This does not add anything to the litdb database.
+
+    """
+    for s, result in llm_oa_search(query, q, n, k):
+        richprint(
+            f"{s[0]:1.2f}: {result['title']} ({result['publication_year']}), {result['id']}\n\n"
+        )
 
 
 @cli.command()
@@ -740,6 +770,8 @@ def research(query, report_type, doc_path, output, verbose):
     Based on gpt_researcher. You need to have some configuration setup in advance.
     API keys for the LLM in environment variables.
     """
+    query = " ".join(query)  # if you don't quote the query it is a list of words.
+
     if doc_path:
         os.environ["DOC_PATH"] = doc_path
 
@@ -747,24 +779,16 @@ def research(query, report_type, doc_path, output, verbose):
         query, report_type, verbose
     )
 
-    s = f"""Report:
-{report}
+    s = f"""{report}
 
----------------------------------------------------
-Research costs:
-{costs}
+# Research costs
+${costs}
 
-Result:
+# Result
 {result}
 
-Context:
+# Context
 {context}
-
-Images:
-{images}
-
-Research sources:
-{sources}
 """
     if output:
         base, ext = os.path.splitext(output)
@@ -795,6 +819,13 @@ Research sources:
             html = mistune.html(s)
             with open(output, "w") as f:
                 f.write(html)
+
+        elif ext == ".org":
+            import pypandoc
+
+            with open(output, "w") as f:
+                org = pypandoc.convert_text(s, to="org", format="md")
+                f.write(org)
 
         elif ext == ".md":
             with open(output, "w") as f:
