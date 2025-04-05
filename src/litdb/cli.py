@@ -728,7 +728,7 @@ def crawl(root):
 @click.option("-n", default=25, help="The number of results to get for each query")
 @click.option("-k", default=5, help="The number of results to return")
 def lsearch(query, q, n, k):
-    """LLM enhances search of OpenAlex.
+    """LLM enhanced search of OpenAlex.
 
     QUERY: string, an natural language query
     Q: int, number of keyword searches to generate
