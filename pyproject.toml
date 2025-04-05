@@ -81,7 +81,8 @@ dependencies = [
   "mistune",
   "htmldocx",
   "docx",
-  "md2pdf"
+  "md2pdf",
+  "pypandoc"
 ]
 
 [project.scripts]
