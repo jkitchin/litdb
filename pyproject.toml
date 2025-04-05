@@ -15,7 +15,7 @@ maintainers = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"}
 ]
 description = "A literature database tool with GPT integration."
-license = {text = "MIT"}
+license = "MIT"
 readme = {file = "README.org", content-type = "text/plain"}
 dependencies = [
   "toml",
