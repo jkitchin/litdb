@@ -35,7 +35,7 @@ import webbrowser
 
 from .utils import get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
-from .openalex import get_data, get_text
+from .openalex import get_data
 from .pdf import add_pdf
 from .bibtex import dump_bibtex
 from .youtube import get_youtube_doc
@@ -1119,6 +1119,8 @@ def openalex(query, _filter, endpoint, sample, per_page):
     """Run an openalex query on FILTER.
 
     ENDPOINT should be one of works, authors, or another entity.
+    SAMPLE: int, return this many random samples
+    PER_PAGE: limits the number of results retrieved
 
     This does not add anything to your database. It is to help you find starting
     points.
@@ -1138,13 +1140,9 @@ def openalex(query, _filter, endpoint, sample, per_page):
     if not _filter:
         query = f"default.search:{query}"
 
-    print(query)
-
-    next_cursor = "*"
     params = {
         "email": config["openalex"]["email"],
         "filter": query,
-        "cursor": next_cursor,
         "per_page": per_page,
     }
 
@@ -1152,28 +1150,19 @@ def openalex(query, _filter, endpoint, sample, per_page):
         params.update(api_key=api_key)
 
     if sample > 0:
-        del params["sort"]  # incompatible param with sample
-        params.update(sample=sample)
+        params.update(sample=sample, per_page=sample)
 
-    while next_cursor:
-        resp = requests.get(url, params)
-        if resp.status_code != 200:
-            print(resp.url)
-            print(resp.text)
-            return
+    resp = requests.get(url, params)
+    if resp.status_code != 200:
+        print(resp.url)
+        print(resp.text)
+        return
 
-        data = resp.json()
-        next_cursor = data["meta"]["next_cursor"]
-        params.update(cursor=next_cursor)
-
-        for result in data["results"]:
-            # Note sometimes there is an exception from bad markup in strings
-            richprint(get_text(result))
-            print()
-
-        if next_cursor:
-            if input("Continue? (y/n)").lower().startswith("n"):
-                return
+    data = resp.json()
+    for result in data["results"]:
+        s = f'{result["title"]}, ({result["publication_year"]}) {result["id"]}\n'
+        # Note sometimes there is an exception from bad markup in strings
+        richprint(s)
 
 
 ########################################
