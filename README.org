@@ -25,7 +25,8 @@ The idea is you add papers to your database, and then you can search it with nat
 7. https://youtube.com/live/3FZ1ROnCC6Y litdb + LiteLLM and streamlit
 8. https://www.youtube.com/live/IKKTQSTXQmc litdb + Youtube and audio
 9. https://youtube.com/live/MEf9rPI0Z1M  litdb + Image search with text and image queries using CLIP
-10.https://youtube.com/live/C4qCam0shf8  litdb + deep research
+10. https://youtube.com/live/C4qCam0shf8  litdb + deep research
+11. https://youtube.com/live/6Wpy7KM3wIM  litdb + LLM-augmented search of OpenAlex
 
 ** installation
 
@@ -128,6 +129,20 @@ You can also search other endpoints and use fulters. Here we perform a search on
 #+BEGIN_SRC sh
 litdb openalex -e sources -f display_name.search:discovery
 #+END_SRC
+
+*** LLM-enhanced search of OpenAlex
+
+The previous command lets you define a precise keyword or filter search for OpenAlex. An alternative is the ~lsearch~ sub-command. This command uses a LLM to generate a set of keyword searches for OpenAlex. Then, for each keyword search it returns results that are sorted in ascending and descending citation counts, publication year, and it performs a random sample search. Each result is scored by vector similarity to the original query, and the top results are printed.
+
+#+BEGIN_SRC sh
+litdb lsearch "some query of interest"
+#+END_SRC
+
+some options include:
+
+- -q :: integer count of number of keyword queries to generate
+- -n :: integer count of results to retrieve for each keyword query
+- -k :: integer count of how many results to display
 
 ** One-time additions of articles to litdb
 
