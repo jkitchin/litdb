@@ -716,8 +716,9 @@ cli.add_command(chat_command, name="chat")
 
 
 @cli.command(help=spider.__doc__)
-@click.argument("root", help="Root url to crawl.")
+@click.argument("root")
 def crawl(root):
+    """Crawl a website at ROOT url."""
     spider(root)
 
 
