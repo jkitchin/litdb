@@ -3,7 +3,6 @@
 import shlex
 from IPython.core.magic import Magics, magics_class, line_cell_magic
 from IPython import get_ipython
-from .cli import cli
 
 
 @magics_class
@@ -11,6 +10,8 @@ class LitdbMagics(Magics):
     @line_cell_magic
     def litdb(self, line, cell=None):
         """Main litdb magic command using Click."""
+        from .cli import cli
+
         args = shlex.split(line)
         if cell is not None:
             args += [cell]
