@@ -644,7 +644,7 @@ This runs asynchronously, and a review buffer appears in another frame."
   (let* ((process-environment (cons "COLUMNS=10000" process-environment))
 	 (proc (start-process-shell-command
 		"litdb-review" "*litdb-review*"
-		(format "litdb review -s %s" since))))
+		(format "litdb review -s \"%s\"" since))))
     (set-process-sentinel proc (lambda (process event)
 				 "Sentinel to keep the buffer alive after PROCESS finishes."
 				 (when (memq (process-status process) '(exit signal))
