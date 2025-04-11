@@ -27,6 +27,7 @@ The idea is you add papers to your database, and then you can search it with nat
 9. https://youtube.com/live/MEf9rPI0Z1M  litdb + Image search with text and image queries using CLIP
 10. https://youtube.com/live/C4qCam0shf8  litdb + deep research
 11. https://youtube.com/live/6Wpy7KM3wIM  litdb + LLM-augmented search of OpenAlex
+12. https://www.youtube.com/live/eS0D-Aje_6A litdb + Claude Desktop
 
 ** installation
 
@@ -520,6 +521,16 @@ brew list pango gobject-introspection
 export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
 #+END_SRC
 
+
+** Claude Desktop + MCP
+
+#+BEGIN_SRC sh
+litdb_mcp install /path/to/litdb.libsql
+#+END_SRC
+
+Then, restart Claude Desktop.
+
+Now in the Claude Desktop app you can use prompts like "Search my litdb for references on alloy segregation" or "Search OpenAlex for articles on alloy segregation."
 
 
 * Adding local files
