@@ -82,11 +82,15 @@ dependencies = [
   "htmldocx",
   "docx",
   "md2pdf",
-  "pypandoc"
+  "pypandoc",
+
+  # mcp server
+  "mcp[cli]"
 ]
 
 [project.scripts]
 litdb = "litdb.cli:cli"
+litdb_mcp = "litdb.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/jkitchin/litdb"
