@@ -17,7 +17,7 @@ and uninstall it with
 
 This should work on Windows, but is untested there.
 
-The mcp server provides three toos:
+The mcp server provides three tools:
 
 about: Just describes the server.
 
