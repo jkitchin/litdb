@@ -44,6 +44,16 @@ To get the cutting edge package, you can install it directly from GitHUB.
 pip install git+https://github.com/jkitchin/litdb
 #+END_SRC
 
+litdb relies on a lot of ML-related packages, and conflicts with version are common. If you have any issues, I recommend you install it with uv (https://github.com/astral-sh/uv) like this:
+
+#+BEGIN_SRC sh
+uv venv --python 3.13
+source .venv/bin/activate
+uv pip install litdb
+#+END_SRC
+
+You have to activate that virtual env to use litdb, which may be annoying.
+
 ** configuration
 
 You have to create a toml configuration file. This file is called litdb.toml. The directory this file is in is considered the root directory. All commands will start in the current working directory and look up to find this file. You can put this file in your home directory, or you can have sub-directories, e.g. a per project litdb.
