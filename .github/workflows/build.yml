@@ -1,19 +1,19 @@
 name: Test installation
 
-on: 
+on:
   push:
 
 
 jobs:
   build:
     name: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'       
+          python-version: '3.12'
       - run: |
           sudo apt-get update
           sudo apt-get install portaudio19-dev python-all-dev
