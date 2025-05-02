@@ -45,7 +45,8 @@ Otherwise, we look for LITDB_ROOT as an environment variable."
   `(let* ((litdb-db (litdb-get-db))
 	  (default-directory (file-name-directory litdb-db))
 	  (db (sqlite-open litdb-db)))
-     ,@body))
+     ,@body
+     (sqlite-close db)))
 
 
 (defun litdb-tags ()
@@ -111,21 +112,21 @@ cite command."
 (defun litdb-activate (start end path _bracketp)
   "Activation function for a litdb link
 START and END are the bounds. PATH could be a comma-separated list."
-  (let ((substrings (split-string path ","))
-	(db (sqlite-open (litdb-get-db))))
+  (let ((substrings (split-string path ",")))
     (goto-char start)
-    (cl-loop for path in substrings
-	     do
-	     (search-forward path end)
-	     (put-text-property (match-beginning 0)
-				(match-end 0)
-				'litdb-key
-				path)
+    (with-litdb
+     (cl-loop for path in substrings
+	      do
+	      (search-forward path end)
+	      (put-text-property (match-beginning 0)
+				 (match-end 0)
+				 'litdb-key
+				 path)
 
-	     (put-text-property (match-beginning 0)
-				(match-end 0)
-				'litdb
-				(caar (sqlite-select db "select json_extract(extra, '$.citation'), source from sources where source = ?" (list path)))))))
+	      (put-text-property (match-beginning 0)
+				 (match-end 0)
+				 'litdb
+				 (caar (sqlite-select db "select json_extract(extra, '$.citation'), source from sources where source = ?" (list path))))))))
 
 (defun litdb-path-at-point ()
   "Return the path at point. Set in `litdb-activate'."
@@ -208,27 +209,27 @@ START and END are the bounds. PATH could be a comma-separated list."
 
 (defun litdb-edit-tags (source)
   "Edit tags for SOURCE."
-  (let* ((db (sqlite-open (litdb-get-db)))
-	 (tags (cl-loop for (tag) in  (sqlite-select db "select tag from tags")
-			collect tag))
-	 (source-id (caar (sqlite-select db "select rowid from sources where source = ?" (list source))))
-	 (current-tags (cl-loop for (tag) in  (sqlite-select db "select tags.tag from tags inner join source_tag on tags.rowid=source_tag.tag_id where source_tag.source_id=?" (list source-id))
-				collect tag))
-	 (new-tags (string-split (read-string "Tags (space separated): " (string-join current-tags " ")) " ")))
+  (with-litdb
+   (let* ((tags (cl-loop for (tag) in  (sqlite-select db "select tag from tags")
+			 collect tag))
+	  (source-id (caar (sqlite-select db "select rowid from sources where source = ?" (list source))))
+	  (current-tags (cl-loop for (tag) in  (sqlite-select db "select tags.tag from tags inner join source_tag on tags.rowid=source_tag.tag_id where source_tag.source_id=?" (list source-id))
+				 collect tag))
+	  (new-tags (string-split (read-string "Tags (space separated): " (string-join current-tags " ")) " ")))
 
-    ;; delete old tags
-    (cl-loop for tag in current-tags do
-	     (let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
-	       (sqlite-execute db "delete from source_tag where source_tag.source_id=? and source_tag.tag_id=?"
-	      		       (list source-id tag-id))))
+     ;; delete old tags
+     (cl-loop for tag in current-tags do
+	      (let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
+		(sqlite-execute db "delete from source_tag where source_tag.source_id=? and source_tag.tag_id=?"
+	      			(list source-id tag-id))))
 
-    ;; add new tags
-    (cl-loop for tag in new-tags do
-	     (progn
-	       (sqlite-execute db "insert or ignore into tags(tag) values (?)" (list tag))
-	       (let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
-		 (sqlite-execute db "insert into source_tag(source_id, tag_id) values (?, ?)"
-				 (list source-id tag-id)))))))
+     ;; add new tags
+     (cl-loop for tag in new-tags do
+	      (progn
+		(sqlite-execute db "insert or ignore into tags(tag) values (?)" (list tag))
+		(let ((tag-id (caar (sqlite-select db "select rowid from tags where tag=?" (list tag)))))
+		  (sqlite-execute db "insert into source_tag(source_id, tag_id) values (?, ?)"
+				  (list source-id tag-id))))))))
 
 
 (defun litdb-insert-similar (source)
@@ -255,38 +256,38 @@ This function is kind of slow because it uses the cli."
 		("c" (lambda (x)
 		       ;; this is kind of dumb but the function takes a list,
 		       ;; not a cons
-		       (let* ((db (sqlite-open (litdb-get-db)))
-			      (source (cdr x))
-			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
-							     (list source)))))
-			 (kill-new (format "%s %s" citation (format "litdb:%s" source)))))
+		       (with-litdb
+			(let* ((source (cdr x))
+			       (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
+							      (list source)))))
+			  (kill-new (format "%s %s" citation (format "litdb:%s" source))))))
 		 "Copy citation + link")))))
 
 
 (defun litdb-open-in-openalex (source)
   "Open source in OpenAlex."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open (litdb-get-db))))
-    (browse-url
-     (caar
-      (sqlite-select db "select json_extract(extra, '$.id') from sources where source = ?"
-		     (list source))))))
+  (with-litdb
+   (browse-url
+    (caar
+     (sqlite-select db "select json_extract(extra, '$.id') from sources where source = ?"
+		    (list source))))))
 
 
 (defun litdb-copy-citation (source)
   "Copy a citation for SOURCE."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open (litdb-get-db))))
-    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
-				   (list source))))))
+  (with-litdb
+   (kill-new (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
+				  (list source))))))
 
 
 (defun litdb-copy-bibtex (source)
   "Copy a bibtex for SOURCE."
   (interactive "sSource: ")
-  (let* ((db (sqlite-open (litdb-get-db))))
-    (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
-				   (list source))))))
+  (with-litdb
+   (kill-new (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
+				  (list source))))))
 
 
 (defun litdb-follow (_path)
@@ -316,14 +317,14 @@ candidates.")
 Use a cache if possible, and generate if not."
   (let* ((attributes (file-attributes (litdb-get-db)))
 	 (db-mod-time (nth 5 attributes))
-	 (db (sqlite-open (litdb-get-db)))
 	 candidates)
     (if (and (not (null (car litdb-insert-cache)))
 	     (time-less-p db-mod-time (car litdb-insert-cache)))
 	(cdr litdb-insert-cache)
       ;; generate cache
-      (setq candidates (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")
-	    litdb-insert-cache (cons (current-time) candidates))
+      (with-litdb
+       (setq candidates (sqlite-select db "select json_extract(extra, '$.citation'), source from sources")
+	     litdb-insert-cache (cons (current-time) candidates)))
       candidates)))
 
 
@@ -386,8 +387,7 @@ X is a candidate (citation source) as a list."
   "Entry point for litdb.
 Default action inserts a link"
   (interactive)
-  (let* ((db (sqlite-open (litdb-get-db)))
-	 (candidates (litdb-candidates)))
+  (let* ((candidates (litdb-candidates)))
 
     (ivy-read "choose: " candidates
 	      :caller 'litdb
@@ -440,10 +440,11 @@ Default action is insert link. Some other actions include:
 		  (read-string "Query: "))
 		current-prefix-arg))
   (let* ((N (or current-prefix-arg 5))
-	 (db (sqlite-open (litdb-get-db)))
-	 (results (sqlite-select db "select snippet(fulltext, 1, '', '', '', 64),source
+
+	 (results (with-litdb
+		   (sqlite-select db "select snippet(fulltext, 1, '', '', '', 64),source
     from fulltext
-    where text match ? order by rank limit ?" (list query N))))
+    where text match ? order by rank limit ?" (list query N)))))
     (ivy-read "choose: " results
 	      :caller 'litdb
 	      :action
@@ -460,15 +461,19 @@ Default action is insert link. Some other actions include:
 		 "Open source")
 		("b" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open (litdb-get-db)))
-			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (nth 1 x))))))
+		       (let* ((bibtex (caar
+				       (with-litdb
+					(sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
+						       (list (nth 1 x)))))))
 
 			 (kill-new bibtex)))
 		 "Insert bibtex")
 		("c" (lambda (x)
 		       "Copy citation string."
-		       (let* ((db (sqlite-open (litdb-get-db)))
-			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (nth 1 x))))))
+		       (let* ((citation (caar
+					 (with-litdb
+					  (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
+							 (list (nth 1 x)))))))
 
 			 (kill-new citation)))
 		 "Copy citation")))))
@@ -502,15 +507,17 @@ This is not a fast function. It goes through the litdb cli command."
 		 "Open source")
 		("b" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open (litdb-get-db)))
-			      (bibtex (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list (cdr x))))))
+		       (let* ((bibtex (with-litdb
+				       (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?"
+							    (list (cdr x)))))))
 
 			 (kill-new bibtex)))
 		 "Copy bibtex")
 		("c" (lambda (x)
 		       "Copy bibtex string."
-		       (let* ((db (sqlite-open (litdb-get-db)))
-			      (citation (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list (cdr x))))))
+		       (let* ((citation (with-litdb
+					 (caar (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?"
+							      (list (cdr x)))))))
 
 			 (kill-new citation)))
 		 "Copy citation")))))
@@ -673,13 +680,13 @@ This runs asynchronously, and a review buffer appears in another frame."
 			     current-kill))))
 		      (t
 		       (read-string "DOI: ")))))
-  (let ((default-directory (file-name-directory (litdb-get-db)))
-	(db (sqlite-open (litdb-get-db))))
+  (let ((default-directory (file-name-directory (litdb-get-db))))
 
     (shell-command (format "litdb add \"%s\"" doi))
     (insert
      (caar
-      (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi))))
+      (with-litdb
+       (sqlite-select db "select json_extract(extra, '$.citation') from sources where source = ?" (list doi)))))
     (insert (format " litdb:%s\n\n" doi))))
 
 
@@ -835,8 +842,7 @@ some of these are invalid."
   (interactive "fBibtex file: ")
 
   ;; get all the paths from litdb links
-  (let* ((db (sqlite-open (litdb-get-db)))
-	 (sources (org-element-map (org-element-parse-buffer) 'link
+  (let* ((sources (org-element-map (org-element-parse-buffer) 'link
 		    (lambda (link)
 		      (let ((plist (nth 1 link))
 			    (keys '()))
@@ -849,9 +855,10 @@ some of these are invalid."
 	 ;; use the stored bibtex entries. It is not clear this is the best
 	 ;; thing to do, but so far it works. It would be faster than trying to
 	 ;; get them all from crossref.
-	 (bibtex-entries (cl-loop for source in (flatten-list sources)
-				  collect
-				  (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list source))))))
+	 (with-litdb
+	  (bibtex-entries (cl-loop for source in (flatten-list sources)
+				   collect
+				   (caar (sqlite-select db "select json_extract(extra, '$.bibtex') from sources where source = ?" (list source)))))))
 
     (when (and (file-exists-p bibtex-file)
 	       (not (y-or-n-p (format "%s exists. Clobber it?" bibtex-file))))
