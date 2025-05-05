@@ -37,7 +37,7 @@ def init_litdb():
             "chunk_overlap": 200,
         },
         "openalex": {"email": email},
-        "gpt": {"model": "ollama/llama2"},
+        "llm": {"model": "ollama/llama2"},
     }
 
     if api_key:
