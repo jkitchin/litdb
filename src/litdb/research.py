@@ -102,6 +102,58 @@ def oa_query(query):
     return d
 
 
+def extract_json(text: str) -> str:
+    """
+    Extract the first JSON object or array from `text`.
+    Finds the first '{' or '[', then scans forward matching braces/brackets,
+    ignoring ones inside string literals. Returns the JSON substring.
+    Raises ValueError if no valid JSON is found.
+    """
+    # 1) Locate first opening brace/bracket
+    start = None
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            start = i
+            break
+    if start is None:
+        raise ValueError("No JSON object or array found in text")
+
+    # 2) Scan forward to find the matching closing brace/bracket
+    stack = []
+    mapping = {"]": "[", "}": "{"}
+    in_string = False
+    escape = False
+
+    for i, ch in enumerate(text[start:], start):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if not stack or stack[-1] != mapping[ch]:
+                    raise ValueError(f"Mismatched closing {ch!r} at position {i}")
+                stack.pop()
+                if not stack:
+                    # Found the matching closing bracket
+                    candidate = text[start : i + 1]
+                    # Optional: validate it's real JSON
+                    try:
+                        json.loads(candidate)
+                    except json.JSONDecodeError as e:
+                        raise ValueError(f"Extracted text is not valid JSON: {e}")
+                    return candidate
+
+    raise ValueError("No matching closing bracket found for JSON start")
+
+
 def litdb_documents(query):
     """Create the litdb documents.
 
@@ -113,8 +165,12 @@ def litdb_documents(query):
     model = SentenceTransformer(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
+    # number of queries to return or generate. This is used in several places. I
+    # don't think it makes sense to configure each one independently. We default
+    # to 5.
+    n_queries = config["gpt-researcher"].get("n_queries", 5)
+
     # vector search
-    # TODO: 5 is hard-coded here
     results = db.execute(
         """select
             sources.source, sources.text,
@@ -122,7 +178,7 @@ def litdb_documents(query):
             from vector_top_k('embedding_idx', ?, ?)
             join sources on sources.rowid = id
             order by d""",
-        (emb, emb, 5),
+        (emb, emb, n_queries),
     ).fetchall()
 
     documents = []
@@ -135,17 +191,17 @@ def litdb_documents(query):
             )
         ]
 
-    # Full text search - Ideally I would use litellm for enforcing json, but not
-    # all models support that, notably gemini doesn't seem to support it, and I
-    # use that one a lot.
+    # Full text search in the litdb - Ideally I would use litellm for enforcing
+    # json, but not all models support that, notably gemini doesn't seem to
+    # support it, and I use that one a lot.
     msgs = [
         {
             "role": "system",
-            "content": """You are an expert deep researcher that outputs only
+            "content": f"""You are an expert deep researcher that outputs only
 valid JSON. Analyze this query to identify full text queries that could be
 relevant. The queries will be used with sqlite fts5.
 
-             Return a list of 5 queries in json:
+             Return a list of {n_queries} queries in json:
 
              {{"queries": [query1, query2, ...]}}
 
@@ -160,20 +216,18 @@ relevant. The queries will be used with sqlite fts5.
 
     try:
         content = response["choices"][0]["message"]["content"].strip()
-        # this is janky, but sometimes the model uses backticks anyway
-        # This seems easier than some kind of regexp to match
-        if content.startswith("```json"):
-            content = content.replace("```json", "")
-            content = content.replace("```", "")
 
-        queries = json.loads(content)["queries"]
+        js = extract_json(content)
+
+        queries = json.loads(js)["queries"]
+
     except json.decoder.JSONDecodeError:
-        print("Generating full text queries failed on")
+        print("Generating full text queries failed on:")
         print(content)
+        print(f'The following json was extracted:\n\n"{js}"\n')
         print("Proceeding without full text queries." " Please report this message")
         queries = []
 
-    # TODO: 5 is hard coded here
     for i, q in enumerate(queries):
         results = db.execute(
             """select
@@ -182,7 +236,7 @@ relevant. The queries will be used with sqlite fts5.
             from fulltext
             inner join sources on fulltext.source = sources.source
             where fulltext.text match ? order by rank limit ?""",
-            (f'"{q}"', 5),
+            (f'"{q}"', n_queries),
         ).fetchall()
 
         for j, (source, text, snippet, extra, score) in enumerate(results):
@@ -195,7 +249,7 @@ relevant. The queries will be used with sqlite fts5.
 
         # OpenAlex queries
         oa = oa_query(q)
-        for j, result in enumerate(oa["results"][0:5]):
+        for j, result in enumerate(oa["results"][0:n_queries]):
             documents += [
                 Document(
                     page_content=get_text(result),
