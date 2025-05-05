@@ -53,6 +53,7 @@ def get_audio_text(path):
             model="openai/whisper-small",
             # On mac, mps doesn't support float64...
             device="cpu",
+            use_fast=False,
         )
 
         transcript = transcriber(audio, return_timestamps=True)["text"]
