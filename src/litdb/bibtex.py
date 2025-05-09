@@ -41,7 +41,12 @@ entry_type_by_crossref_type = {
 
 def dump_bibtex(work):
     # entry_type = entry_type_by_crossref_type.get(work.get('type'))
-    entry_type = entry_type_by_crossref_type.get(work.get("type_crossref"))
+    wtype = work.get("type_crossref")
+    if wtype is None:
+        print(f"Unable to generate a bibtex entry for {work.get('id')}")
+        return None
+
+    entry_type = entry_type_by_crossref_type.get(wtype)
 
     # work_id = work.get('id')
     work_id = work.get("doi") or work.get("id")
