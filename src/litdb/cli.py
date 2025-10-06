@@ -32,6 +32,7 @@ import tabulate
 from tqdm import tqdm
 import webbrowser
 
+from futurehouse_client import FutureHouseClient, JobNames
 
 from .utils import get_config, init_litdb
 from .db import get_db, add_source, add_work, add_author, update_filter, add_bibtex
@@ -45,6 +46,7 @@ from .images import add_image, image_query, image_extensions
 from .crawl import spider
 from .research import deep_research
 from .lsearch import llm_oa_search
+from .extract import extract_tables, extract_schema
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -751,6 +753,90 @@ def lsearch(query, q, n, k):
 
 
 @cli.command()
+@click.argument(
+    "pdf", type=click.Path(exists=True, dir_okay=False, readable=True), required=True
+)
+@click.option(
+    "-t",
+    "--tables",
+    type=int,
+    multiple=True,
+    help="Table numbers to extract (1-based index).",
+)
+@click.option("-f", "--fmt", default="csv")
+def extract(pdf, tables, fmt):
+    """Extract tables from a pdf.
+
+    PDF: string, path to file
+    TABLES: list of int, the table numbers to extract, starting at 1
+    FMT: string, output format.
+    """
+
+    for df in extract_tables(pdf, tables):
+        match fmt:
+            case "csv":
+                print(df.to_csv(index=False))
+            case "json":
+                print(df.to_json(index=False))
+            case "md":
+                print(df.to_markdown(index=False))
+            case _:
+                print(df)
+        print()
+
+
+@cli.command()
+@click.argument("source", type=str, required=True)
+@click.argument("schema", type=str, required=True)
+def schema(source, schema):
+    """Extract structured schema from a SOURCE.
+
+    SOURCE: string, url or path to file
+    SCHEMA: string, the scheme to extract. Comma separated name type.
+    """
+    print(extract_schema(source, schema))
+
+
+@cli.command()
+@click.argument("query", nargs=-1)
+@click.option(
+    "-t",
+    "--task",
+    default="crow",
+    help="The type of task to run. One of crow, owl, falcon.",
+)
+def fhresearch(query, task):
+    """Run a FutureHouse research TASK on QUERY.
+
+    Tasks:
+    crow: General research
+    owl: Did anyone do this before?
+    falcon: Deep research
+
+
+    You need to set FUTURE_HOUSE_API_KEY in your env. To get one of those, go to
+    https://platform.futurehouse.org/, create an account and get one.
+
+    This is a slow function. It can take 2-10 minutes for the task to be
+    completed, with little feedback until the answer returns.
+
+    """
+
+    client = FutureHouseClient(api_key=os.environ["FUTURE_HOUSE_API_KEY"])
+
+    jobs = {"crow": JobNames.CROW, "owl": JobNames.OWL, "falcon": JobNames.FALCON}
+
+    if not isinstance(query, str):
+        query = " ".join(query)
+
+    task_response = client.run_tasks_until_done(
+        {"name": jobs[task.lower()], "query": query}
+    )
+
+    print(task_response[0].formatted_answer)
+
+
+@cli.command()
 @click.argument("query", nargs=-1)
 @click.option(
     "--report-type", default="research_report", help="The type of report to generate."
@@ -1063,14 +1149,19 @@ litdb:{{ source }}
 @click.option("-s", "--silent", is_flag=True, default=False)
 def update_filters(fmt, silent):
     """Update litdb using a filter with works from a created date."""
+
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"  # Prevent checking HF on each filter
     filters = db.execute("""select filter, description, last_updated from queries""")
-    for f, description, last_updated in filters.fetchall():
-        results = update_filter(f, last_updated, silent)
-        if results:
-            richprint(f"* {description}")
-        for result in results:
-            source, text, extra = result
-            richprint(Template(fmt).render(**locals()))
+    for f, description, last_updated in tqdm(filters.fetchall(), disable=silent):
+        try:
+            results = update_filter(f, last_updated, silent)
+            if results:
+                richprint(f"* {description or f}")
+            for result in results:
+                source, text, extra = result
+                richprint(Template(fmt).render(**locals()))
+        except:  # noqa: E722
+            continue
 
 
 list_filter_fmt = (
@@ -1354,6 +1445,7 @@ def bibtex(sources):
             """select extra from sources where source = ?""", (source,)
         ).fetchone()
         if work:
+            print(f"WORK: {work}")
             richprint(dump_bibtex(json.loads(work[0])))
         else:
             print(f"No entry found for {source}")
@@ -1400,8 +1492,10 @@ def about():
     """Summary statistics of your db."""
     config = get_config()
     dbf = os.path.join(config["root"], "litdb.libsql")
+    cf = os.path.join(config["root"], "litdb.toml")
 
     richprint(f"Your database is located at {dbf}")
+    richprint(f"The configuration is at {cf}")
     kb = 1024
     mb = 1024 * kb
     gb = 1024 * mb

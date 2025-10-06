@@ -43,35 +43,28 @@ dependencies = [
   "pytesseract",
   "pillow",
   "bibtexparser",
-
-# these are sort of hard to install, and rely on other libraries
-# I document them here, but consider it optional
-#  "pyaudio",
-#  "playsound",
-
+  # these are sort of hard to install, and rely on other libraries
+  # I document them here, but consider it optional
+  #  "pyaudio",
+  #  "playsound",
   # for coa
   "pandas",
   "more-itertools",
   "nameparser",
   "tabulate",
   "IPython",
-
   # youtube
   "yt_dlp",
   "webvtt-py",
-
   # the streamlit app
   "streamlit",
-
   # image clip search
   "pyperclip",
   "pillow",
   "pillow_heif",
-
   # web crawling
   "scrapy",
   "backoff",
-
   # deep research
   "gpt_researcher",
   "duckduckgo-search",
@@ -83,13 +76,12 @@ dependencies = [
   "docx",
   "md2pdf",
   "pypandoc",
-
   # mcp server
   "mcp[cli]",
-
-#
+  #
   "gmft",
-  "futurehouse_client"
+  "futurehouse_client",
+  "ruff>=0.13.3",
 ]
 
 [project.scripts]
