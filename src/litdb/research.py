@@ -229,15 +229,19 @@ relevant. The queries will be used with sqlite fts5.
         queries = []
 
     for i, q in enumerate(queries):
-        results = db.execute(
-            """select
-            sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
-            sources.extra, bm25(fulltext)
-            from fulltext
-            inner join sources on fulltext.source = sources.source
-            where fulltext.text match ? order by rank limit ?""",
-            (f'"{q}"', n_queries),
-        ).fetchall()
+        try:
+            results = db.execute(
+                """select
+                sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
+                sources.extra, bm25(fulltext)
+                from fulltext
+                inner join sources on fulltext.source = sources.source
+                where fulltext.text match ? order by rank limit ?""",
+                (f'"{q}"', n_queries),
+            ).fetchall()
+        # the main exception that can occur here is a bad query.
+        except:  # noqa: E722
+            results = []
 
         for j, (source, text, snippet, extra, score) in enumerate(results):
             documents += [
