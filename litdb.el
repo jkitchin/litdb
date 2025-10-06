@@ -135,40 +135,48 @@ START and END are the bounds. PATH could be a comma-separated list."
   (get-text-property (point) 'litdb-key))
 
 
+(defun litdb-follow-pdf ()
+  (interactive)
+  (let* ((candidates '())
+	 (source (litdb-path-at-point))
+	 (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
+	 (parser (lambda ()
+		   "Parse the response from json to elisp."
+		   (let ((json-array-type 'list)
+			 (json-object-type 'plist)
+			 (json-key-type 'keyword)
+			 (json-false nil)
+			 (json-encoding-pretty-print nil))
+		     (json-read))))
+	 (resp (request unpaywall
+		 :sync t :parser parser
+		 :params '(("email" . "jkitchin@cmu.edu"))))
+	 (data (request-response-data resp)))
+
+    (setq candidates (append
+		      candidates
+		      (with-litdb
+		       (car
+			(sqlite-select db
+				       "select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
+				       (list source))))))
+
+    ;; try with unpaywall
+    (cl-loop for loc in (plist-get data :oa_locations)
+	     do
+	     (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
+
+    (setq candidates (remove nil candidates))
+    (if candidates
+	(browse-url (completing-read "URL: " candidates))
+      (message "No url to pdf found."))))
+
 (defhydra litdb-follow (:color blue :hint nil)
   "litdb actions
 "
   ("o" (browse-url (litdb-path-at-point)) "Open" :column "Open")
   ("a" (litdb-open-in-openalex (litdb-path-at-point)) "OpenAlex" :column "Open")
-  ("p" (let* ((candidates '())
-	      (source (litdb-path-at-point))
-	      (unpaywall (format "https://api.unpaywall.org/v2/%s" source))
-	      (parser (lambda ()
-			"Parse the response from json to elisp."
-			(let ((json-array-type 'list)
-			      (json-object-type 'plist)
-			      (json-key-type 'keyword)
-			      (json-false nil)
-			      (json-encoding-pretty-print nil))
-			  (json-read))))
-	      (resp (request unpaywall
-		      :sync t :parser parser
-		      :params '(("email" . "jkitchin@cmu.edu"))))
-	      (data (request-response-data resp)))
-
-	 (setq candidates (append
-			   candidates
-			   (with-litdb
-			    (car (sqlite-select db
-						"select json_extract(extra, '$.primary_location.pdf_url') from sources where source = ?"
-						(list (org-entry-get (point) "SOURCE")))))))
-
-	 ;; try with unpaywall
-	 (cl-loop for loc in (plist-get data :oa_locations)
-		  do
-		  (setq candidates (append candidates (list (plist-get loc :url_for_pdf)))))
-
-	 (browse-url (completing-read "URL: " (remove nil candidates))))"pdf")
+  ("p" (litdb-follow-pdf)  "pdf")
 
   ("i" litdb "Insert new link" :column "Insert")
   ("s" (litdb-insert-similar (litdb-path-at-point)) "Similar" :column "Insert")
