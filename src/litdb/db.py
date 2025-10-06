@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-import libsql_experimental as libsql
+import libsql
 
 from .utils import get_config
 
