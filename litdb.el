@@ -45,8 +45,10 @@ Otherwise, we look for LITDB_ROOT as an environment variable."
   `(let* ((litdb-db (litdb-get-db))
 	  (default-directory (file-name-directory litdb-db))
 	  (db (sqlite-open litdb-db)))
-     ,@body
-     (sqlite-close db)))
+     (prog1
+	 (progn
+	   ,@body)
+       (sqlite-close db))))
 
 
 (defun litdb-tags ()
