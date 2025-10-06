@@ -25,7 +25,7 @@ dependencies = [
   "docling",
   "langchain",
   "tqdm",
-  "libsql-experimental",
+  "libsql",
   "sentence-transformers",
   "transformers",
   "click",
@@ -85,7 +85,11 @@ dependencies = [
   "pypandoc",
 
   # mcp server
-  "mcp[cli]"
+  "mcp[cli]",
+
+#
+  "gmft",
+  "futurehouse_client"
 ]
 
 [project.scripts]
