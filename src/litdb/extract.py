@@ -4,6 +4,7 @@ Extract tables and structured data from a pdf.
 """
 
 import json
+from ast import literal_eval
 from .utils import get_config
 from docling.document_converter import DocumentConverter
 
@@ -72,12 +73,11 @@ def parse_schema_dsl(dsl: str) -> type[BaseModel]:
         if "=" in field_def:
             field_def, default_str = field_def.split("=", maxsplit=1)
             default_str = default_str.strip()
-            # We won't do heavy parsing of default; assume it's a string literal or number
-            # that Python can evaluate. For safety, you might do something more robust.
+            # Use literal_eval for safe parsing of Python literals (str, int, float, list, dict, etc.)
             try:
-                default_value = eval(default_str)
-            except:  # noqa: E722
-                # If we can’t eval, store it as a raw string
+                default_value = literal_eval(default_str)
+            except (ValueError, SyntaxError):
+                # If we can't parse as a literal, store it as a raw string
                 default_value = default_str
 
         # 2) Does field_def contain ':type'?
