@@ -93,7 +93,7 @@ def oa_query(query):
 
     params = {
         "filter": f"default.search:{query}",
-        "email": config["openalex"].get("email"),
+        "mailto": config["openalex"].get("email"),
         "api_key": config["openalex"].get("api_key"),
     }
 

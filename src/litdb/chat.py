@@ -171,12 +171,13 @@ def get_rag_content(prompt, n):
     max_tries=5,  # Maximum number of retries
     jitter=backoff.full_jitter,  # Helps distribute retry attempts
 )
-def get_completion(model, messages):
+def get_completion(model, messages, max_tokens=None):
     """Return the output from model for the list of messages.
 
     Args:
         model: a string for the LiteLLM model.
         messages: a list of dictionaries defining the messages.
+        max_tokens: optional max tokens for completion (defaults to model default)
 
     Returns:
         the completion output.
@@ -184,7 +185,11 @@ def get_completion(model, messages):
     output = ""
     # This lets you Ctrl-c to stop streaming if it has gone way off.
     try:
-        response = completion(model=model, messages=messages, stream=True)
+        kwargs = {"model": model, "messages": messages, "stream": True}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        response = completion(**kwargs)
         for chunk in response:
             out = chunk.choices[0].delta.content or ""
             richprint(out, end="")
