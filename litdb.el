@@ -1,4 +1,4 @@
-;;; litdb.el --- litdb and emacs
+;;; litdb.el --- litdb and emacs  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;

@@ -47,6 +47,7 @@ from .crawl import spider
 from .research import deep_research
 from .lsearch import llm_oa_search
 from .extract import extract_tables, extract_schema
+from .summary import generate_summary
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -705,6 +706,34 @@ def review(since, fmt):
     for source, text, extra in c:
         extra = json.loads(extra) or {}
         print(template.render(**locals()))
+
+
+@cli.command()
+@click.option("-s", "--since", default="1 week")
+@click.option("-o", "--output", default=None, help="Output file path (optional)")
+@click.option("--model", default=None, help="LLM model to use (optional)")
+def summary(since, output, model):
+    """Generate a newsletter-style summary of articles added SINCE.
+
+    SINCE: Time period to look back (e.g., "1 week", "2 weeks", "1 month").
+    Uses dateparser, so flexible date formats are supported.
+
+    OUTPUT: Optional file path to save the summary. If not provided, outputs to stdout.
+
+    MODEL: LLM model to use for analysis (uses config default if not specified).
+
+    This command:
+    1. Fetches articles added since the specified date
+    2. Extracts topics from each article using an LLM
+    3. Aggregates topics into 5-10 main themes with subtopics
+    4. Classifies each article into topics/subtopics
+    5. Generates narrative summaries for each subtopic
+    6. Outputs an org-mode formatted newsletter
+
+    Example:
+        litdb summary -s "2 weeks" -o newsletter.org
+    """
+    generate_summary(since=since, output_file=output, model=model)
 
 
 #############
@@ -1439,7 +1468,7 @@ def openalex(query, _filter, endpoint, sample, per_page):
         query = f"default.search:{query}"
 
     params = {
-        "email": config["openalex"]["email"],
+        "mailto": config["openalex"]["email"],
         "filter": query,
         "per_page": per_page,
     }
@@ -1680,7 +1709,7 @@ def unpaywall(doi):
     """Use unpaywall to find PDFs for doi."""
     config = get_config()
     url = f"https://api.unpaywall.org/v2/{doi}"
-    params = {"email": config["openalex"]["email"]}
+    params = {"mailto": config["openalex"]["email"]}
 
     resp = requests.get(url, params)
     if resp.status_code == 200:
@@ -1861,7 +1890,7 @@ def suggest_reviewers(query, n):
     for batch in batched(authors, 50):
         url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
 
-        params = {"per-page": 50, "email": config["openalex"]["email"]}
+        params = {"per-page": 50, "mailto": config["openalex"]["email"]}
 
         r = get_data(url, params)
 

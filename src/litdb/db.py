@@ -161,7 +161,7 @@ def get_citation(doi):
     """Get a citation string for doi."""
     config = get_config()
     citeas = "https://api.citeas.org/product/"
-    cp = {"email": config["openalex"]["email"]}
+    cp = {"mailto": config["openalex"]["email"]}
 
     resp = requests.get(citeas + doi, cp)
     if resp.status_code == 200:
@@ -184,7 +184,7 @@ def add_work(workid, references=False, citing=False, related=False):
 
     """
     config = get_config()
-    params = {"email": config["openalex"]["email"], "per_page": 200}
+    params = {"mailto": config["openalex"]["email"], "per_page": 200}
     if config["openalex"].get("api_key"):
         params.update(api_key=config["openalex"].get("api_key"))
 
@@ -266,7 +266,7 @@ def add_author(oaid):
     aurl = "https://api.openalex.org/authors/" + oaid
 
     params = {
-        "email": config["openalex"]["email"],
+        "mailto": config["openalex"]["email"],
         "per_page": 200,
     }
 
@@ -317,7 +317,7 @@ def update_filter(f, last_updated=None, silent=False):
     _filter += f",from_created_date:{last_updated}"
 
     params = {
-        "email": config["openalex"]["email"],
+        "mailto": config["openalex"]["email"],
         "api_key": config["openalex"]["api_key"],
         "per_page": 200,
         "filter": _filter,
