@@ -54,6 +54,17 @@ uv pip install litdb
 
 You have to activate that virtual env to use litdb, which may be annoying.
 
+** Recent additions
+
+*** Version 2.1.8
+
+- *fromtext command*: Extract and add references from pasted text using LLM parsing and CrossRef matching. See [[./FROMTEXT_USAGE.md][detailed documentation]].
+- *summary command*: Generate newsletter-style summaries of recent articles with automatic topic extraction and classification.
+- *extract command*: Extract tables from PDF files.
+- *schema command*: Extract structured data from documents using a flexible schema DSL or JSON format.
+- *Bug fix*: Corrected OpenAlex API parameter from ~email~ to ~mailto~ for proper API compliance.
+- *Security fix*: Replaced unsafe ~eval()~ with ~ast.literal_eval()~ in schema parsing.
+
 ** configuration
 
 You have to create a toml configuration file. This file is called litdb.toml. The directory this file is in is considered the root directory. All commands will start in the current working directory and look up to find this file. You can put this file in your home directory, or you can have sub-directories, e.g. a per project litdb.
@@ -64,22 +75,33 @@ You will need an OpenAlex premium key if you want to use the update-filters feat
 
 #+BEGIN_EXAMPLE
 [embedding]
+# SentenceTransformer model for vector search
 model = 'all-MiniLM-L6-v2'
 cross-encoder = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
 chunk_size = 1000
 chunk_overlap = 200
 
-
 [openalex]
+# Email for OpenAlex API (polite pool access)
 email = "you@example.com"
+# Optional: Premium API key for update-filters feature
 api_key = "..."
 
 [gpt]
+# Model for the 'litdb gpt' command (uses ollama)
 model = "llama2"
 
 [llm]
+# Model for LiteLLM-based commands (chat, fromtext, summary, schema, research)
+# Supports any provider: ollama/*, openai/*, anthropic/*, google_genai/*, etc.
 model = "ollama/llama2"
 #+END_EXAMPLE
+
+Configuration sections and their usage:
+- *[embedding]*: Used by all vector search operations (~vsearch~, ~hybrid-search~, etc.)
+- *[openalex]*: Required for OpenAlex searches and updates
+- *[gpt]*: Used by the ~litdb gpt~ command (ollama-only)
+- *[llm]*: Used by ~chat~, ~fromtext~, ~summary~, ~schema~, and ~research~ commands (supports all LiteLLM providers)
 
 You can define an environment variable to the root of your default litdb project. This should be a directory with a litdb.toml file in it.
 
@@ -185,6 +207,37 @@ These are all one-time additions.
 
 You can also add things like YouTube videos and podcasts. We use ML to extract the audio from these to text so they become searchable!
 
+*** Adding references from text
+
+You can paste text containing academic references and litdb will use an LLM to extract and add them automatically. This is useful when copying reference lists from PDFs, papers, or websites.
+
+#+BEGIN_SRC sh
+litdb fromtext "Kitchin, Examples of Effective Data Sharing in Scientific Publishing, ACS Catalysis, 2015, DOI: 10.1021/acscatal.5b00538"
+#+END_SRC
+
+You can also add multiple references at once:
+
+#+BEGIN_SRC sh
+litdb fromtext "Recent work by Smith et al. (Nature, 2020) showed...
+Another study by Jones (Science, 2019) demonstrated..."
+#+END_SRC
+
+The command supports the same options as ~litdb add~ for adding related works:
+
+#+BEGIN_SRC sh
+litdb fromtext "TEXT" --references --related --citing
+#+END_SRC
+
+You can also specify which LLM model to use:
+
+#+BEGIN_SRC sh
+litdb fromtext "TEXT" --model "gpt-4o"
+#+END_SRC
+
+The LLM extracts structured reference information, then litdb uses CrossRef to find DOIs and match references. High-confidence matches are added automatically, while lower-confidence matches prompt for confirmation.
+
+See [[./FROMTEXT_USAGE.md][detailed documentation]] for more information on supported citation formats and how the matching works.
+
 ** Adding filters
 
 litdb provides several convenient ways to add queries to update your litdb in the future.
@@ -254,6 +307,47 @@ litdb review -s "1 week ago"
 #+END_SRC
 
 This works best when you update your litdb regularly. You might want to redirect that into a file so you can review it in an editor of your choice.
+
+** Generating newsletter summaries
+
+You can generate a newsletter-style summary of recently added articles. This command uses an LLM to analyze articles, extract topics, aggregate them into themes, and create narrative summaries organized by topic.
+
+#+BEGIN_SRC sh
+litdb summary -s "1 week" -o newsletter.org
+#+END_SRC
+
+The default time period is "1 week", but you can specify different periods using natural language:
+
+#+BEGIN_SRC sh
+litdb summary -s "2 weeks"
+litdb summary -s "1 month"
+litdb summary -s "3 days"
+#+END_SRC
+
+You can specify which LLM model to use (defaults to the model in your ~litdb.toml~ config):
+
+#+BEGIN_SRC sh
+litdb summary -s "1 week" --model "gpt-4o"
+litdb summary -s "2 weeks" --model "anthropic/claude-3-5-sonnet-20241022"
+#+END_SRC
+
+If you omit the ~-o~ option, the summary is written to a file with an auto-generated name based on the date range.
+
+The output is an org-mode formatted newsletter with:
+1. Main topic sections (5-10 automatically identified themes)
+2. Subtopic subsections with narrative summaries
+3. Numbered references within the narrative text
+4. Bibliography of articles for each subtopic
+
+This command works best with articles that have abstracts. It only processes entries classified as articles (journal articles, reviews, preprints, etc.), skipping other entry types like books or datasets.
+
+The process:
+1. Fetches articles added since the specified date
+2. Extracts 3-5 topics from each article using an LLM
+3. Aggregates all topics into 5-10 main themes with subtopics
+4. Classifies each article into the most relevant topic/subtopic
+5. Generates narrative summaries for each subtopic, referencing the articles
+6. Formats everything as an org-mode document
 
 ** Searching litdb
 
@@ -531,6 +625,70 @@ brew list pango gobject-introspection
 export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
 #+END_SRC
 
+** Extracting tables from PDFs
+
+You can extract tables from PDF files using the ~extract~ command. This uses computer vision and machine learning to identify and extract tables.
+
+#+BEGIN_SRC sh
+litdb extract paper.pdf
+#+END_SRC
+
+This will extract all tables from the PDF. To extract specific tables (using 1-based indexing):
+
+#+BEGIN_SRC sh
+litdb extract paper.pdf -t 1 -t 3
+#+END_SRC
+
+This extracts only tables 1 and 3. You can specify an output format with the ~-f~ option:
+
+#+BEGIN_SRC sh
+litdb extract paper.pdf -t 1 -f markdown
+#+END_SRC
+
+The extracted tables are returned as pandas DataFrames, which can be formatted in various ways.
+
+** Extracting structured data with schemas
+
+You can extract structured information from documents (PDFs, web pages, etc.) using the ~schema~ command. This uses an LLM to parse the document and extract data according to a schema you define.
+
+*** Using the schema DSL
+
+The schema command supports a simple domain-specific language (DSL) for defining schemas:
+
+#+BEGIN_SRC sh
+litdb schema paper.pdf "title:str, authors:list, year:int, doi?:str"
+#+END_SRC
+
+Schema DSL syntax:
+- ~fieldName:type~ - Required field with type
+- ~fieldName?:type~ - Optional field (can be None)
+- ~fieldName:type=defaultValue~ - Field with default value
+- ~fieldName?:type=defaultValue~ - Optional field with default
+
+Supported types: ~str~, ~int~, ~float~, ~bool~, ~list~, ~dict~
+
+Examples:
+
+#+BEGIN_SRC sh
+# Extract basic paper metadata
+litdb schema paper.pdf "title:str, authors:list, year:int"
+
+# Extract with optional DOI and default value for journal
+litdb schema paper.pdf "title:str, doi?:str, journal:str=Unknown"
+
+# Extract experimental data
+litdb schema data.pdf "temperature:float, pressure:float, yield:float, catalyst:str"
+#+END_SRC
+
+*** Using JSON schemas
+
+You can also provide a schema as a JSON object:
+
+#+BEGIN_SRC sh
+litdb schema paper.pdf '{"title": ["str", None], "year": ["int", 2024]}'
+#+END_SRC
+
+The schema command first converts the document to markdown using Docling, then uses an LLM with structured output to extract the requested fields. The LLM model used is configured in the ~[llm]~ section of your ~litdb.toml~ file.
 
 ** Claude Desktop + MCP
 
@@ -913,3 +1071,13 @@ Many of these projects require you to make an account. There are freemium levels
   - Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
 
 With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no or low-code solutions, and if that is what you are looking for, look there! If you want to hack on things yourself, look here.
+
+* Tasks
+
+** DONE create a Claude skill for litdb
+CLOSED: [2025-10-21 Tue 20:26] DEADLINE: <2025-10-22 Wed>
+
+** TODO create version 2 that uses a server / client architecture to improve performance
+DEADLINE: <2025-11-01 Sat>
+
+** TODO Make a nicer streamlit app for the front end.
