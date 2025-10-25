@@ -86,7 +86,7 @@ dependencies = [
 
 [project.scripts]
 litdb = "litdb.cli:cli"
-litdb_mcp = "litdb.mcp:main"
+litdb_mcp = "litdb.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/jkitchin/litdb"

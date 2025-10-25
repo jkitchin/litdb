@@ -31,7 +31,7 @@ def oa_query(query, n, sort=None, sample=False):
     params = {
         "per_page": n,
         "filter": f"default.search:{query}",
-        "email": config["openalex"].get("email"),
+        "mailto": config["openalex"].get("email"),
         "api_key": config["openalex"].get("api_key"),
     }
     if sort:
