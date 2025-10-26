@@ -15,7 +15,6 @@ import click
 import requests
 from rich import print as richprint
 
-from ..crawl import spider
 from ..extract import extract_tables, extract_schema
 from . import manage
 
@@ -314,8 +313,11 @@ def schema(source, schema):
     print(extract_schema(source, schema))
 
 
-@click.command(help=spider.__doc__)
+@click.command()
 @click.argument("root")
 def crawl(root):
-    """Crawl a website at ROOT url."""
+    """Crawl through ROOT website and add documents to litdb."""
+    # Import spider here (scrapy is an optional dependency in crawl extra)
+    from ..crawl import spider
+
     spider(root)
