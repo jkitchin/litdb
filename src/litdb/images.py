@@ -19,11 +19,11 @@ register_heif_opener()
 image_extensions = Image.registered_extensions().keys()
 
 model = SentenceTransformer("clip-ViT-B-32")
-db = get_db()
 
 
 def add_image(path):
     """Embed and add the image in path to db."""
+    db = get_db()
     emb = model.encode(Image.open(path))
 
     q = """insert or ignore into
@@ -46,6 +46,7 @@ def image_query(query=None, clipboard=False, n=1):
     If query is not None, it is either a text description or path to image.
     If clipboard is True, use an image or text from the clipboard
     """
+    db = get_db()
     if query and os.path.exists(query):
         emb = model.encode(Image.open(query))
     elif query and not os.path.exists(query):
