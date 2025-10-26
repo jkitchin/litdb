@@ -1,0 +1,82 @@
+* Analysis of gpt-researcher
+
+I have been using gpt-researcher in litdb.
+
+- pros
+  - multiple search tools
+  - it mostly works
+
+
+- cons
+  - references are not always right
+  - hard / impossible to turn of web search
+  - very hard to follow the code IMO.
+
+The output is better than what i had before though.
+
+I am documenting what I can tell about how it works here. Maybe it will lead to my own implementation.
+
+* flow of the code
+
+The repo is at [[file:~/Dropbox/emacs/projects/gpt-researcher/gpt_researcher/]]
+
+The code I use takes these steps.
+
+1. Setup the environment
+2. Make a GPTResearcher
+3. conduct research
+4. write report
+
+** Setup the environment
+
+gpt-researcher relies a lot on environment variables, and here I just set API keys.
+
+** Make a GPTResearcher
+
+I generate some langchain documents first, and then make an instance of GPTResearcher.
+
+The class is defined in [[nb:gpt-researcher::gpt_researcher/agent.py::c1]]
+
+This class has a lot of arguments, many of them are undocumented. I guess it stores a lot of state data.
+
+** conduct research
+
+This happens in researcher.conduct_research()
+
+- log event
+- if deep research self._handle_deep_research(on_progress) and return
+  - _handle_deep_research(on_progress)
+    - return context = self.deep_researcher.run(on_progress=on_progress)
+
+- some logic if there is no agent /role to choose an agent and set it
+- sets context to self.research_conductor.conduct_research()
+- returns context
+
+*** DeepResearchSkill
+
+class with these methods:
+
+- generate_search_queries
+- generate_research_plan
+- process_research_results
+- deep_research
+- run
+  - generate_research_plan
+  - deep_research (context with citations happens here) -> researcher.context
+
+** write report
+:PROPERTIES:
+:ID:       C8EAC0D2-254B-45AF-A012-94CC66645445
+:END:
+
+There are also write_report_conclusion, write_introduction, I don't obviously use.
+
+- self.report_generator.write_report [[nb:gpt-researcher::gpt_researcher/skills/writer.py::c871]]
+  - does something with images, maybe only relevant for the app?
+  - seems to call generate_report ([[nb:gpt-researcher::gpt_researcher/actions/report_generation.py::c6137]])
+
+*** generate_report
+
+some conditional to set content, which appears mostly to be a prompt that generates the report. That is wrapped in an llm call exception block, and the differences is whether it takes a system prompt or not I guess.
+
+and then it returns the output. Interestingly, it seems a single call is used to generate that report.
