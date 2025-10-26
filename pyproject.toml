@@ -18,6 +18,7 @@ description = "A literature database tool with GPT integration."
 license = "MIT"
 readme = {file = "README.org", content-type = "text/plain"}
 dependencies = [
+  # Core dependencies - always installed
   "toml",
   "tomlkit",
   "requests",
@@ -43,44 +44,15 @@ dependencies = [
   "pytesseract",
   "pillow",
   "bibtexparser",
-  # these are sort of hard to install, and rely on other libraries
-  # I document them here, but consider it optional
-  #  "pyaudio",
-  #  "playsound",
-  # for coa
+  # Data processing and COA
   "pandas",
   "more-itertools",
   "nameparser",
   "tabulate",
   "IPython",
-  # youtube
-  "yt_dlp",
-  "webvtt-py",
-  # the streamlit app
-  "streamlit",
-  # image clip search
-  "pyperclip",
-  "pillow",
-  "pillow_heif",
-  # web crawling
-  "scrapy",
-  "backoff",
-  # deep research
-  "gpt_researcher",
-  "duckduckgo-search",
-  "langchain_ollama",
-  "langchain_google_genai",
-  "langchain_anthropic",
-  "mistune",
-  "htmldocx",
-  "docx",
-  "md2pdf",
-  "pypandoc",
-  # mcp server
-  "mcp[cli]",
-  #
+  # Table extraction
   "gmft",
-  "futurehouse_client",
+  # Development tools
   "ruff>=0.13.3",
 ]
 
@@ -92,12 +64,93 @@ litdb_mcp = "litdb.mcp_server:main"
 Homepage = "https://github.com/jkitchin/litdb"
 
 [project.optional-dependencies]
+# Testing dependencies
 test = [
   "pytest>=8.0.0",
   "pytest-cov>=4.1.0",
   "pytest-mock>=3.12.0",
   "responses>=0.24.0",
   "freezegun>=1.4.0",
+]
+
+# Future House research client
+futurehouse = [
+  "futurehouse_client",
+]
+
+# Deep research with gpt-researcher
+research = [
+  "gpt_researcher",
+  "duckduckgo-search",
+  "langchain_ollama",
+  "langchain_google_genai",
+  "langchain_anthropic",
+  "mistune",
+  "htmldocx",
+  "docx",
+  "md2pdf",
+  "pypandoc",
+]
+
+# Streamlit web app
+app = [
+  "streamlit",
+]
+
+# YouTube video transcription
+youtube = [
+  "yt_dlp",
+  "webvtt-py",
+]
+
+# Web crawling
+crawl = [
+  "scrapy",
+  "backoff",
+]
+
+# Image CLIP search
+image = [
+  "pyperclip",
+  "pillow_heif",
+]
+
+# MCP server for Claude Desktop
+mcp = [
+  "mcp[cli]",
+]
+
+# Audio recording and transcription (requires external libraries)
+audio = [
+  "pyaudio",
+  "playsound",
+  "SpeechRecognition",
+]
+
+# All optional features
+all = [
+  "futurehouse_client",
+  "gpt_researcher",
+  "duckduckgo-search",
+  "langchain_ollama",
+  "langchain_google_genai",
+  "langchain_anthropic",
+  "mistune",
+  "htmldocx",
+  "docx",
+  "md2pdf",
+  "pypandoc",
+  "streamlit",
+  "yt_dlp",
+  "webvtt-py",
+  "scrapy",
+  "backoff",
+  "pyperclip",
+  "pillow_heif",
+  "mcp[cli]",
+  "pyaudio",
+  "playsound",
+  "SpeechRecognition",
 ]
 
 [tool.pytest.ini_options]

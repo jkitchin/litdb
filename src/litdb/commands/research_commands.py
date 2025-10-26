@@ -19,8 +19,6 @@ from rich.markdown import Markdown
 import tabulate
 import webbrowser
 
-from futurehouse_client import FutureHouseClient, JobNames
-
 from ..utils import get_config
 from ..openalex import get_data
 from ..research import deep_research
@@ -51,6 +49,16 @@ def fhresearch(query, task):
     completed, with little feedback until the answer returns.
 
     """
+    # Lazy import - only fail if futurehouse extra is not installed and command is used
+    try:
+        from futurehouse_client import FutureHouseClient, JobNames
+    except ImportError:
+        click.echo(
+            "The futurehouse_client package is required for this command.\n"
+            "Install it with: pip install litdb[futurehouse]\n"
+            "Or install all optional dependencies with: pip install litdb[all]"
+        )
+        raise click.Abort()
 
     client = FutureHouseClient(api_key=os.environ["FUTURE_HOUSE_API_KEY"])
 
