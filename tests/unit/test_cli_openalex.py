@@ -109,8 +109,9 @@ class TestFollowCommand:
         mock_db.commit.assert_called()
 
     @pytest.mark.unit
+    @patch("litdb.commands.openalex_commands.add_author")
     @patch("litdb.commands.openalex_commands.get_openalex_db")
-    def test_follow_remove(self, mock_get_openalex_db):
+    def test_follow_remove(self, mock_get_openalex_db, mock_add_author):
         """Test removing a followed ORCID."""
         mock_db = MagicMock()
         mock_cursor = MagicMock()
