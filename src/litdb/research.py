@@ -326,15 +326,21 @@ focus the response and ask them what they would like.""",
     return query
 
 
-async def get_report(query: str, report_type: str, verbose: bool):
+async def get_report(
+    query: str, report_type: str, verbose: bool, skip_refinement: bool = False
+):
     """Generate the report.
 
     QUERY: string to query and generate a report for.
+    skip_refinement: if True, skip the interactive query refinement step
 
     Adapted from https://docs.gptr.dev/docs/gpt-researcher/gptr/pip-package.
     """
     research_env()
-    query = refine_query(query)
+    if not skip_refinement:
+        query = refine_query(query)
+    else:
+        print(f"Doing research on:\n\n{query}\n\n")
 
     docs = litdb_documents(query)
 
@@ -386,7 +392,9 @@ async def get_report(query: str, report_type: str, verbose: bool):
     )
 
 
-def deep_research(query, report_type="research_report", verbose=False):
+def deep_research(
+    query, report_type="research_report", verbose=False, skip_refinement=False
+):
     """Run deep_research on the QUERY.
 
     report_type is one of
@@ -399,13 +407,14 @@ def deep_research(query, report_type="research_report", verbose=False):
     subtopic_report
 
     when verbose is truthy, provides more output.
+    skip_refinement: if True, skip the interactive query refinement step
 
     Note: there are two functions, get_report, and this one because of the async
     methods used.
 
     """
     report, result, context, costs, images, sources = asyncio.run(
-        get_report(query, report_type, verbose)
+        get_report(query, report_type, verbose, skip_refinement)
     )
 
     return report, result, context, costs, images, sources
