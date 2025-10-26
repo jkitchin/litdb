@@ -7,14 +7,18 @@ search the images either by textual descriptions, or by using similar images.
 
 from .db import get_db
 from sentence_transformers import SentenceTransformer
-from PIL import Image, ImageGrab
-from pillow_heif import register_heif_opener
+from PIL import Image
 import numpy as np
 import datetime
 import os
-import pyperclip
 
-register_heif_opener()
+# Register HEIF support if available (optional dependency)
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:
+    pass
 
 image_extensions = Image.registered_extensions().keys()
 
@@ -52,6 +56,9 @@ def image_query(query=None, clipboard=False, n=1):
     elif query and not os.path.exists(query):
         emb = model.encode(query)
     elif clipboard:
+        from PIL import ImageGrab
+        import pyperclip
+
         clip = ImageGrab.grabclipboard()
         if isinstance(clip, Image.Image):
             emb = model.encode(clip)

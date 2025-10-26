@@ -1,7 +1,5 @@
 """Support to search YouTube videos."""
 
-import yt_dlp
-import webvtt
 import os
 import tempfile
 
@@ -15,6 +13,9 @@ def get_youtube_doc(url):
     Returns:
        doc, citation
     """
+    import yt_dlp
+    import webvtt
+
     fd, path = tempfile.mkstemp()
 
     ydl_opts = {
