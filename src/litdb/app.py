@@ -37,6 +37,17 @@ def render_sidebar():
     """Render sidebar with navigation and database info."""
     st.sidebar.title("LitDB")
 
+    # Show version
+    try:
+        from importlib.metadata import version
+
+        litdb_version = version("litdb")
+        st.sidebar.caption(f"Version {litdb_version}")
+    except Exception:
+        st.sidebar.caption("Version unknown")
+
+    st.sidebar.markdown("---")
+
     # GitHub links
     st.sidebar.markdown("""
     **Links**
