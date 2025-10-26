@@ -1469,16 +1469,22 @@ def tab_manage_filters():
         st.markdown(f"**{len(queries)} saved queries:**")
 
         for i, (filter_text, description, last_updated) in enumerate(queries):
-            with st.expander(f"{filter_text[:60]}..."):
-                st.markdown(f"**Filter:** `{filter_text}`")
-                if description:
-                    st.markdown(f"**Description:** {description}")
-                st.markdown(f"**Last Updated:** {last_updated}")
+            # Show filter and description clearly
+            st.markdown(f"**Filter:** `{filter_text}`")
+            if description:
+                st.markdown(f"*{description}*")
+            else:
+                st.markdown("*No description*")
 
-                col1, col2 = st.columns([3, 1])
-                with col2:
-                    if st.button("Delete", key=f"delete_query_{i}"):
-                        st.info("Query deletion coming soon...")
+            # Show metadata and actions in columns
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.caption(f"Last updated: {last_updated}")
+            with col3:
+                if st.button("Delete", key=f"delete_query_{i}"):
+                    st.info("Query deletion coming soon...")
+
+            st.markdown("---")
     else:
         st.info("No saved queries yet")
 
