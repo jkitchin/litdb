@@ -56,7 +56,7 @@ def about_litdb():
     The MCP server has three tools, this one, a vector search tool, and an
     OpenAlex search integration.
 
-    Using the db at {os.environ['litdb']}.
+    Using the db at {os.environ["litdb"]}.
     """
 
 

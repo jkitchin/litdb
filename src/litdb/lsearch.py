@@ -98,7 +98,7 @@ Respond with a JSON object, without backticks or markdown formatting.""",
     except json.decoder.JSONDecodeError:
         print("Generating full text queries failed on")
         print(content)
-        print("Proceeding without full text queries." " Please report this message")
+        print("Proceeding without full text queries. Please report this message")
         queries = []
 
     results = []

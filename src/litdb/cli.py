@@ -240,14 +240,14 @@ def crossref(query, references, related, citing):
         data = resp.json()
         for i, item in enumerate(data["message"]["items"]):
             authors = ", ".join(
-                [f'{au["given"]} {au["family"]}' for au in item.get("author", [])]
+                [f"{au['given']} {au['family']}" for au in item.get("author", [])]
             )
             source = " ".join(item.get("container-title", ["no source"]))
             published = item.get("published", {}) or {}
             year = published.get("date-parts", [["no year"]])[0][0]
             title = item.get("title", ["no title"])
             richprint(
-                f'{i}. {" ".join(title)}, {authors}, {source} ({year}), https://doi.org/{item["DOI"]}.'
+                f"{i}. {' '.join(title)}, {authors}, {source} ({year}), https://doi.org/{item['DOI']}."
             )
 
         toadd = input("Enter space separated numbers to add, or return to quit. ")
@@ -425,14 +425,14 @@ Text:
 
                     best_authors = ", ".join(
                         [
-                            f'{au.get("given", "")} {au.get("family", "")}'.strip()
+                            f"{au.get('given', '')} {au.get('family', '')}".strip()
                             for au in best.get("author", [])[:3]
                         ]
                     )
                     best_year = best.get("published", {}).get("date-parts", [[None]])[
                         0
                     ][0]
-                    best_doi = f'https://doi.org/{best["DOI"]}'
+                    best_doi = f"https://doi.org/{best['DOI']}"
 
                     richprint(f"   Best match (similarity: {similarity:.2f}):")
                     richprint(f"   {best_title}")
@@ -805,7 +805,7 @@ def audio(playback=False):
 @click.option(
     "-f",
     "--fmt",
-    default=(" {{ i }}. ({{ score|round(3) }})" " {{ source }}\n{{ text[:200] }}\n\n"),
+    default=(" {{ i }}. ({{ score|round(3) }}) {{ source }}\n{{ text[:200] }}\n\n"),
 )
 @click.option("-x", "--cross-encode", is_flag=True, default=False)
 def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
@@ -1487,7 +1487,7 @@ def openalex(query, _filter, endpoint, sample, per_page):
 
     data = resp.json()
     for result in data["results"]:
-        s = f'{result["title"]}, ({result["publication_year"]}) {result["id"]}\n'
+        s = f"{result['title']}, ({result['publication_year']}) {result['id']}\n"
         # Note sometimes there is an exception from bad markup in strings
         richprint(s)
 
@@ -1514,8 +1514,8 @@ def author_search(name):
 
     for result in data["results"]:
         richprint(
-            f'- {result["display_name"]}\n  {result["hint"]} '
-            f'{result["external_id"]}\n\n'
+            f"- {result['display_name']}\n  {result['hint']} "
+            f"{result['external_id']}\n\n"
         )
 
 
@@ -1714,8 +1714,8 @@ def unpaywall(doi):
     resp = requests.get(url, params)
     if resp.status_code == 200:
         data = resp.json()
-        richprint(f'{data["title"]}, {data.get("journal_name") or ""}')
-        richprint(f'Is open access: {data.get("is_oa", False)}')
+        richprint(f"{data['title']}, {data.get('journal_name') or ''}")
+        richprint(f"Is open access: {data.get('is_oa', False)}")
 
         for loc in data.get("oa_locations", []):
             richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
@@ -1888,7 +1888,7 @@ def suggest_reviewers(query, n):
     # You can only filter on 50 ids at a time, so we hard code this limit here
     # and per page.
     for batch in batched(authors, 50):
-        url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
+        url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
 
         params = {"per-page": 50, "mailto": config["openalex"]["email"]}
 

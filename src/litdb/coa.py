@@ -56,7 +56,7 @@ def get_coa(orcid):
         aus = pub["authorships"]
         for au in aus:
             hn = HumanName(au["author"]["display_name"])
-            name = f'{hn.last}, {hn.first} {hn.middle or ""}'
+            name = f"{hn.last}, {hn.first} {hn.middle or ''}"
 
             authors += [[name, year, last_active, au["author"]["id"], pub["id"]]]
 
@@ -69,7 +69,7 @@ def get_coa(orcid):
     oaids = set([row[3].replace("https://openalex.org/", "") for row in authors])
     affiliations = {}
     for batch in batched(oaids, 50):
-        url = f'https://api.openalex.org/authors?filter=id:{"|".join(batch)}'
+        url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
 
         params = {"per-page": 50, "email": "jkitchin@andrew.cmu.edu"}
 
