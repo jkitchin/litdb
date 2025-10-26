@@ -164,7 +164,7 @@ def tab_search():
                 citation = format_citation(extra)
                 title = citation if citation else source
 
-                with st.expander(f"{i}. {title[:100]}... (distance: {distance:.4f})"):
+                with st.expander(f"{i}. {title} (distance: {distance:.4f})"):
                     if citation:
                         st.markdown(citation)
                         st.markdown("---")
@@ -259,7 +259,7 @@ def tab_search():
                 citation = format_citation(extra)
                 title = citation if citation else source
 
-                with st.expander(f"{i}. {title[:100]}..."):
+                with st.expander(f"{i}. {title}"):
                     if citation:
                         st.markdown(citation)
                         st.markdown("---")
@@ -372,7 +372,7 @@ def tab_search():
                 citation = format_citation(extra)
                 title = citation if citation else source
 
-                with st.expander(f"{i}. {title[:100]}... (distance: {distance:.4f})"):
+                with st.expander(f"{i}. {title} (distance: {distance:.4f})"):
                     if citation:
                         st.markdown(citation)
                         st.markdown("---")
@@ -459,7 +459,7 @@ def tab_search():
                 citation = format_citation(extra)
                 title = citation if citation else source
 
-                with st.expander(f"{i}. {title[:100]}..."):
+                with st.expander(f"{i}. {title}"):
                     if citation:
                         st.markdown(citation)
                         st.markdown("---")
@@ -1915,17 +1915,35 @@ focus the response and ask them what they would like.""",
                     with st.spinner(
                         "Running FutureHouse research... This may take 2-10 minutes."
                     ):
-                        task_response = client.run_tasks_until_done(
+                        # Create the task
+                        import time
+
+                        task_response = client.create_task(
                             {
                                 "name": jobs[st.session_state.research_type],
                                 "query": final_query,
                             }
                         )
 
+                        task_id = task_response.task_id
+
+                        # Poll until complete
+                        while True:
+                            result = client.get_task(task_id=str(task_id))
+                            if result.status in ["completed", "failed", "error"]:
+                                break
+                            time.sleep(5)  # Wait 5 seconds between polls
+
                     # Store results
-                    st.session_state.research_report = task_response[0].formatted_answer
-                    st.session_state.research_step = "results"
-                    st.rerun()
+                    if result.status == "completed":
+                        st.session_state.research_report = result.formatted_answer
+                        st.session_state.research_step = "results"
+                        st.rerun()
+                    else:
+                        st.error(f"Task failed with status: {result.status}")
+                        if st.button("Back to Input"):
+                            st.session_state.research_step = "input"
+                            st.rerun()
 
             except ImportError:
                 st.error("FutureHouse research requires futurehouse_client")

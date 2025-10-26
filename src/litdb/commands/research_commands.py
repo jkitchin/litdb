@@ -67,11 +67,24 @@ def fhresearch(query, task):
     if not isinstance(query, str):
         query = " ".join(query)
 
-    task_response = client.run_tasks_until_done(
-        {"name": jobs[task.lower()], "query": query}
-    )
+    # Create the task
+    import time
 
-    print(task_response[0].formatted_answer)
+    task_response = client.create_task({"name": jobs[task.lower()], "query": query})
+
+    task_id = task_response.task_id
+
+    # Poll until complete
+    while True:
+        result = client.get_task(task_id=str(task_id))
+        if result.status in ["completed", "failed", "error"]:
+            break
+        time.sleep(5)  # Wait 5 seconds between polls
+
+    if result.status == "completed":
+        print(result.formatted_answer)
+    else:
+        print(f"Task failed with status: {result.status}")
 
 
 @click.command()
