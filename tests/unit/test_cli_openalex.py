@@ -109,12 +109,14 @@ class TestFollowCommand:
         mock_db.commit.assert_called()
 
     @pytest.mark.unit
-    @patch("litdb.commands.openalex_commands._db")
-    def test_follow_remove(self, mock_db):
+    @patch("litdb.commands.openalex_commands.get_openalex_db")
+    def test_follow_remove(self, mock_get_openalex_db):
         """Test removing a followed ORCID."""
+        mock_db = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.rowcount = 1
         mock_db.execute.return_value = mock_cursor
+        mock_get_openalex_db.return_value = mock_db
 
         runner = CliRunner()
         result = runner.invoke(cli, ["follow", "0000-0003-2625-9232", "--remove"])
