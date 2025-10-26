@@ -5,6 +5,35 @@ All notable changes to litdb will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Refactored
+
+- **CLI Architecture**: Completed major refactoring of CLI codebase
+  - Reduced `cli.py` from 932 lines to 128 lines (86% reduction)
+  - Extracted 43 commands into 10 focused modules in `src/litdb/commands/`:
+    - `manage.py` - Core database management (6 commands: init, add, remove, index, reindex, update_embeddings)
+    - `search.py` - Search functionality (7 commands: vsearch, fulltext, hybrid_search, lsearch, similar, image_search, screenshot)
+    - `export.py` - Export and display (6 commands: bibtex, citation, show, visit, about, sql)
+    - `tags.py` - Tag management (5 commands: add_tag, rm_tag, delete_tag, show_tag, list_tags)
+    - `review.py` - Review and summary (2 commands: review, summary)
+    - `filters.py` - Filter management (4 commands: add_filter, rm_filter, update_filters, list_filters)
+    - `openalex_commands.py` - OpenAlex integration (7 commands: openalex, author_search, follow, watch, citing, related, unpaywall)
+    - `research_commands.py` - Research tools (3 commands: fhresearch, research, suggest_reviewers)
+    - `data_processing.py` - Data processing (5 commands: crossref, fromtext, extract, schema, crawl)
+    - `utilities.py` - Utility commands (6 commands: web, audio, chat, app, version, coa)
+  - `cli.py` now serves only as a clean orchestration layer
+  - All existing functionality preserved, no breaking changes
+  - Improved code organization and maintainability
+
+### Fixed
+
+- **Tests**: Fixed failing CI tests in `test_cli_openalex.py`
+  - Fixed `test_unpaywall_basic` - Added missing mock response fields
+  - Fixed `test_follow_remove` - Added proper mocks for `add_author()` and `get_openalex_db()`
+  - All 133 tests now passing (66 skipped integration tests)
+  - CI/CD pipeline green on main branch
+
 ## [2.1.8] - 2025-10-25
 
 ### Added
