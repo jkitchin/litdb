@@ -16,19 +16,15 @@ from ..summary import generate_summary
 
 
 # Lazy database initialization
-db = None
+_db = None
 
 
 def get_review_db():
     """Get or create database connection for review commands."""
-    global db
-    if db is None:
-        db = get_db()
-    return db
-
-
-# Initialize db for module
-db = get_review_db()
+    global _db
+    if _db is None:
+        _db = get_db()
+    return _db
 
 
 @click.command()
@@ -42,11 +38,15 @@ def review(since, fmt):
     """
 
     since = dateparser.parse(since).strftime("%Y-%m-%d")
-    c = db.execute(
-        """select source, text, extra from sources
+    c = (
+        get_review_db()
+        .execute(
+            """select source, text, extra from sources
     where date(date_added) > ?""",
-        (since,),
-    ).fetchall()
+            (since,),
+        )
+        .fetchall()
+    )
 
     template = Template(
         fmt

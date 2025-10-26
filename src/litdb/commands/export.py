@@ -24,19 +24,15 @@ from ..bibtex import dump_bibtex
 
 
 # Lazy database initialization
-db = None
+_db = None
 
 
 def get_export_db():
     """Get or create database connection for export commands."""
-    global db
-    if db is None:
-        db = get_db()
-    return db
-
-
-# Initialize db for module
-db = get_export_db()
+    global _db
+    if _db is None:
+        _db = get_db()
+    return _db
 
 
 @click.command()
@@ -47,9 +43,11 @@ def bibtex(sources):
         sources = sys.stdin.read().strip().split()
 
     for source in sources:
-        work = db.execute(
-            """select extra from sources where source = ?""", (source,)
-        ).fetchone()
+        work = (
+            get_export_db()
+            .execute("""select extra from sources where source = ?""", (source,))
+            .fetchone()
+        )
         if work:
             print(f"WORK: {work}")
             richprint(dump_bibtex(json.loads(work[0])))
@@ -65,11 +63,15 @@ def citation(sources):
         sources = sys.stdin.read().strip().split()
 
     for i, source in enumerate(sources):
-        (_citation,) = db.execute(
-            """select json_extract(extra, '$.citation')
+        (_citation,) = (
+            get_export_db()
+            .execute(
+                """select json_extract(extra, '$.citation')
         from sources where source = ?""",
-            (source,),
-        ).fetchone()
+                (source,),
+            )
+            .fetchone()
+        )
         richprint(f"{i + 1:2d}. {_citation}")
 
 
@@ -86,8 +88,9 @@ def about():
     mb = 1024 * kb
     gb = 1024 * mb
     richprint(f"Database size: {os.path.getsize(dbf) / gb:1.2f} GB")
-    db = get_db()
-    (nsources,) = db.execute("select count(source) from sources").fetchone()
+    (nsources,) = (
+        get_export_db().execute("select count(source) from sources").fetchone()
+    )
     richprint(f"You have {nsources} sources")
 
 
@@ -95,7 +98,7 @@ def about():
 @click.argument("sql")
 def sql(sql):
     """Run the SQL command on the db."""
-    for row in db.execute(sql).fetchall():
+    for row in get_export_db().execute(sql).fetchall():
         richprint(row)
 
 
@@ -108,11 +111,15 @@ def show(sources, fmt):
     FMT is a jinja template with access to source, text, extra for each arg.
     """
     for src in sources:
-        result = db.execute(
-            """select source, text, extra from
+        result = (
+            get_export_db()
+            .execute(
+                """select source, text, extra from
         sources where source = ?""",
-            (src,),
-        ).fetchone()
+                (src,),
+            )
+            .fetchone()
+        )
 
         if result:
             source, text, extra = result

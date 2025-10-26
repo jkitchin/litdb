@@ -15,7 +15,7 @@ class TestReviewCommand:
     """Test the 'litdb review' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.review.db")
+    @patch("litdb.commands.review._db")
     @patch("litdb.commands.review.dateparser")
     def test_review_default_timeframe(self, mock_dateparser, mock_db):
         """Test review with default timeframe."""
@@ -41,7 +41,7 @@ class TestReviewCommand:
         assert "Test Paper" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.review.db")
+    @patch("litdb.commands.review._db")
     @patch("litdb.commands.review.dateparser")
     def test_review_custom_timeframe(self, mock_dateparser, mock_db):
         """Test review with custom timeframe."""
@@ -60,7 +60,7 @@ class TestReviewCommand:
         mock_dateparser.parse.assert_called_once_with("1 month ago")
 
     @pytest.mark.unit
-    @patch("litdb.commands.review.db")
+    @patch("litdb.commands.review._db")
     @patch("litdb.commands.review.dateparser")
     def test_review_with_custom_format(self, mock_dateparser, mock_db):
         """Test review with custom jinja template."""
@@ -83,7 +83,7 @@ class TestReviewCommand:
         assert "test.pdf: Test Paper" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.review.db")
+    @patch("litdb.commands.review._db")
     @patch("litdb.commands.review.dateparser")
     def test_review_no_results(self, mock_dateparser, mock_db):
         """Test review when no entries found."""
