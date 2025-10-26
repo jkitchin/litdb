@@ -13,3 +13,12 @@ __pycache__
 /*.xlsx
 /litdb.toml
 archive
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+*.py[cod]
+*$py.class

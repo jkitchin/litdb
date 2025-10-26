@@ -91,6 +91,59 @@ litdb_mcp = "litdb.mcp_server:main"
 [project.urls]
 Homepage = "https://github.com/jkitchin/litdb"
 
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0.0",
+  "pytest-cov>=4.1.0",
+  "pytest-mock>=3.12.0",
+  "responses>=0.24.0",
+  "freezegun>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+  "--verbose",
+  "--cov=src/litdb",
+  "--cov-report=term-missing",
+  "--cov-report=html",
+  "--cov-report=xml",
+  "--cov-branch",
+]
+markers = [
+  "unit: Unit tests (fast, no external dependencies)",
+  "integration: Integration tests (may call external APIs)",
+  "slow: Slow tests (long-running operations)",
+]
+
+[tool.coverage.run]
+source = ["src/litdb"]
+omit = [
+  "*/tests/*",
+  "*/__pycache__/*",
+  "*/site-packages/*",
+]
+branch = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "@abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
 
 # (shell-command "uv build")
 # (shell-command "uv publish")
