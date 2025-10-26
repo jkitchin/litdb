@@ -16,7 +16,16 @@ import numpy as np
 from .utils import get_config
 from .openalex import get_data, get_text
 
-config = get_config()
+# Lazy config initialization
+_config = None
+
+
+def get_lsearch_config():
+    """Get or create config for lsearch module."""
+    global _config
+    if _config is None:
+        _config = get_config()
+    return _config
 
 
 def oa_query(query, n, sort=None, sample=False):
@@ -27,6 +36,7 @@ def oa_query(query, n, sort=None, sample=False):
     SAMPLE: boolean
     """
     url = "https://api.openalex.org/works"
+    config = get_lsearch_config()
 
     params = {
         "per_page": n,
@@ -64,6 +74,8 @@ def llm_oa_search(query, q=5, n=25, k=5):
 
     """
     query = " ".join(query)
+
+    config = get_lsearch_config()
 
     msgs = [
         {
