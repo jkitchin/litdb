@@ -39,10 +39,10 @@ def init():
     db = get_db()
 
     # Import about command to show statistics after init
-    from ..cli import about
+    from . import export
 
-    with click.Context(about) as ctx:
-        ctx.invoke(about)
+    with click.Context(export.about) as ctx:
+        ctx.invoke(export.about)
 
     return db
 

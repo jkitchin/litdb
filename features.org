@@ -1,0 +1,111 @@
+# -*- eval: (and (fboundp 'gptel-mode) (gptel-mode 1)); -*-
+:PROPERTIES:
+:GPTEL_MODEL: claude-sonnet-4-20250514
+:GPTEL_BACKEND: Claude
+:GPTEL_SYSTEM: You are a large language model working in Emacs and a helpful assistant. Respond concisely using org-mode syntax.\n\nWhen writing Python code, use this template:\n\n#+BEGIN_SRC jupyter-python\n<python-code>\n#+END_SRC\n
+:GPTEL_BOUNDS: ((response (1001 3599)))
+:END:
+* DONE add references from text
+CLOSED: [2025-10-08 Wed 15:46]
+
+I want to add a new command that lets me paste text containing references in it, and it will try to add each one to the litdb.
+
+> litdb fromtext "<pasted text>"
+
+The text will typically be copied from a pdf or website. The best strategy is probably to pass the text to an LLM to have it parse the references into a list, and then to add each one using a crossref query.
+
+First, outline the strategy to add this feature.
+
+* Semantic Scholar integration
+
+[[./swagger.json]]
+
+summarize the api points for semantic scholar
+
+* Semantic Scholar API Summary
+
+** Overview
+The Semantic Scholar Academic Graph API provides access to paper and author data from their academic database. The API base path is =/graph/v1= and supports JSON requests/responses.
+
+** Authentication
+- Use header =x-api-key= (case-sensitive) if you have an API key
+- Rate limits and enhanced access available with API keys
+
+** Main Endpoints
+
+*** *Paper Data*
+- *Search Papers*: =GET /paper/search= - Relevance-based paper search (max 1,000 results)
+- *Bulk Search*: =GET /paper/search/bulk= - Large-scale paper retrieval with filtering
+- *Title Match*: =GET /paper/search/match= - Find papers by closest title match
+- *Paper Details*: =GET /paper/{paper_id}= - Full paper information
+- *Batch Papers*: =POST /paper/batch= - Get multiple papers at once (max 500)
+- *Autocomplete*: =GET /paper/autocomplete= - Query completion suggestions
+
+*** *Paper Relationships*
+- *Citations*: =GET /paper/{paper_id}/citations= - Papers citing this paper
+- *References*: =GET /paper/{paper_id}/references= - Papers referenced by this paper
+- *Authors*: =GET /paper/{paper_id}/authors= - Author details for a paper
+
+*** *Author Data*
+- *Author Search*: =GET /author/search= - Search authors by name
+- *Author Details*: =GET /author/{author_id}= - Full author information
+- *Author Papers*: =GET /author/{author_id}/papers= - Papers by an author
+- *Batch Authors*: =POST /author/batch= - Get multiple authors at once (max 1,000)
+
+*** *Snippet Search*
+- *Text Snippets*: =GET /snippet/search= - Search within paper text content
+
+** Key Features
+
+*** *Paper Identifiers Supported*
+- Semantic Scholar ID (SHA hash)
+- =CorpusId:123456=
+- =DOI:10.xxx/xxx=
+- =ARXIV:xxxx.xxxxx=
+- =PMID:12345=
+- Various other academic IDs
+
+*** *Common Parameters*
+- *fields*: Specify which data fields to return
+- *limit/offset*: Pagination control
+- *publicationDateOrYear*: Filter by publication date
+- *fieldsOfStudy*: Filter by academic discipline
+- *venue*: Filter by journal/conference
+- *minCitationCount*: Filter by citation threshold
+
+*** *Available Data Fields*
+- Basic: title, abstract, authors, year, venue
+- Metrics: citationCount, referenceCount, influentialCitationCount
+- Advanced: embeddings, tldr summaries, full text snippets
+- Relationships: citations, references with context
+
+** Limitations
+- Max 10 MB response size per request
+- Batch limits: 500 papers, 1,000 authors
+- Relevance search limited to 1,000 results
+- Bulk search supports up to 10M papers total
+
+This API is ideal for academic research, literature reviews, citation analysis, and building research tools.
+
+** DONE Make a summary command for litdb
+CLOSED: [2025-10-25 Sat 18:06]
+
+- [ ] Maybe it needs a filter to select articles?
+
+this command should take a -s, --since argument that finds articles added since that time/date, preferrably in a json format. make the default since be "1 week"
+
+Then, each article should be reviewed with an LLM in one pass to identify the main topics in the article. Accumulate these topics, and afterwards use the LLM to aggregate the list of topics into 5-10 main topics, with subtopics as needed. only consider articles that are articles.
+
+in a second pass, read each article again, and aggregate them by topic/subtopic in a data structure.
+a
+For each subtopic, prepare a summary of all the articles in the subtopic in narrative form. Reference the articles where appropriate. at the end of the subject provide a bibliography of the articles summarized.
+
+Finally, combine all the subtopic summaries into an organized newsletter like summary with sections for each main topic. Use org-mode for the syntax. output to stdout, and provide an option to save to a file.
+
+put the code in a separate file summary.py
+
+add a new cli subcommand called summary.
+
+First, develop a detailed implementation plan.
+
+Create a feature branch to do this work on.

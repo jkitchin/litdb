@@ -6,7 +6,6 @@ The main command is litdb. There are subcommands for the actions.
 import os
 import datetime
 import json
-import sys
 import warnings
 
 import click
@@ -29,7 +28,6 @@ from futurehouse_client import FutureHouseClient, JobNames
 from .utils import get_config
 from .db import get_db, add_author, update_filter
 from .openalex import get_data
-from .bibtex import dump_bibtex
 from .audio import get_audio_text, record
 
 from .crawl import spider
@@ -38,7 +36,7 @@ from .extract import extract_tables, extract_schema
 from .summary import generate_summary
 
 # Import command modules
-from .commands import manage, search
+from .commands import manage, search, export
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -1150,40 +1148,6 @@ def related(doi, remove=False):
 
 
 @cli.command()
-@click.argument("sources", nargs=-1)
-def bibtex(sources):
-    """Generate bibtex entries for sources."""
-    if not sources:
-        sources = sys.stdin.read().strip().split()
-
-    for source in sources:
-        work = db.execute(
-            """select extra from sources where source = ?""", (source,)
-        ).fetchone()
-        if work:
-            print(f"WORK: {work}")
-            richprint(dump_bibtex(json.loads(work[0])))
-        else:
-            print(f"No entry found for {source}")
-
-
-@cli.command()
-@click.argument("sources", nargs=-1)
-def citation(sources):
-    """Generate citation strings for sources."""
-    if not sources:
-        sources = sys.stdin.read().strip().split()
-
-    for i, source in enumerate(sources):
-        (_citation,) = db.execute(
-            """select json_extract(extra, '$.citation')
-        from sources where source = ?""",
-            (source,),
-        ).fetchone()
-        richprint(f"{i + 1:2d}. {_citation}")
-
-
-@cli.command()
 @click.argument("doi")
 def unpaywall(doi):
     """Use unpaywall to find PDFs for doi."""
@@ -1201,67 +1165,6 @@ def unpaywall(doi):
             richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
     else:
         richprint(f"{doi} not found in unpaywall")
-
-
-@cli.command()
-def about():
-    """Summary statistics of your db."""
-    config = get_config()
-    dbf = os.path.join(config["root"], "litdb.libsql")
-    cf = os.path.join(config["root"], "litdb.toml")
-
-    richprint(f"Your database is located at {dbf}")
-    richprint(f"The configuration is at {cf}")
-    kb = 1024
-    mb = 1024 * kb
-    gb = 1024 * mb
-    richprint(f"Database size: {os.path.getsize(dbf) / gb:1.2f} GB")
-    db = get_db()
-    (nsources,) = db.execute("select count(source) from sources").fetchone()
-    richprint(f"You have {nsources} sources")
-
-
-@cli.command()
-@click.argument("sql")
-def sql(sql):
-    """Run the SQL command on the db."""
-    for row in db.execute(sql).fetchall():
-        richprint(row)
-
-
-@cli.command()
-@click.argument("sources", nargs=-1)
-@click.option("-f", "--fmt", default="{{ source }}\n{{ text }}")
-def show(sources, fmt):
-    """Show the source.
-
-    FMT is a jinja template with access to source, text, extra for each arg.
-    """
-    for src in sources:
-        result = db.execute(
-            """select source, text, extra from
-        sources where source = ?""",
-            (src,),
-        ).fetchone()
-
-        if result:
-            source, text, extra = result
-            extra = json.loads(extra)
-            richprint(Template(fmt).render(**locals()))
-        else:
-            print(f"Nothing found for {src}")
-
-
-@cli.command(name="open")
-@click.argument("source")
-def visit(source):
-    """Open source."""
-    if source.startswith("http"):
-        webbrowser.open(source, new=2)
-    elif source.endswith(".pdf"):
-        webbrowser.open(f"file://{source}")
-    else:
-        webbrowser.open(f"file://{source}")
 
 
 ######################
@@ -1424,6 +1327,14 @@ cli.add_command(search.lsearch)
 cli.add_command(search.image_search)
 cli.add_command(search.similar)
 cli.add_command(search.hybrid_search)
+
+# Register commands from export module
+cli.add_command(export.bibtex)
+cli.add_command(export.citation)
+cli.add_command(export.show)
+cli.add_command(export.visit)
+cli.add_command(export.about)
+cli.add_command(export.sql)
 
 
 if __name__ == "__main__":
