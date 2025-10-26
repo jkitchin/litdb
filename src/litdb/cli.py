@@ -11,7 +11,6 @@ import warnings
 import click
 from IPython import get_ipython
 from IPython.display import display, HTML
-from jinja2 import Template
 from more_itertools import batched
 
 import requests
@@ -19,13 +18,12 @@ from rich import print as richprint
 from rich.console import Console
 from rich.markdown import Markdown
 import tabulate
-from tqdm import tqdm
 import webbrowser
 
 from futurehouse_client import FutureHouseClient, JobNames
 
 from .utils import get_config
-from .db import get_db, add_author, update_filter
+from .db import get_db, add_author
 from .openalex import get_data
 from .audio import get_audio_text, record
 
@@ -34,7 +32,7 @@ from .research import deep_research
 from .extract import extract_tables, extract_schema
 
 # Import command modules
-from .commands import manage, search, export, tags, review
+from .commands import manage, search, export, tags, review, filters
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -620,99 +618,6 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
         webbrowser.open(url)
 
 
-###########
-# Filters #
-###########
-
-
-@cli.command()
-@click.argument("_filter")
-@click.option("-d", "--description")
-def add_filter(_filter, description=None):
-    """Add an OpenAlex FILTER.
-
-    This does not run the filter right away. You need
-    to manually update the filters later.
-    """
-    db.execute(
-        "insert into queries(filter, description) values (?, ?)", (_filter, description)
-    )
-    db.commit()
-
-
-@cli.command()
-@click.argument("_filter")
-def rm_filter(_filter):
-    """Remove an OpenAlex FILTER."""
-    db.execute("delete from queries where filter = ?", (_filter,))
-    db.commit()
-
-
-update_filter_fmt = """** {{ extra['display_name'] | replace("\n", "") | replace("\r", "") }}
-:PROPERTIES:
-:SOURCE: {{ source }}
-:REFERENCE_COUNT: {{ extra.get('referenced_works_count', 0) }}
-:CITED_BY_COUNT: {{ extra.get('cited_by_count', 0) }}
-:END:
-
-litdb:{{ source }}
-
-{{ text }}
-
-"""
-
-
-@cli.command()
-@click.option("-f", "--fmt", default=update_filter_fmt)
-@click.option("-s", "--silent", is_flag=True, default=False)
-def update_filters(fmt, silent):
-    """Update litdb using a filter with works from a created date."""
-
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"  # Prevent checking HF on each filter
-    filters = db.execute("""select filter, description, last_updated from queries""")
-    for f, description, last_updated in tqdm(filters.fetchall(), disable=silent):
-        try:
-            results = update_filter(f, last_updated, silent)
-            if results:
-                richprint(f"* {description or f}")
-            for result in results:
-                source, text, extra = result
-                richprint(Template(fmt).render(**locals()))
-        except:  # noqa: E722
-            continue
-
-
-list_filter_fmt = (
-    '{{ "{:3d}".format(rowid) }}.'
-    ' {{ "{:30s}".format(description'
-    ' or "None") }} {{ f }}'
-    " ({{ last_updated }})"
-)
-
-
-@cli.command()
-@click.option("-f", "--fmt", default=list_filter_fmt)
-def list_filters(fmt):
-    """List the filters.
-
-    FMT is a jinja template with access to the variables rowid, f, description
-    and last_updated. f is the filter string.
-
-    You can dump the filters to stdout like this.
-
-    > litdb list-filters -f 'litdb add-filter {{ f }}'
-
-    You could use that to send a list of your filters to someone, or to recreate
-    a db somewhere else.
-    """
-    filters = db.execute(
-        """select rowid, filter, description, last_updated
-    from queries"""
-    )
-    for rowid, f, description, last_updated in filters.fetchall():
-        richprint(Template(fmt).render(**locals()))
-
-
 ######################
 # OpenAlex searching #
 ######################
@@ -1150,6 +1055,12 @@ cli.add_command(tags.list_tags)
 # Register commands from review module
 cli.add_command(review.review)
 cli.add_command(review.summary)
+
+# Register commands from filters module
+cli.add_command(filters.add_filter)
+cli.add_command(filters.rm_filter)
+cli.add_command(filters.update_filters)
+cli.add_command(filters.list_filters)
 
 
 if __name__ == "__main__":

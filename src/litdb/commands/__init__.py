@@ -6,4 +6,5 @@ This package contains organized CLI command groups:
 - export: Export and display commands (bibtex, citation, show, visit/open, about, sql)
 - tags: Tag management commands (add_tag, rm_tag, delete_tag, show_tag, list_tags)
 - review: Review and summary commands (review, summary)
+- filters: Filter management commands (add_filter, rm_filter, update_filters, list_filters)
 """
