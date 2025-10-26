@@ -8,4 +8,5 @@ This package contains organized CLI command groups:
 - review: Review and summary commands (review, summary)
 - filters: Filter management commands (add_filter, rm_filter, update_filters, list_filters)
 - openalex_commands: OpenAlex commands (openalex, author_search, follow, watch, citing, related, unpaywall)
+- research_commands: Research commands (fhresearch, research, suggest_reviewers)
 """

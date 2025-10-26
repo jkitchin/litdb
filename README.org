@@ -4,8 +4,9 @@
 [[./litdb.png]]
 #+BEGIN_html
 <a href="https://github.com/jkitchin/litdb/actions/workflows/build.yml">
-  <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Test installation">
+  <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Build Status">
 </a>
+<img src="https://img.shields.io/badge/tests-110_passed,_56_skipped-brightgreen" alt="Tests">
 #+END_HTML
 
 * litdb concept
