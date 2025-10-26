@@ -29,22 +29,29 @@ warnings.filterwarnings("ignore")
 readline.parse_and_bind("tab: complete")
 readline.parse_and_bind("set editing-mode emacs")
 
-# Load history
-db = get_db()
+# Load history - done lazily to avoid import-time database access
+db = None
 
-# This is needed to update existing litdb dbs.
-try:
-    db.execute("""select prompt from prompt_history order by rowid limit 1""")
-except ValueError:
-    db.execute(
-        """create table if not exists
+
+def _ensure_db():
+    """Lazy initialization of database connection."""
+    global db
+    if db is None:
+        db = get_db()
+        # This is needed to update existing litdb dbs.
+        try:
+            db.execute("""select prompt from prompt_history order by rowid limit 1""")
+        except ValueError:
+            db.execute(
+                """create table if not exists
             prompt_history(rowid integer primary key,
             prompt text)"""
-    )
+            )
 
-cursor = db.execute("""select prompt from prompt_history order by rowid""")
-for (row,) in cursor.fetchall():
-    readline.add_history(row)
+        cursor = db.execute("""select prompt from prompt_history order by rowid""")
+        for (row,) in cursor.fetchall():
+            readline.add_history(row)
+
 
 # Disable parallelism in tokenizers
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
