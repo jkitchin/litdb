@@ -25,7 +25,6 @@ import json
 import os
 
 from sentence_transformers import SentenceTransformer
-from gpt_researcher import GPTResearcher
 from litellm import completion
 from langchain_core.documents import Document
 
@@ -336,6 +335,9 @@ async def get_report(
 
     Adapted from https://docs.gptr.dev/docs/gpt-researcher/gptr/pip-package.
     """
+    # Import gpt_researcher here (it's an optional dependency in the research extra)
+    from gpt_researcher import GPTResearcher
+
     research_env()
     if not skip_refinement:
         query = refine_query(query)
