@@ -15,7 +15,7 @@ class TestAddTagCommand:
     """Test the 'litdb add-tag' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_add_tag_single_source_single_tag(self, mock_db):
         """Test adding a single tag to a single source."""
         # Mock source lookup
@@ -43,7 +43,7 @@ class TestAddTagCommand:
         assert mock_db.commit.call_count >= 2
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_add_tag_existing_tag(self, mock_db):
         """Test adding an existing tag to a source."""
         mock_cursor_source = MagicMock()
@@ -65,7 +65,7 @@ class TestAddTagCommand:
         assert "Tagged test.pdf with existing" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_add_multiple_tags(self, mock_db):
         """Test adding multiple tags to a source."""
         mock_cursor_source = MagicMock()
@@ -98,7 +98,7 @@ class TestRmTagCommand:
     """Test the 'litdb rm-tag' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_rm_tag_single_tag(self, mock_db):
         """Test removing a single tag from a source."""
         mock_cursor_source = MagicMock()
@@ -123,7 +123,7 @@ class TestRmTagCommand:
         assert "Deleted 1 rows (old-tag from test.pdf)" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_rm_multiple_tags(self, mock_db):
         """Test removing multiple tags from a source."""
         mock_cursor_source = MagicMock()
@@ -155,7 +155,7 @@ class TestDeleteTagCommand:
     """Test the 'litdb delete-tag' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_delete_tag_single(self, mock_db):
         """Test deleting a single tag."""
         mock_cursor = MagicMock()
@@ -173,7 +173,7 @@ class TestDeleteTagCommand:
         mock_db.commit.assert_called_once()
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_delete_multiple_tags(self, mock_db):
         """Test deleting multiple tags."""
         mock_cursor = MagicMock()
@@ -193,7 +193,7 @@ class TestShowTagCommand:
     """Test the 'litdb show-tag' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_show_tag_basic(self, mock_db):
         """Test showing entries with a tag."""
         mock_cursor = MagicMock()
@@ -209,7 +209,7 @@ class TestShowTagCommand:
         assert "test.pdf" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_show_tag_with_format(self, mock_db):
         """Test showing entries with custom format."""
         mock_cursor = MagicMock()
@@ -225,7 +225,7 @@ class TestShowTagCommand:
         assert "test.pdf" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_show_tag_no_results(self, mock_db):
         """Test showing a tag with no entries."""
         mock_cursor = MagicMock()
@@ -243,7 +243,7 @@ class TestListTagsCommand:
     """Test the 'litdb list-tags' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_list_tags_with_tags(self, mock_db):
         """Test listing all tags."""
         mock_cursor = MagicMock()
@@ -260,7 +260,7 @@ class TestListTagsCommand:
         assert "tag3" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.tags.db")
+    @patch("litdb.commands.tags._db")
     def test_list_tags_empty(self, mock_db):
         """Test listing tags when none exist."""
         mock_cursor = MagicMock()

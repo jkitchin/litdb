@@ -15,7 +15,7 @@ class TestBibtexCommand:
     """Test the 'litdb bibtex' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     @patch("litdb.commands.export.dump_bibtex")
     def test_bibtex_single_source(self, mock_dump, mock_db):
         """Test generating bibtex for a single source."""
@@ -32,7 +32,7 @@ class TestBibtexCommand:
         mock_dump.assert_called_once()
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_bibtex_source_not_found(self, mock_db):
         """Test bibtex with non-existent source."""
         mock_cursor = MagicMock()
@@ -77,7 +77,7 @@ class TestCitationCommand:
     """Test the 'litdb citation' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_citation_single_source(self, mock_db):
         """Test generating citation for a single source."""
         mock_cursor = MagicMock()
@@ -92,7 +92,7 @@ class TestCitationCommand:
         mock_db.execute.assert_called_once()
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_citation_multiple_sources(self, mock_db):
         """Test generating citations for multiple sources."""
         mock_cursor = MagicMock()
@@ -131,7 +131,7 @@ class TestShowCommand:
     """Test the 'litdb show' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_show_source_found(self, mock_db):
         """Test showing an existing source."""
         mock_cursor = MagicMock()
@@ -146,7 +146,7 @@ class TestShowCommand:
         assert "Test content" in result.output
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_show_source_not_found(self, mock_db):
         """Test showing a non-existent source."""
         mock_cursor = MagicMock()
@@ -230,9 +230,9 @@ class TestAboutCommand:
 
     @pytest.mark.unit
     @patch("litdb.commands.export.os.path.getsize")
-    @patch("litdb.commands.export.get_db")
+    @patch("litdb.commands.export.get_export_db")
     @patch("litdb.commands.export.get_config")
-    def test_about_shows_stats(self, mock_config, mock_get_db, mock_getsize):
+    def test_about_shows_stats(self, mock_config, mock_get_export_db, mock_getsize):
         """Test about command shows database statistics."""
         mock_config.return_value = {"root": "/test/path"}
         mock_getsize.return_value = 1024 * 1024 * 1024  # 1 GB
@@ -241,7 +241,7 @@ class TestAboutCommand:
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = (100,)
         mock_db.execute.return_value = mock_cursor
-        mock_get_db.return_value = mock_db
+        mock_get_export_db.return_value = mock_db
 
         runner = CliRunner()
         result = runner.invoke(cli, ["about"])
@@ -255,7 +255,7 @@ class TestSqlCommand:
     """Test the 'litdb sql' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.export.db")
+    @patch("litdb.commands.export._db")
     def test_sql_basic_query(self, mock_db):
         """Test running a basic SQL query."""
         mock_cursor = MagicMock()
