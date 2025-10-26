@@ -283,7 +283,10 @@ class TestUnpaywallCommand:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "best_oa_location": {"url_for_pdf": "https://example.com/paper.pdf"}
+            "title": "Test Paper Title",
+            "journal_name": "Test Journal",
+            "is_oa": True,
+            "oa_locations": [{"url_for_pdf": "https://example.com/paper.pdf"}],
         }
         mock_requests.get.return_value = mock_response
 
@@ -291,7 +294,8 @@ class TestUnpaywallCommand:
         result = runner.invoke(cli, ["unpaywall", "10.1234/test"])
 
         assert result.exit_code == 0
-        assert "example.com" in result.output or result.exit_code == 0
+        assert "Test Paper Title" in result.output
+        assert "example.com" in result.output
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires network and Unpaywall API")
