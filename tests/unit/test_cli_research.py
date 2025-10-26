@@ -10,11 +10,20 @@ from unittest.mock import patch, MagicMock
 
 from litdb.cli import cli
 
+# Check if futurehouse_client is available
+try:
+    import futurehouse_client  # noqa: F401
+
+    HAS_FUTUREHOUSE = True
+except ImportError:
+    HAS_FUTUREHOUSE = False
+
 
 class TestFhresearchCommand:
     """Test the 'litdb fhresearch' command."""
 
     @pytest.mark.unit
+    @pytest.mark.skipif(not HAS_FUTUREHOUSE, reason="futurehouse_client not installed")
     @patch("futurehouse_client.FutureHouseClient")
     @patch("litdb.commands.research_commands.os")
     def test_fhresearch_basic(self, mock_os, mock_client):
