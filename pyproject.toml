@@ -123,7 +123,6 @@ mcp = [
 # Audio recording and transcription (requires external libraries)
 audio = [
   "pyaudio",
-  "playsound",
   "SpeechRecognition",
 ]
 
@@ -149,7 +148,6 @@ all = [
   "pillow_heif",
   "mcp[cli]",
   "pyaudio",
-  "playsound",
   "SpeechRecognition",
 ]
 
