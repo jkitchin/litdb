@@ -33,9 +33,6 @@ from .utils import get_config
 from .db import get_db
 from .openalex import get_data, get_text
 
-config = get_config()
-db = get_db()
-
 
 def research_env():
     """Set up the environment variables.
@@ -51,6 +48,7 @@ def research_env():
     Others from gpt_researcher could be supported, but I haven't used them
     myself.
     """
+    config = get_config()
     gr_config = config.get("gpt-researcher", {})
 
     # You won't always need this, but it is harmless to set here.
@@ -89,6 +87,7 @@ def research_env():
 
 def oa_query(query):
     """Get data from OpenAlex for query."""
+    config = get_config()
     url = "https://api.openalex.org/works"
 
     params = {
@@ -162,6 +161,7 @@ def litdb_documents(query):
     Returns a list of langchain Documents.
     """
     config = get_config()
+    db = get_db()
     model = SentenceTransformer(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
@@ -270,6 +270,7 @@ def refine_query(query):
     The goal is to ask some clarifying questions about the query, and then
     refine it to get a better starting point for research.
     """
+    config = get_config()
     msgs = [
         {
             "role": "system",
