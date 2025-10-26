@@ -15,7 +15,7 @@ class TestAddCommand:
     """Test the 'litdb add' command."""
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_basic(self, mock_add_work):
         """Test adding a work by DOI."""
         runner = CliRunner()
@@ -27,7 +27,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_with_full_url(self, mock_add_work):
         """Test adding a work with full DOI URL."""
         runner = CliRunner()
@@ -39,7 +39,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_with_references(self, mock_add_work):
         """Test adding a work with --references flag."""
         runner = CliRunner()
@@ -51,7 +51,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_with_citing(self, mock_add_work):
         """Test adding a work with --citing flag."""
         runner = CliRunner()
@@ -63,7 +63,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_with_related(self, mock_add_work):
         """Test adding a work with --related flag."""
         runner = CliRunner()
@@ -75,7 +75,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_doi_with_all_flag(self, mock_add_work):
         """Test adding a work with --all flag (references, citing, related)."""
         runner = CliRunner()
@@ -87,7 +87,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_work")
+    @patch("litdb.commands.manage.add_work")
     def test_add_multiple_dois(self, mock_add_work):
         """Test adding multiple DOIs at once."""
         runner = CliRunner()
@@ -99,7 +99,7 @@ class TestAddCommand:
         assert mock_add_work.call_count == 3
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_author")
+    @patch("litdb.commands.manage.add_author")
     def test_add_orcid(self, mock_add_author):
         """Test adding works from an ORCID."""
         runner = CliRunner()
@@ -109,7 +109,7 @@ class TestAddCommand:
         mock_add_author.assert_called_once_with("https://orcid.org/0000-0001-2345-6789")
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_author")
+    @patch("litdb.commands.manage.add_author")
     def test_add_openalex_author(self, mock_add_author):
         """Test adding works from an OpenAlex author ID."""
         runner = CliRunner()
@@ -119,7 +119,7 @@ class TestAddCommand:
         mock_add_author.assert_called_once_with("https://openalex.org/A1234567890")
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_bibtex")
+    @patch("litdb.commands.manage.add_bibtex")
     def test_add_bibtex_file(self, mock_add_bibtex):
         """Test adding from a bibtex file."""
         runner = CliRunner()
@@ -129,7 +129,7 @@ class TestAddCommand:
         mock_add_bibtex.assert_called_once_with("references.bib")
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_pdf")
+    @patch("litdb.commands.manage.add_pdf")
     @patch("os.path.abspath")
     def test_add_pdf_file(self, mock_abspath, mock_add_pdf):
         """Test adding a PDF file."""
@@ -141,8 +141,8 @@ class TestAddCommand:
         mock_add_pdf.assert_called_once_with("/absolute/path/paper.pdf")
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_source")
-    @patch("litdb.cli.Document")
+    @patch("litdb.commands.manage.add_source")
+    @patch("litdb.commands.manage.Document")
     @patch("os.path.abspath")
     def test_add_docx_file(self, mock_abspath, mock_document, mock_add_source):
         """Test adding a DOCX file."""
@@ -162,8 +162,8 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_source")
-    @patch("litdb.cli.get_youtube_doc")
+    @patch("litdb.commands.manage.add_source")
+    @patch("litdb.commands.manage.get_youtube_doc")
     def test_add_youtube_url(self, mock_youtube, mock_add_source):
         """Test adding a YouTube video."""
         mock_youtube.return_value = ("Transcript text", "Video title")
@@ -179,7 +179,7 @@ class TestAddCommand:
         )
 
     @pytest.mark.unit
-    @patch("litdb.cli.add_source")
+    @patch("litdb.commands.manage.add_source")
     @patch("builtins.open", new_callable=mock_open, read_data="Plain text content")
     @patch("os.path.abspath")
     def test_add_text_file(self, mock_abspath, mock_file, mock_add_source):
