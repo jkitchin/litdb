@@ -225,7 +225,7 @@ relevant. The queries will be used with sqlite fts5.
         print("Generating full text queries failed on:")
         print(content)
         print(f'The following json was extracted:\n\n"{js}"\n')
-        print("Proceeding without full text queries." " Please report this message")
+        print("Proceeding without full text queries. Please report this message")
         queries = []
 
     for i, q in enumerate(queries):

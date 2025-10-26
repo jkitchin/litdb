@@ -75,7 +75,7 @@ The following subcommands can be used:
         elif prompt == "!save":
             with open(input("Filename (chat.txt): ") or "chat.txt", "w") as f:
                 for message in messages:
-                    f.write(f'{message["role"]}: {message["content"]}\n\n')
+                    f.write(f"{message['role']}: {message['content']}\n\n")
             continue
 
         elif prompt == "!restart":
@@ -85,7 +85,7 @@ The following subcommands can be used:
 
         elif prompt == "!messages":
             for message in messages:
-                richprint(f'{message["role"]}: {message["content"]}\n\n')
+                richprint(f"{message['role']}: {message['content']}\n\n")
             continue
 
         # Run shell command to get rag content

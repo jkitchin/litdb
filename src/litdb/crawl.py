@@ -22,11 +22,11 @@ class LinkExtractorSpider(scrapy.Spider):
 
     def parse(self, response):
         """Extract all links from the response."""
-        links = response.css('a::attr(href)').getall()
+        links = response.css("a::attr(href)").getall()
         for link in links:
             # Construct absolute URL
             absolute_url = response.urljoin(link)
-            yield {'link': absolute_url}
+            yield {"link": absolute_url}
 
 
 def extract_links(root_url):
@@ -34,15 +34,18 @@ def extract_links(root_url):
     extracted_links = []
 
     def handle_item(item, response, spider):
-        extracted_links.append(item['link'])
+        extracted_links.append(item["link"])
 
     # Connect the signal handler to the item_scraped signal
     dispatcher.connect(handle_item, signal=signals.item_scraped)
 
     # Set up the crawling process
-    process = CrawlerProcess(settings={
-        # Options: CRITICAL, ERROR, WARNING, INFO, DEBUG
-        "LOG_LEVEL": "ERROR"})
+    process = CrawlerProcess(
+        settings={
+            # Options: CRITICAL, ERROR, WARNING, INFO, DEBUG
+            "LOG_LEVEL": "ERROR"
+        }
+    )
     process.crawl(LinkExtractorSpider, start_url=root_url)
     process.start()  # The script will block here until the crawling is finished
 
@@ -59,6 +62,6 @@ def spider(root):
 
         try:
             md = converter.convert(url).document.export_to_markdown()
-            add_source(url, md, {'from': 'crawl'})
+            add_source(url, md, {"from": "crawl"})
         except Exception as e:
             print(e)
