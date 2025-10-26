@@ -10,7 +10,7 @@ from .utils import get_config
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tqdm import tqdm
 import datetime
 import requests
