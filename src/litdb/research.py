@@ -27,7 +27,7 @@ import os
 from sentence_transformers import SentenceTransformer
 from gpt_researcher import GPTResearcher
 from litellm import completion
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from .utils import get_config
 from .db import get_db

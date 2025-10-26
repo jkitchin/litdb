@@ -262,7 +262,7 @@ def update_embeddings():
 
     """
     import numpy as np
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     config = get_config()
     db = get_db()
