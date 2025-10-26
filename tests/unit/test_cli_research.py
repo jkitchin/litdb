@@ -15,7 +15,7 @@ class TestFhresearchCommand:
     """Test the 'litdb fhresearch' command."""
 
     @pytest.mark.unit
-    @patch("litdb.commands.research_commands.FutureHouseClient")
+    @patch("futurehouse_client.FutureHouseClient")
     @patch("litdb.commands.research_commands.os")
     def test_fhresearch_basic(self, mock_os, mock_client):
         """Test basic FutureHouse research."""

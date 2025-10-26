@@ -61,6 +61,7 @@ def render_sidebar():
         "Navigation",
         [
             "🔍 Search",
+            "🔎 OpenAlex Search",
             "💬 Chat",
             "📚 Library Browser",
             "⚙️ Manage Filters",
@@ -159,6 +160,68 @@ def tab_search():
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Text preview:** {text[:300]}...")
 
+                    # Check if this is a DOI/OpenAlex entry to show add buttons
+                    doi = None
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            doi = extra_data.get("doi") or extra_data.get("id")
+                        except Exception:
+                            pass
+
+                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                        st.markdown("---")
+                        st.markdown("**Add Related Works:**")
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            if st.button("📚 Add References", key=f"refs_v_{i}"):
+                                with st.spinner("Adding references..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=True,
+                                            citing=False,
+                                            related=False,
+                                        )
+                                        st.success("✓ References added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col2:
+                            if st.button("📝 Add Citing", key=f"citing_v_{i}"):
+                                with st.spinner("Adding citing papers..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=True,
+                                            related=False,
+                                        )
+                                        st.success("✓ Citing papers added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col3:
+                            if st.button("🔗 Add Related", key=f"related_v_{i}"):
+                                with st.spinner("Adding related works..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=False,
+                                            related=True,
+                                        )
+                                        st.success("✓ Related works added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_v_{i}"):
                         try:
@@ -191,6 +254,68 @@ def tab_search():
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
+
+                    # Check if this is a DOI/OpenAlex entry to show add buttons
+                    doi = None
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            doi = extra_data.get("doi") or extra_data.get("id")
+                        except Exception:
+                            pass
+
+                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                        st.markdown("---")
+                        st.markdown("**Add Related Works:**")
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            if st.button("📚 Add References", key=f"refs_fts_{i}"):
+                                with st.spinner("Adding references..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=True,
+                                            citing=False,
+                                            related=False,
+                                        )
+                                        st.success("✓ References added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col2:
+                            if st.button("📝 Add Citing", key=f"citing_fts_{i}"):
+                                with st.spinner("Adding citing papers..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=True,
+                                            related=False,
+                                        )
+                                        st.success("✓ Citing papers added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col3:
+                            if st.button("🔗 Add Related", key=f"related_fts_{i}"):
+                                with st.spinner("Adding related works..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=False,
+                                            related=True,
+                                        )
+                                        st.success("✓ Related works added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
 
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_fts_{i}"):
@@ -243,6 +368,68 @@ def tab_search():
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Text preview:** {text[:200]}...")
 
+                    # Check if this is a DOI/OpenAlex entry to show add buttons
+                    doi = None
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            doi = extra_data.get("doi") or extra_data.get("id")
+                        except Exception:
+                            pass
+
+                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                        st.markdown("---")
+                        st.markdown("**Add Related Works:**")
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            if st.button("📚 Add References", key=f"refs_hv_{i}"):
+                                with st.spinner("Adding references..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=True,
+                                            citing=False,
+                                            related=False,
+                                        )
+                                        st.success("✓ References added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col2:
+                            if st.button("📝 Add Citing", key=f"citing_hv_{i}"):
+                                with st.spinner("Adding citing papers..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=True,
+                                            related=False,
+                                        )
+                                        st.success("✓ Citing papers added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col3:
+                            if st.button("🔗 Add Related", key=f"related_hv_{i}"):
+                                with st.spinner("Adding related works..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=False,
+                                            related=True,
+                                        )
+                                        st.success("✓ Related works added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_hv_{i}"):
                         try:
@@ -268,6 +455,68 @@ def tab_search():
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
 
+                    # Check if this is a DOI/OpenAlex entry to show add buttons
+                    doi = None
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+                            doi = extra_data.get("doi") or extra_data.get("id")
+                        except Exception:
+                            pass
+
+                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                        st.markdown("---")
+                        st.markdown("**Add Related Works:**")
+                        col1, col2, col3 = st.columns(3)
+
+                        with col1:
+                            if st.button("📚 Add References", key=f"refs_hf_{i}"):
+                                with st.spinner("Adding references..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=True,
+                                            citing=False,
+                                            related=False,
+                                        )
+                                        st.success("✓ References added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col2:
+                            if st.button("📝 Add Citing", key=f"citing_hf_{i}"):
+                                with st.spinner("Adding citing papers..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=True,
+                                            related=False,
+                                        )
+                                        st.success("✓ Citing papers added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
+                        with col3:
+                            if st.button("🔗 Add Related", key=f"related_hf_{i}"):
+                                with st.spinner("Adding related works..."):
+                                    from litdb.db import add_work
+
+                                    try:
+                                        add_work(
+                                            doi,
+                                            references=False,
+                                            citing=False,
+                                            related=True,
+                                        )
+                                        st.success("✓ Related works added!")
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_hf_{i}"):
                         try:
@@ -275,6 +524,181 @@ def tab_search():
                             st.json(extra_data)
                         except Exception:
                             st.text(extra)
+
+
+def tab_openalex_search():
+    """OpenAlex search tab - search OpenAlex directly and add papers."""
+    st.title("🔎 OpenAlex Search")
+
+    st.markdown(
+        """
+    Search [OpenAlex](https://openalex.org/) directly for academic papers.
+    You can add individual papers or their references, citing papers, and related works.
+    """
+    )
+
+    # Use form to allow Enter key to submit
+    with st.form("openalex_search_form"):
+        query = st.text_input("Enter your search query")
+        n_results = st.slider("Number of results", 1, 50, 10)
+        search_submitted = st.form_submit_button("Search OpenAlex")
+
+    if search_submitted:
+        if not query:
+            st.warning("Please enter a search query")
+            return
+
+        st.subheader("Results from OpenAlex")
+
+        # Search OpenAlex
+        from litdb.openalex import get_data
+
+        config = get_config()
+        url = "https://api.openalex.org/works"
+
+        params = {
+            "filter": f"default.search:{query}",
+            "mailto": config["openalex"].get("email"),
+            "per_page": n_results,
+        }
+
+        if config["openalex"].get("api_key"):
+            params["api_key"] = config["openalex"].get("api_key")
+
+        try:
+            with st.spinner("Searching OpenAlex..."):
+                data = get_data(url, params)
+
+            results = data.get("results", [])
+
+            if not results:
+                st.info("No results found")
+                return
+
+            st.success(f"Found {len(results)} papers")
+
+            for i, work in enumerate(results, 1):
+                # Extract paper info
+                title = work.get("title", "No title")
+                doi = work.get("doi") or work.get("id")
+                publication_year = work.get("publication_year")
+                citation_count = work.get("cited_by_count", 0)
+
+                # Authors
+                authors = []
+                if work.get("authorships"):
+                    authors = [
+                        a["author"]["display_name"] for a in work["authorships"][:3]
+                    ]
+                    if len(work["authorships"]) > 3:
+                        authors.append("et al.")
+
+                author_str = ", ".join(authors) if authors else "No authors"
+
+                # Build header
+                header = f"{i}. {title}"
+                if publication_year:
+                    header += f" ({publication_year})"
+
+                with st.expander(header):
+                    st.markdown(f"**Authors:** {author_str}")
+                    if doi:
+                        st.markdown(f"**DOI/ID:** {doi}")
+                    st.markdown(f"**Citations:** {citation_count}")
+
+                    # Venue
+                    if work.get("host_venue") and work["host_venue"].get(
+                        "display_name"
+                    ):
+                        st.markdown(f"**Venue:** {work['host_venue']['display_name']}")
+
+                    # Abstract preview
+                    if work.get("abstract_inverted_index"):
+                        # Reconstruct abstract from inverted index (first 200 chars)
+                        inv_index = work["abstract_inverted_index"]
+                        words = []
+                        for word, positions in sorted(
+                            inv_index.items(), key=lambda x: min(x[1]) if x[1] else 0
+                        ):
+                            words.extend([word] * len(positions))
+                        abstract = " ".join(words[:50]) + "..."
+                        st.markdown(f"**Abstract:** {abstract}")
+
+                    st.markdown("---")
+
+                    # Add buttons
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    with col1:
+                        if st.button("➕ Add to Library", key=f"add_oa_{i}"):
+                            with st.spinner("Adding paper..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        doi,
+                                        references=False,
+                                        citing=False,
+                                        related=False,
+                                    )
+                                    st.success("✓ Paper added to library!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col2:
+                        if st.button("📚 Add References", key=f"refs_oa_{i}"):
+                            with st.spinner("Adding references..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        doi,
+                                        references=True,
+                                        citing=False,
+                                        related=False,
+                                    )
+                                    st.success("✓ References added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col3:
+                        if st.button("📝 Add Citing", key=f"citing_oa_{i}"):
+                            with st.spinner("Adding citing papers..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        doi,
+                                        references=False,
+                                        citing=True,
+                                        related=False,
+                                    )
+                                    st.success("✓ Citing papers added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col4:
+                        if st.button("🔗 Add Related", key=f"related_oa_{i}"):
+                            with st.spinner("Adding related works..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        doi,
+                                        references=False,
+                                        citing=False,
+                                        related=True,
+                                    )
+                                    st.success("✓ Related works added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    # Show full metadata with toggle
+                    if st.checkbox("Show full metadata", key=f"meta_oa_{i}"):
+                        st.json(work)
+
+        except Exception as e:
+            st.error(f"Error searching OpenAlex: {e}")
 
 
 def tab_chat():
@@ -1535,8 +1959,16 @@ focus the response and ask them what they would like.""",
 
 def main():
     """Main application entry point."""
+    # Get version from package metadata
+    try:
+        from importlib.metadata import version
+
+        litdb_version = version("litdb")
+    except Exception:
+        litdb_version = "unknown"
+
     st.set_page_config(
-        page_title="LitDB",
+        page_title=f"LitDB v{litdb_version}",
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -1548,6 +1980,8 @@ def main():
     # Route to appropriate tab
     if selected_tab == "🔍 Search":
         tab_search()
+    elif selected_tab == "🔎 OpenAlex Search":
+        tab_openalex_search()
     elif selected_tab == "💬 Chat":
         tab_chat()
     elif selected_tab == "➕ Add Content":

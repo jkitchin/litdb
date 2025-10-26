@@ -17,7 +17,23 @@ import importlib
 from docling.document_converter import DocumentConverter
 from docling.exceptions import ConversionError
 import logging
-import backoff
+
+# Try to import backoff (optional dependency in crawl extra)
+try:
+    import backoff
+except ImportError:
+    # Create a no-op decorator if backoff is not available
+    class backoff:
+        @staticmethod
+        def on_exception(*args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        expo = None
+        full_jitter = None
+
 
 from .utils import get_config
 from .db import get_db
