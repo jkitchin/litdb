@@ -6,7 +6,7 @@
 <a href="https://github.com/jkitchin/litdb/actions/workflows/build.yml">
   <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Build Status">
 </a>
-<img src="https://img.shields.io/badge/tests-110_passed,_56_skipped-brightgreen" alt="Tests">
+<img src="https://img.shields.io/badge/tests-133_passed,_66_skipped-brightgreen" alt="Tests">
 #+END_HTML
 
 * litdb concept
@@ -121,6 +121,21 @@ litdb has a cli with an entry command of litdb and subcommands (like git) for in
 #+BEGIN_SRC sh :dir example
 litdb --help
 #+END_SRC
+
+** Command Organization
+
+litdb's 43 commands are organized into logical groups:
+
+- *Management*: init, add, remove, index, reindex, update_embeddings
+- *Search*: vsearch, fulltext, hybrid_search, lsearch, similar, image_search, screenshot
+- *Export*: bibtex, citation, show, visit, about, sql
+- *Tags*: add_tag, rm_tag, delete_tag, show_tag, list_tags
+- *Review*: review, summary
+- *Filters*: add_filter, rm_filter, update_filters, list_filters
+- *OpenAlex*: openalex, author_search, follow, watch, citing, related, unpaywall
+- *Research*: fhresearch, research, suggest_reviewers
+- *Data Processing*: crossref, fromtext, extract, schema, crawl
+- *Utilities*: web, audio, chat, app, version, coa
 
 ** Searching the web
 
