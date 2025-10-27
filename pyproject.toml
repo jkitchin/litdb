@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "litdb"
-version = "2.1.8"
+version = "2.1.9"
 authors = [
   {name = "John Kitchin", email = "jkitchin@andrew.cmu.edu"},
 ]
