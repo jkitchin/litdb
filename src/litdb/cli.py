@@ -21,6 +21,7 @@ from .commands import (
     research_commands,
     data_processing,
     utilities,
+    install,
 )
 
 import logging
@@ -121,6 +122,9 @@ cli.add_command(utilities.chat_command, name="chat")
 cli.add_command(utilities.app)
 cli.add_command(utilities.version)
 cli.add_command(utilities.coa)
+
+# Register install command group
+cli.add_command(install.install)
 
 
 if __name__ == "__main__":
