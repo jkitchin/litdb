@@ -73,6 +73,8 @@ def render_sidebar():
         [
             "🔍 Search",
             "🔎 OpenAlex Search",
+            "📖 Semantic Scholar Search",
+            "👥 Suggest Reviewers",
             "💬 Chat",
             "📚 Library Browser",
             "⚙️ Manage Filters",
@@ -136,30 +138,167 @@ def tab_search():
         n_results = st.slider("Number of results", 1, 20, 5)
         search_submitted = st.form_submit_button("Search")
 
+    # Store search parameters in session state
     if search_submitted:
         if not query:
             st.warning("Please enter a search query")
             return
 
+        st.session_state.last_search_query = query
+        st.session_state.last_search_type = search_type
+        st.session_state.last_n_results = n_results
+
+    # Check for iteration button click BEFORE determining should_search
+    # This handles the case where button triggers iteration -> rerun -> search
+    iteration_requested = st.session_state.get("run_iteration", False)
+
+    if iteration_requested:
+        st.session_state.run_iteration = False  # Clear the flag
+
+        # Process the iteration
+        from litdb.db import add_work
+
+        last_results = st.session_state.get("last_search_results", [])
+
+        if last_results:
+            # Show progress
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Collect DOIs from last results
+            dois_to_process = []
+            for result in last_results:
+                source, text, extra = result[0], result[1], result[2]
+                if extra:
+                    try:
+                        extra_data = json.loads(extra)
+                        doi = extra_data.get("doi") or extra_data.get("id")
+                        if doi and (doi.startswith("http") or doi.startswith("10.")):
+                            dois_to_process.append(doi)
+                    except Exception:
+                        pass
+
+            processed = 0
+            total = len(dois_to_process)
+
+            # Create a container for detailed status
+            status_container = st.container()
+
+            for idx, doi in enumerate(dois_to_process, 1):
+                with status_container:
+                    status_text.markdown(f"""
+**Processing paper {idx}/{total}**
+DOI: `{doi}`
+Adding: references, citations, and related works...
+                    """)
+                try:
+                    add_work(doi, references=True, citing=True, related=True)
+                    processed += 1
+                    with status_container:
+                        st.success(f"✓ Completed paper {idx}/{total}")
+                except Exception as e:
+                    with status_container:
+                        st.error(f"✗ Could not process {doi}: {e}")
+
+                progress_bar.progress(idx / total)
+
+            if processed > 0:
+                # Store iteration status for display
+                st.session_state.iteration_status = {
+                    "processed": processed,
+                    "total": total,
+                }
+
+                status_text.text(
+                    f"✓ Completed! Processed {processed}/{total} papers. "
+                    f"Refreshing search results..."
+                )
+
+                # Set flag to rerun search
+                st.session_state.rerun_search = True
+
+                # Small delay to show completion
+                import time
+
+                time.sleep(0.5)
+
+                # Clear progress indicators before rerun
+                progress_bar.empty()
+                status_text.empty()
+
+                # Trigger rerun to execute the search with new data
+                st.rerun()
+            else:
+                progress_bar.empty()
+                status_text.empty()
+                st.warning("No papers could be processed for iteration.")
+
+    # Check if we should run a search (either from form or after iteration)
+    # Also show search results if we have previous search parameters (so button stays visible)
+    has_previous_search = "last_search_query" in st.session_state
+    should_search = (
+        search_submitted
+        or st.session_state.get("rerun_search", False)
+        or has_previous_search
+    )
+
+    if should_search:
+        # Determine if we need to actually run a query or just show previous results
+        should_run_query = search_submitted or st.session_state.get(
+            "rerun_search", False
+        )
+
+        # Clear the rerun flag if it was set
+        if st.session_state.get("rerun_search", False):
+            st.session_state.rerun_search = False
+
+        # Use stored parameters if available
+        query = st.session_state.get("last_search_query", query)
+        search_type = st.session_state.get("last_search_type", search_type)
+        n_results = st.session_state.get("last_n_results", n_results)
+
         st.subheader("Results")
 
+        # Display iteration status banner if available
+        if "iteration_status" in st.session_state:
+            status = st.session_state.iteration_status
+            st.success(
+                f"✓ Iteration completed: Added references, citations, and related works for "
+                f"{status['processed']} of {status['total']} papers. "
+                f"Results updated below."
+            )
+            # Clear the status after displaying
+            del st.session_state.iteration_status
+
+        # ===== DISPLAY RESULTS (from fresh query or cache) =====
         if search_type == "Vector Search":
-            # Vector search - we need to compute embedding first
-            from sentence_transformers import SentenceTransformer
-            import numpy as np
+            # Execute query if needed
+            if should_run_query:
+                # Vector search - we need to compute embedding first
+                from sentence_transformers import SentenceTransformer
+                import numpy as np
 
-            config = get_config()
-            model = SentenceTransformer(config["embedding"]["model"])
-            emb = model.encode([query]).astype(np.float32).tobytes()
+                config = get_config()
+                model = SentenceTransformer(config["embedding"]["model"])
+                emb = model.encode([query]).astype(np.float32).tobytes()
 
-            results = db.execute(
-                """SELECT sources.source, sources.text, sources.extra,
-                   vector_distance_cos(?, embedding) as d
-                   FROM vector_top_k('embedding_idx', ?, ?)
-                   JOIN sources ON sources.rowid = id""",
-                [emb, emb, n_results],
-            ).fetchall()
+                results = db.execute(
+                    """SELECT sources.source, sources.text, sources.extra,
+                       vector_distance_cos(?, embedding) as d
+                       FROM vector_top_k('embedding_idx', ?, ?)
+                       JOIN sources ON sources.rowid = id""",
+                    [emb, emb, n_results],
+                ).fetchall()
 
+                # Store results in session state
+                st.session_state.last_search_results = results
+            else:
+                # Use cached results
+                results = st.session_state.get("last_search_results", [])
+                if not results:
+                    st.warning("No cached results available")
+
+            # Display results
             for i, (source, text, extra, distance) in enumerate(results, 1):
                 citation = format_citation(extra)
                 title = citation if citation else source
@@ -170,6 +309,31 @@ def tab_search():
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Text preview:** {text[:300]}...")
+
+                    # Add copy buttons for citation and BibTeX
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+
+                            # Citation copy button
+                            if citation:
+                                st.markdown("---")
+                                st.markdown("**📋 Copy Citation:**")
+                                st.code(citation, language="text")
+
+                            # BibTeX copy button
+                            from litdb.bibtex import dump_bibtex
+
+                            bibtex = dump_bibtex(extra_data)
+                            if bibtex:
+                                st.markdown("**📋 Copy BibTeX:**")
+                                st.code(bibtex, language="bibtex")
+                        except Exception as e:
+                            st.error(
+                                f"Error generating copy buttons: {e}"
+                            )  # Show error for debugging
+                    else:
+                        st.warning("No metadata available for copy buttons")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -242,19 +406,30 @@ def tab_search():
                             st.text(extra)
 
         elif search_type == "Full-Text Search":
-            # Full-text search
-            results = db.execute(
-                """SELECT sources.source, sources.text,
-                   snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet,
-                   sources.extra
-                   FROM fulltext
-                   INNER JOIN sources ON fulltext.source = sources.source
-                   WHERE fulltext.text MATCH ?
-                   ORDER BY rank
-                   LIMIT ?""",
-                [query, n_results],
-            ).fetchall()
+            # Execute query if needed
+            if should_run_query:
+                # Full-text search
+                results = db.execute(
+                    """SELECT sources.source, sources.text,
+                       snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet,
+                       sources.extra
+                       FROM fulltext
+                       INNER JOIN sources ON fulltext.source = sources.source
+                       WHERE fulltext.text MATCH ?
+                       ORDER BY rank
+                       LIMIT ?""",
+                    [query, n_results],
+                ).fetchall()
 
+                # Store results in session state
+                st.session_state.last_search_results = results
+            else:
+                # Use cached results
+                results = st.session_state.get("last_search_results", [])
+                if not results:
+                    st.warning("No cached results available")
+
+            # Display results
             for i, (source, text, snippet, extra) in enumerate(results, 1):
                 citation = format_citation(extra)
                 title = citation if citation else source
@@ -265,6 +440,31 @@ def tab_search():
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
+
+                    # Add copy buttons for citation and BibTeX
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+
+                            # Citation copy button
+                            if citation:
+                                st.markdown("---")
+                                st.markdown("**📋 Copy Citation:**")
+                                st.code(citation, language="text")
+
+                            # BibTeX copy button
+                            from litdb.bibtex import dump_bibtex
+
+                            bibtex = dump_bibtex(extra_data)
+                            if bibtex:
+                                st.markdown("**📋 Copy BibTeX:**")
+                                st.code(bibtex, language="bibtex")
+                        except Exception as e:
+                            st.error(
+                                f"Error generating copy buttons: {e}"
+                            )  # Show error for debugging
+                    else:
+                        st.warning("No metadata available for copy buttons")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -339,33 +539,47 @@ def tab_search():
         elif search_type == "Hybrid Search":
             st.info("Hybrid search combines vector and full-text results")
 
-            # Vector search
-            from sentence_transformers import SentenceTransformer
-            import numpy as np
+            # Execute queries if needed
+            if should_run_query:
+                # Vector search
+                from sentence_transformers import SentenceTransformer
+                import numpy as np
 
-            config = get_config()
-            model = SentenceTransformer(config["embedding"]["model"])
-            emb = model.encode([query]).astype(np.float32).tobytes()
+                config = get_config()
+                model = SentenceTransformer(config["embedding"]["model"])
+                emb = model.encode([query]).astype(np.float32).tobytes()
 
-            vector_results = db.execute(
-                """SELECT sources.source, sources.text, sources.extra,
-                   vector_distance_cos(?, embedding) as d
-                   FROM vector_top_k('embedding_idx', ?, ?)
-                   JOIN sources ON sources.rowid = id""",
-                [emb, emb, n_results],
-            ).fetchall()
+                vector_results = db.execute(
+                    """SELECT sources.source, sources.text, sources.extra,
+                       vector_distance_cos(?, embedding) as d
+                       FROM vector_top_k('embedding_idx', ?, ?)
+                       JOIN sources ON sources.rowid = id""",
+                    [emb, emb, n_results],
+                ).fetchall()
 
-            # Full-text search
-            fts_results = db.execute(
-                """SELECT sources.source, sources.text,
-                   snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet
-                   FROM fulltext
-                   INNER JOIN sources ON fulltext.source = sources.source
-                   WHERE fulltext.text MATCH ?
-                   ORDER BY rank
-                   LIMIT ?""",
-                [query, n_results],
-            ).fetchall()
+                # Full-text search
+                fts_results = db.execute(
+                    """SELECT sources.source, sources.text,
+                       snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet
+                       FROM fulltext
+                       INNER JOIN sources ON fulltext.source = sources.source
+                       WHERE fulltext.text MATCH ?
+                       ORDER BY rank
+                       LIMIT ?""",
+                    [query, n_results],
+                ).fetchall()
+
+                # Store both results in session state
+                st.session_state.last_search_results = (
+                    vector_results  # For iterative search
+                )
+                st.session_state.last_hybrid_fts_results = fts_results
+            else:
+                # Use cached results
+                vector_results = st.session_state.get("last_search_results", [])
+                fts_results = st.session_state.get("last_hybrid_fts_results", [])
+                if not vector_results and not fts_results:
+                    st.warning("No cached results available")
 
             st.markdown("**Vector Search Results:**")
             for i, (source, text, extra, distance) in enumerate(vector_results, 1):
@@ -378,6 +592,31 @@ def tab_search():
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Text preview:** {text[:200]}...")
+
+                    # Add copy buttons for citation and BibTeX
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+
+                            # Citation copy button
+                            if citation:
+                                st.markdown("---")
+                                st.markdown("**📋 Copy Citation:**")
+                                st.code(citation, language="text")
+
+                            # BibTeX copy button
+                            from litdb.bibtex import dump_bibtex
+
+                            bibtex = dump_bibtex(extra_data)
+                            if bibtex:
+                                st.markdown("**📋 Copy BibTeX:**")
+                                st.code(bibtex, language="bibtex")
+                        except Exception as e:
+                            st.error(
+                                f"Error generating copy buttons: {e}"
+                            )  # Show error for debugging
+                    else:
+                        st.warning("No metadata available for copy buttons")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -466,6 +705,31 @@ def tab_search():
                     st.markdown(f"**Source:** {source}")
                     st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
 
+                    # Add copy buttons for citation and BibTeX
+                    if extra:
+                        try:
+                            extra_data = json.loads(extra)
+
+                            # Citation copy button
+                            if citation:
+                                st.markdown("---")
+                                st.markdown("**📋 Copy Citation:**")
+                                st.code(citation, language="text")
+
+                            # BibTeX copy button
+                            from litdb.bibtex import dump_bibtex
+
+                            bibtex = dump_bibtex(extra_data)
+                            if bibtex:
+                                st.markdown("**📋 Copy BibTeX:**")
+                                st.code(bibtex, language="bibtex")
+                        except Exception as e:
+                            st.error(
+                                f"Error generating copy buttons: {e}"
+                            )  # Show error for debugging
+                    else:
+                        st.warning("No metadata available for copy buttons")
+
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
                     if extra:
@@ -535,6 +799,19 @@ def tab_search():
                             st.json(extra_data)
                         except Exception:
                             st.text(extra)
+
+        # Add iterative search button for Vector and Hybrid searches
+        if search_type in ["Vector Search", "Hybrid Search"]:
+            st.markdown("---")
+            st.markdown("### 🔄 Iterative Search")
+            st.markdown(
+                "Run one iteration to add references, citations, and related works from current results, then re-search for better matches."
+            )
+
+            if st.button("▶️ Run One Iteration"):
+                # Set flag to trigger iteration processing on next rerun
+                st.session_state.run_iteration = True
+                st.rerun()
 
 
 def tab_openalex_search():
@@ -712,6 +989,392 @@ def tab_openalex_search():
             st.error(f"Error searching OpenAlex: {e}")
 
 
+def tab_semantic_scholar_search():
+    """Semantic Scholar search tab - search Semantic Scholar directly and add papers."""
+    st.title("📖 Semantic Scholar Search")
+
+    st.markdown(
+        """
+    Search [Semantic Scholar](https://www.semanticscholar.org/) directly for academic papers.
+    You can add individual papers or their references, citing papers, and related works.
+    """
+    )
+
+    # Use form to allow Enter key to submit
+    with st.form("semantic_scholar_search_form"):
+        query = st.text_input("Enter your search query")
+        n_results = st.slider("Number of results", 1, 50, 10)
+        search_submitted = st.form_submit_button("Search Semantic Scholar")
+
+    if search_submitted:
+        if not query:
+            st.warning("Please enter a search query")
+            return
+
+        st.subheader("Results from Semantic Scholar")
+
+        # Search Semantic Scholar
+        import requests
+
+        url = "https://api.semanticscholar.org/graph/v1/paper/search"
+
+        params = {
+            "query": query,
+            "limit": n_results,
+            "fields": "title,authors,year,citationCount,externalIds,abstract,venue",
+        }
+
+        # Add API key if available in config
+        headers = {}
+        config = get_config()
+        if "semantic-scholar" in config and "api_key" in config["semantic-scholar"]:
+            api_key = config["semantic-scholar"]["api_key"]
+            if api_key:
+                headers["x-api-key"] = api_key
+
+        try:
+            with st.spinner("Searching Semantic Scholar..."):
+                response = requests.get(url, params=params, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+            results = data.get("data", [])
+
+            if not results:
+                st.info("No results found")
+                return
+
+            st.success(f"Found {len(results)} papers")
+
+            for i, paper in enumerate(results, 1):
+                # Extract paper info
+                title = paper.get("title", "No title")
+                publication_year = paper.get("year")
+                citation_count = paper.get("citationCount", 0)
+                venue = paper.get("venue", "")
+
+                # Get DOI from external IDs
+                external_ids = paper.get("externalIds", {})
+                doi = external_ids.get("DOI")
+                arxiv_id = external_ids.get("ArXiv")
+
+                # Authors
+                authors = []
+                if paper.get("authors"):
+                    authors = [a["name"] for a in paper["authors"][:3]]
+                    if len(paper["authors"]) > 3:
+                        authors.append("et al.")
+
+                author_str = ", ".join(authors) if authors else "No authors"
+
+                # Build header
+                header = f"{i}. {title}"
+                if publication_year:
+                    header += f" ({publication_year})"
+
+                with st.expander(header):
+                    st.markdown(f"**Authors:** {author_str}")
+                    if doi:
+                        st.markdown(f"**DOI:** {doi}")
+                    elif arxiv_id:
+                        st.markdown(f"**arXiv:** {arxiv_id}")
+                    if venue:
+                        st.markdown(f"**Venue:** {venue}")
+                    st.markdown(f"**Citations:** {citation_count}")
+
+                    # Abstract
+                    abstract = paper.get("abstract")
+                    if abstract:
+                        if st.checkbox("📄 Show Abstract", key=f"abstract_ss_{i}"):
+                            st.write(abstract)
+
+                    # Add paper button
+                    st.markdown("---")
+                    st.markdown("**Add to Library:**")
+
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    with col1:
+                        # Determine what ID to use (prefer DOI)
+                        paper_id = None
+                        if doi:
+                            paper_id = (
+                                f"https://doi.org/{doi}"
+                                if not doi.startswith("http")
+                                else doi
+                            )
+                        elif arxiv_id:
+                            paper_id = f"https://arxiv.org/abs/{arxiv_id}"
+
+                        if paper_id and st.button("➕ Add Paper", key=f"add_ss_{i}"):
+                            with st.spinner("Adding paper..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        paper_id,
+                                        references=False,
+                                        citing=False,
+                                        related=False,
+                                    )
+                                    st.success("✓ Paper added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col2:
+                        if paper_id and st.button(
+                            "📚 Add References", key=f"refs_ss_{i}"
+                        ):
+                            with st.spinner("Adding references..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        paper_id,
+                                        references=True,
+                                        citing=False,
+                                        related=False,
+                                    )
+                                    st.success("✓ References added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col3:
+                        if paper_id and st.button(
+                            "📝 Add Citing", key=f"citing_ss_{i}"
+                        ):
+                            with st.spinner("Adding citing papers..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        paper_id,
+                                        references=False,
+                                        citing=True,
+                                        related=False,
+                                    )
+                                    st.success("✓ Citing papers added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    with col4:
+                        if paper_id and st.button(
+                            "🔗 Add Related", key=f"related_ss_{i}"
+                        ):
+                            with st.spinner("Adding related works..."):
+                                from litdb.db import add_work
+
+                                try:
+                                    add_work(
+                                        paper_id,
+                                        references=False,
+                                        citing=False,
+                                        related=True,
+                                    )
+                                    st.success("✓ Related works added!")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+
+                    # Show full metadata with toggle
+                    if st.checkbox("Show full metadata", key=f"meta_ss_{i}"):
+                        st.json(paper)
+
+        except Exception as e:
+            st.error(f"Error searching Semantic Scholar: {e}")
+
+
+def tab_suggest_reviewers():
+    """Suggest Reviewers tab - find potential reviewers based on similar papers."""
+    st.title("👥 Suggest Reviewers")
+
+    st.markdown(
+        """
+    Find potential reviewers by searching for papers similar to your topic.
+    The system will identify authors from the most relevant papers in your database
+    and rank them by h-index and number of relevant publications.
+    """
+    )
+
+    # Use form to allow Enter key to submit
+    with st.form("suggest_reviewers_form"):
+        query = st.text_input(
+            "Enter your research topic or abstract",
+            help="Describe your research to find authors who have published similar work",
+        )
+        n_papers = st.slider("Number of similar papers to analyze", 5, 20, 10)
+        search_submitted = st.form_submit_button("Find Reviewers")
+
+    if search_submitted:
+        if not query:
+            st.warning("Please enter a research topic or query")
+            return
+
+        st.subheader("Results")
+
+        try:
+            # Perform vector search to find similar papers
+            from sentence_transformers import SentenceTransformer
+            import numpy as np
+            from collections import Counter
+            from more_itertools import batched
+
+            config = get_config()
+            db = get_db()
+
+            with st.spinner("Searching for similar papers..."):
+                model = SentenceTransformer(config["embedding"]["model"])
+                emb = model.encode([query]).astype(np.float32).tobytes()
+
+                results = db.execute(
+                    """SELECT sources.source, sources.text, sources.extra,
+                       vector_distance_cos(?, embedding) as d
+                       FROM vector_top_k('embedding_idx', ?, ?)
+                       JOIN sources ON sources.rowid = id""",
+                    [emb, emb, n_papers],
+                ).fetchall()
+
+            if not results:
+                st.warning("No similar papers found in your database")
+                return
+
+            st.markdown(f"**Found {len(results)} similar papers**")
+
+            # Show the papers that were used
+            with st.expander("📄 View similar papers used for reviewer suggestions"):
+                for i, (source, text, extra, distance) in enumerate(results, 1):
+                    citation = format_citation(extra) if extra else None
+                    st.markdown(
+                        f"{i}. {citation or source} (similarity: {1 - distance:.3f})"
+                    )
+
+            # Collect authors from matching papers
+            with st.spinner("Analyzing authors from similar papers..."):
+                authors = []
+                for source, text, extra, distance in results:
+                    if extra:
+                        try:
+                            d = json.loads(extra)
+                            for authorship in d.get("authorships", []):
+                                author_id = authorship.get("author", {}).get("id")
+                                if author_id:
+                                    authors.append(author_id)
+                        except Exception:
+                            pass
+
+                # Count occurrences
+                author_counts = Counter(authors)
+
+                if not author_counts:
+                    st.warning("No author information found in the similar papers")
+                    return
+
+            # Get author information from OpenAlex
+            with st.spinner(
+                f"Fetching details for {len(author_counts)} unique authors..."
+            ):
+                from litdb.openalex import get_data
+
+                author_data = []
+
+                # Process authors in batches of 50
+                for batch in batched(author_counts.keys(), 50):
+                    url = (
+                        f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
+                    )
+                    params = {
+                        "per-page": 50,
+                        "mailto": config.get("openalex", {}).get("email", ""),
+                    }
+
+                    r = get_data(url, params)
+
+                    for d in r.get("results", []):
+                        # Get institution
+                        lki = d.get("last_known_institutions", [])
+                        if lki and len(lki) >= 1:
+                            institution = lki[0].get("display_name", "Unknown")
+                        else:
+                            affils = d.get("affiliations", [])
+                            if affils and len(affils) >= 1:
+                                institution = (
+                                    affils[0]
+                                    .get("institution", {})
+                                    .get("display_name", "Unknown")
+                                )
+                            else:
+                                institution = "Unknown"
+
+                        author_data.append(
+                            {
+                                "name": d.get("display_name", "Unknown"),
+                                "papers": author_counts[d["id"]],
+                                "h_index": d.get("summary_stats", {}).get("h_index", 0),
+                                "id": d["id"],
+                                "institution": institution,
+                                "works_count": d.get("works_count", 0),
+                            }
+                        )
+
+            # Sort by h-index (primary) and number of papers (secondary)
+            author_data.sort(key=lambda x: (x["h_index"], x["papers"]), reverse=True)
+
+            # Display results
+            st.markdown("### 🎯 Suggested Reviewers")
+            st.markdown(
+                f"*Ranked by h-index and number of relevant publications ({len(author_data)} total)*"
+            )
+
+            # Create a nice table
+            for i, author in enumerate(author_data[:20], 1):  # Show top 20
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([3, 1, 1, 2])
+
+                    with col1:
+                        st.markdown(f"**{i}. {author['name']}**")
+                        st.caption(author["institution"])
+
+                    with col2:
+                        st.metric("H-Index", author["h_index"])
+
+                    with col3:
+                        st.metric("Relevant Papers", author["papers"])
+
+                    with col4:
+                        st.caption(f"Total works: {author['works_count']}")
+                        # Make the OpenAlex ID clickable
+                        oa_url = author["id"].replace(
+                            "https://openalex.org/", "https://openalex.org/authors/"
+                        )
+                        st.markdown(f"[View Profile]({oa_url})")
+
+                    st.markdown("---")
+
+            # Optionally show full table for download
+            with st.expander("📊 View full data table"):
+                import pandas as pd
+
+                df = pd.DataFrame(author_data)
+                st.dataframe(
+                    df[["name", "papers", "h_index", "works_count", "institution"]],
+                    use_container_width=True,
+                )
+
+                # Add download button
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="suggested_reviewers.csv",
+                    mime="text/csv",
+                )
+
+        except Exception as e:
+            st.error(f"Error suggesting reviewers: {e}")
+            import traceback
+
+            st.code(traceback.format_exc())
+
+
 def tab_chat():
     """Chat tab with RAG functionality (original chat interface)."""
     st.title("💬 Chat with Your Library")
@@ -844,7 +1507,6 @@ def tab_add_content():
 
         if fromtext_submitted:
             if text_input:
-                import json
                 import requests
                 from difflib import SequenceMatcher
                 from litdb.chat import get_completion
@@ -2017,6 +2679,10 @@ def main():
         tab_search()
     elif selected_tab == "🔎 OpenAlex Search":
         tab_openalex_search()
+    elif selected_tab == "📖 Semantic Scholar Search":
+        tab_semantic_scholar_search()
+    elif selected_tab == "👥 Suggest Reviewers":
+        tab_suggest_reviewers()
     elif selected_tab == "💬 Chat":
         tab_chat()
     elif selected_tab == "➕ Add Content":
