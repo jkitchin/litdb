@@ -5,7 +5,7 @@ Focus on testing the robust_json_parse function which handles LLM output.
 
 import pytest
 
-from litdb.summary import robust_json_parse, ARTICLE_TYPES
+from litdb.summary import robust_json_parse, ARTICLE_TYPES, format_org_mode
 
 
 class TestRobustJsonParse:
@@ -222,3 +222,67 @@ class TestGenerateSummaryPlaceholder:
         """Test full summary generation workflow."""
         # TODO: Implement with mocked LLM and test database
         pass
+
+
+class TestFormatOrgMode:
+    """Test the format_org_mode function."""
+
+    @pytest.mark.unit
+    def test_empty_categories_not_printed(self):
+        """Test that categories with no articles are not included in output."""
+        # Create a topic structure with 3 main topics
+        topic_structure = {
+            "Machine Learning": ["neural networks", "deep learning"],
+            "Climate Science": ["climate modeling", "carbon emissions"],
+            "Quantum Computing": ["qubits", "quantum algorithms"],
+        }
+
+        # Create classified articles - only for Machine Learning and Climate Science
+        # Quantum Computing has no articles
+        classified_articles = {
+            "Machine Learning": {
+                "neural networks": [
+                    (
+                        "doi:10.1234/ml1",
+                        "Text about neural networks",
+                        {"citation": "Smith et al. 2024, Neural Networks Today"},
+                    )
+                ]
+            },
+            "Climate Science": {
+                "carbon emissions": [
+                    (
+                        "doi:10.1234/climate1",
+                        "Text about carbon",
+                        {"citation": "Jones et al. 2024, Climate Journal"},
+                    )
+                ]
+            },
+            # Note: Quantum Computing is NOT in classified_articles
+        }
+
+        # Create summaries only for topics that have articles
+        summaries = {
+            (
+                "Machine Learning",
+                "neural networks",
+            ): "Summary of neural networks research.",
+            (
+                "Climate Science",
+                "carbon emissions",
+            ): "Summary of carbon emissions research.",
+        }
+
+        # Format the newsletter
+        result = format_org_mode(topic_structure, classified_articles, summaries)
+
+        # Verify output
+        assert "Machine Learning" in result, "Should include Machine Learning category"
+        assert "Climate Science" in result, "Should include Climate Science category"
+        assert "Quantum Computing" not in result, (
+            "Should NOT include empty Quantum Computing category"
+        )
+        assert "neural networks" in result
+        assert "carbon emissions" in result
+        assert "qubits" not in result
+        assert "quantum algorithms" not in result
