@@ -62,7 +62,13 @@ def install_claude_skill():
     default=None,
     help="Path to litdb database. If not specified, uses the current database from config.",
 )
-def install_mcp_server(db):
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    help="Skip confirmation prompt and install immediately.",
+)
+def install_mcp_server(db, yes):
     """Install the litdb MCP server for Claude Desktop.
 
     This configures Claude Desktop to use litdb as an MCP server.
@@ -73,20 +79,28 @@ def install_mcp_server(db):
 
         try:
             config = get_config()
-            litdb_root = config.get("LITDB_ROOT")
-            if litdb_root:
-                db = os.path.join(litdb_root, "litdb.libsql")
+            root = config.get("root")
+            if root:
+                db = os.path.join(root, "litdb.libsql")
             else:
                 richprint(
-                    "[red]Error: No database path specified and LITDB_ROOT not in config[/red]"
+                    "[red]Error: Could not determine database location from config[/red]"
                 )
                 richprint(
-                    "[yellow]Use --db option to specify the database path[/yellow]"
+                    "[yellow]Run this command from a directory with litdb.toml or set LITDB_ROOT[/yellow]"
+                )
+                richprint(
+                    "[yellow]Or use --db option to specify the database path explicitly[/yellow]"
                 )
                 raise click.Abort()
         except SystemExit:
             richprint("[red]Error: Could not load litdb config[/red]")
-            richprint("[yellow]Use --db option to specify the database path[/yellow]")
+            richprint(
+                "[yellow]Make sure you are in a directory with litdb.toml[/yellow]"
+            )
+            richprint(
+                "[yellow]Or use --db option to specify the database path explicitly[/yellow]"
+            )
             raise click.Abort()
 
     # Expand path
@@ -95,7 +109,27 @@ def install_mcp_server(db):
 
     if not os.path.exists(db):
         richprint(f"[red]Error: Database not found at {db}[/red]")
+        richprint(
+            "[yellow]Make sure the database exists before installing the MCP server[/yellow]"
+        )
         raise click.Abort()
+
+    # Get database size for display
+    db_size_mb = os.path.getsize(db) / (1024 * 1024)
+
+    # Show details and ask for confirmation
+    richprint("\n[bold]MCP Server Installation Details:[/bold]")
+    richprint(f"[blue]Database path:[/blue] {db}")
+    richprint(f"[blue]Database size:[/blue] {db_size_mb:.2f} MB")
+
+    if not yes:
+        richprint(
+            "\n[yellow]This will configure Claude Desktop to use this litdb database.[/yellow]"
+        )
+        confirm = input("Continue with installation? (y/N): ")
+        if not confirm.lower().startswith("y"):
+            richprint("[yellow]Installation cancelled[/yellow]")
+            raise click.Abort()
 
     # Get Claude Desktop config file path based on platform
     if platform.system() == "Darwin":
