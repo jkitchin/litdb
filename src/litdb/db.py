@@ -13,7 +13,6 @@ from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tqdm import tqdm
 import datetime
-import requests
 import bibtexparser
 from rich import print
 
@@ -157,18 +156,76 @@ def add_source(source, text, extra=None):
     db.commit()
 
 
-def get_citation(doi):
-    """Get a citation string for doi."""
-    config = get_config()
-    citeas = "https://api.citeas.org/product/"
-    cp = {"mailto": config["openalex"]["email"]}
+def get_citation(openalex_data):
+    """Generate a citation string from OpenAlex metadata with full author list.
 
-    resp = requests.get(citeas + doi, cp)
-    if resp.status_code == 200:
-        cdata = resp.json()
-        citations = cdata.get("citations", [])
-        return citations[0]["citation"]
-    else:
+    Args:
+        openalex_data: dict containing OpenAlex work metadata
+
+    Returns:
+        str: formatted citation with all authors
+    """
+    if not openalex_data:
+        return None
+
+    try:
+        parts = []
+
+        # Title
+        title = openalex_data.get("title") or openalex_data.get("display_name")
+        if title:
+            parts.append(title)
+
+        # All authors (not truncated!)
+        if openalex_data.get("authorships"):
+            authors = [
+                a["author"]["display_name"]
+                for a in openalex_data["authorships"]
+                if a.get("author", {}).get("display_name")
+            ]
+            if authors:
+                parts.append(", ".join(authors))
+
+        # Journal/venue
+        host_venue = openalex_data.get("host_venue") or {}
+        venue = host_venue.get("display_name")
+        if venue:
+            parts.append(venue)
+
+        # Volume and issue
+        biblio = openalex_data.get("biblio") or {}
+        volume = biblio.get("volume")
+        issue = biblio.get("issue")
+
+        if volume and issue:
+            parts.append(f"{volume}({issue})")
+        elif volume:
+            parts.append(str(volume))
+
+        # Pages
+        first_page = biblio.get("first_page")
+        last_page = biblio.get("last_page")
+        if first_page and last_page:
+            parts.append(f"{first_page}-{last_page}")
+        elif first_page:
+            parts.append(str(first_page))
+
+        # Year
+        year = openalex_data.get("publication_year")
+        if year:
+            parts.append(f"({year})")
+
+        # DOI or URL
+        doi = openalex_data.get("doi")
+        if doi:
+            parts.append(doi)
+        elif openalex_data.get("id"):
+            parts.append(openalex_data["id"])
+
+        return " ".join(parts) if parts else None
+
+    except Exception as e:
+        print(f"Error generating citation: {e}")
         return None
 
 
@@ -197,7 +254,7 @@ def add_work(workid, references=False, citing=False, related=False):
         print(f"No id found for {workid}.\n{data}")
         return
 
-    data["citation"] = get_citation(workid)
+    data["citation"] = get_citation(data)
     data["bibtex"] = dump_bibtex(data)
 
     add_source(workid, get_text(data), data)
@@ -210,7 +267,7 @@ def add_work(workid, references=False, citing=False, related=False):
                 print(f"Something failed for {wid}. continuing")
                 continue
             text = get_text(rdata)
-            rdata["citation"] = get_citation(source)
+            rdata["citation"] = get_citation(rdata)
             rdata["bibtex"] = dump_bibtex(rdata)
             add_source(source, text, rdata)
 
@@ -222,7 +279,7 @@ def add_work(workid, references=False, citing=False, related=False):
                 print(f"Something failed for {wid}. continuing")
                 continue
             text = get_text(rdata)
-            rdata["citation"] = get_citation(source)
+            rdata["citation"] = get_citation(rdata)
             rdata["bibtex"] = dump_bibtex(rdata)
             add_source(source, text, rdata)
 
@@ -252,7 +309,7 @@ def add_work(workid, references=False, citing=False, related=False):
             for work in tqdm(cdata["results"]):
                 source = work.get("doi") or work["id"]
                 text = get_text(work)
-                work["citation"] = get_citation(source)
+                work["citation"] = get_citation(work)
                 work["bibtex"] = dump_bibtex(work)
                 add_source(source, text, work)
 
@@ -334,7 +391,7 @@ def update_filter(f, last_updated=None, silent=False):
 
         for work in tqdm(data["results"], disable=silent):
             source = work.get("doi") or work.get("id")
-            citation = get_citation(source)
+            citation = get_citation(work)
             work["citation"] = citation
 
             bibtex = dump_bibtex(work)

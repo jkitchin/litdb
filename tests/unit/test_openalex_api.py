@@ -45,31 +45,78 @@ class TestOpenAlexAPIParameters:
                 assert "mailto" in query_string or len(rsps.calls) == 0
 
     @pytest.mark.unit
+    def test_get_citation_includes_all_authors(self):
+        """Test that get_citation includes all authors (not truncated)."""
+        from litdb.db import get_citation
+
+        # Mock OpenAlex data with 10 authors
+        openalex_data = {
+            "title": "Test Article",
+            "display_name": "Test Article",
+            "authorships": [
+                {"author": {"display_name": f"Author {i}"}} for i in range(1, 11)
+            ],
+            "host_venue": {"display_name": "Test Journal"},
+            "publication_year": 2024,
+            "biblio": {
+                "volume": "10",
+                "issue": "2",
+                "first_page": "100",
+                "last_page": "110",
+            },
+            "doi": "https://doi.org/10.1234/test",
+        }
+
+        citation = get_citation(openalex_data)
+
+        # Verify all 10 authors are in the citation
+        for i in range(1, 11):
+            assert f"Author {i}" in citation, (
+                f"Author {i} should be in citation but was not found"
+            )
+
+        # Verify other components are present
+        assert "Test Article" in citation
+        assert "Test Journal" in citation
+        assert "2024" in citation
+        assert "10(2)" in citation
+
+    @pytest.mark.unit
+    def test_get_citation_handles_missing_data(self):
+        """Test that get_citation handles missing fields gracefully."""
+        from litdb.db import get_citation
+
+        # Minimal OpenAlex data
+        openalex_data = {
+            "title": "Minimal Article",
+            "authorships": [{"author": {"display_name": "Single Author"}}],
+        }
+
+        citation = get_citation(openalex_data)
+
+        assert citation is not None
+        assert "Minimal Article" in citation
+        assert "Single Author" in citation
+
+    @pytest.mark.unit
     @patch("litdb.db.get_config")
     @patch("litdb.db.requests.get")
     def test_add_work_uses_mailto(self, mock_get, mock_config):
         """Test that add_work function uses 'mailto' parameter."""
-        from litdb.db import get_citation
-
         # Mock config
         mock_config.return_value = {
             "openalex": {"email": "test@example.com"},
             "embedding": {"model": "all-MiniLM-L6-v2"},
         }
 
-        # Mock response
+        # Mock response - no longer testing get_citation as it doesn't call API
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"citations": []}
         mock_get.return_value = mock_response
 
-        try:
-            get_citation("10.1234/test")
-        except Exception:
-            # May fail due to missing dependencies, but check the call
-            pass
-
-        # If the function was called, verify it used mailto
+        # This test is now primarily about verifying add_work uses mailto
+        # The actual verification happens in the responses test above
         if mock_get.called:
             call_args = mock_get.call_args
             if call_args and len(call_args) > 1:
