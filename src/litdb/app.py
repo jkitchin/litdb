@@ -4,7 +4,9 @@ Enhanced multi-tab interface for literature database management.
 """
 
 import json
+import logging
 import os
+import warnings
 
 import pandas as pd
 import streamlit as st
@@ -13,6 +15,10 @@ from litellm import completion
 from litdb.chat import get_rag_content
 from litdb.db import get_db
 from litdb.utils import get_config
+
+# Suppress torch-related errors from Streamlit's file watcher
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="streamlit")
+logging.getLogger("streamlit.watcher.local_sources_watcher").setLevel(logging.ERROR)
 
 # Configuration
 config = get_config()
@@ -88,6 +94,89 @@ def render_sidebar():
     return tab
 
 
+def get_tags_for_source(source):
+    """Get all tags for a source."""
+    try:
+        source_id_result = db.execute(
+            "SELECT rowid FROM sources WHERE source = ?", (source,)
+        ).fetchone()
+
+        if not source_id_result:
+            return []
+
+        (source_id,) = source_id_result
+        tags = db.execute(
+            """SELECT tags.tag FROM tags
+               INNER JOIN source_tag ON source_tag.tag_id = tags.rowid
+               WHERE source_tag.source_id = ?""",
+            (source_id,),
+        ).fetchall()
+        return [tag[0] for tag in tags]
+    except Exception:
+        return []
+
+
+def add_tag_to_source(source, tag):
+    """Add a tag to a source."""
+    try:
+        # Get source id
+        (source_id,) = db.execute(
+            "SELECT rowid FROM sources WHERE source = ?", (source,)
+        ).fetchone()
+
+        # Get or create tag
+        tag_result = db.execute(
+            "SELECT rowid FROM tags WHERE tag = ?", (tag,)
+        ).fetchone()
+
+        if not tag_result:
+            cursor = db.execute("INSERT INTO tags(tag) VALUES (?)", (tag,))
+            tag_id = cursor.lastrowid
+            db.commit()
+        else:
+            (tag_id,) = tag_result
+
+        # Check if tag already exists for this source
+        existing = db.execute(
+            "SELECT rowid FROM source_tag WHERE source_id = ? AND tag_id = ?",
+            (source_id, tag_id),
+        ).fetchone()
+
+        if not existing:
+            db.execute(
+                "INSERT INTO source_tag(source_id, tag_id) VALUES (?, ?)",
+                (source_id, tag_id),
+            )
+            db.commit()
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Error adding tag: {e}")
+        return False
+
+
+def remove_tag_from_source(source, tag):
+    """Remove a tag from a source."""
+    try:
+        # Get source id and tag id
+        (source_id,) = db.execute(
+            "SELECT rowid FROM sources WHERE source = ?", (source,)
+        ).fetchone()
+        (tag_id,) = db.execute(
+            "SELECT rowid FROM tags WHERE tag = ?", (tag,)
+        ).fetchone()
+
+        db.execute(
+            "DELETE FROM source_tag WHERE source_id = ? AND tag_id = ?",
+            (source_id, tag_id),
+        )
+        db.commit()
+        return True
+    except Exception as e:
+        st.error(f"Error removing tag: {e}")
+        return False
+
+
 def format_citation(extra):
     """Format citation from extra JSON data."""
     if not extra:
@@ -128,6 +217,45 @@ def format_citation(extra):
 def tab_search():
     """Search tab with vector, full-text, and hybrid search."""
     st.title("🔍 Search")
+
+    # Custom CSS for larger, more readable text
+    st.markdown(
+        """
+    <style>
+    /* Increase base font size in expanders and markdown */
+    .stMarkdown p {
+        font-size: 18px !important;
+        line-height: 1.6;
+    }
+
+    /* Larger expander titles */
+    .streamlit-expanderHeader {
+        font-size: 18px !important;
+    }
+
+    /* Larger text in expander content */
+    .streamlit-expanderContent {
+        font-size: 17px !important;
+    }
+
+    /* Code blocks (BibTeX, citations) */
+    code {
+        font-size: 15px !important;
+    }
+
+    /* Headers within results */
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        font-size: 20px !important;
+    }
+
+    /* Strong/bold text */
+    .stMarkdown strong {
+        font-size: 18px !important;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Use form to allow Enter key to submit
     with st.form("search_form"):
@@ -334,6 +462,43 @@ Adding: references, citations, and related works...
                             )  # Show error for debugging
                     else:
                         st.warning("No metadata available for copy buttons")
+
+                    # Tags section
+                    st.markdown("---")
+                    st.markdown("**🏷️ Tags:**")
+
+                    # Get current tags
+                    current_tags = get_tags_for_source(source)
+
+                    # Display existing tags with remove buttons
+                    if current_tags:
+                        cols = st.columns(len(current_tags) + 1)
+                        for idx, tag in enumerate(current_tags):
+                            with cols[idx]:
+                                if st.button(f"🗑️ {tag}", key=f"rm_tag_v_{i}_{tag}"):
+                                    if remove_tag_from_source(source, tag):
+                                        st.success(f"Removed tag: {tag}")
+                                        st.rerun()
+                    else:
+                        st.caption("No tags yet")
+
+                    # Add new tag
+                    new_tag_col1, new_tag_col2 = st.columns([3, 1])
+                    with new_tag_col1:
+                        new_tag = st.text_input(
+                            "Add tag",
+                            key=f"new_tag_v_{i}",
+                            placeholder="Enter tag name...",
+                            label_visibility="collapsed",
+                        )
+                    with new_tag_col2:
+                        if st.button("➕ Add", key=f"add_tag_v_{i}"):
+                            if new_tag and new_tag.strip():
+                                if add_tag_to_source(source, new_tag.strip()):
+                                    st.success(f"Added tag: {new_tag}")
+                                    st.rerun()
+                                else:
+                                    st.warning("Tag already exists")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -1451,15 +1616,214 @@ def tab_add_content():
 
         if doi_submitted:
             if doi_input:
+                from litdb.db import add_work, get_db
+
+                # Get database connection
+                db_conn = get_db()
+
                 dois = [d.strip() for d in doi_input.split("\n") if d.strip()]
                 st.info(f"Adding {len(dois)} DOI(s)...")
 
-                for doi in dois:
+                added_works = []
+                failed_works = []
+
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                for idx, doi in enumerate(dois, 1):
+                    status_text.text(f"Processing {idx}/{len(dois)}: {doi}")
                     try:
-                        # Here you would call the actual add function
-                        st.success(f"Added: {doi}")
+                        # Add the work
+                        add_work(doi, references=False, related=False, citing=False)
+
+                        # Query the database to get the work info
+                        work_info = db_conn.execute(
+                            "SELECT source, text, extra FROM sources WHERE source = ?",
+                            (doi,),
+                        ).fetchone()
+
+                        if work_info:
+                            source, text, extra = work_info
+                            extra_data = json.loads(extra) if extra else {}
+                            citation = format_citation(extra)
+
+                            added_works.append(
+                                {
+                                    "doi": doi,
+                                    "citation": citation or doi,
+                                    "title": extra_data.get("display_name", "Unknown"),
+                                    "authors": extra_data.get("authorships", []),
+                                }
+                            )
+                            status_text.success(f"✓ Added {idx}/{len(dois)}")
+                        else:
+                            failed_works.append(
+                                {
+                                    "doi": doi,
+                                    "error": "Not found in database after adding",
+                                }
+                            )
+
                     except Exception as e:
-                        st.error(f"Failed to add {doi}: {e}")
+                        failed_works.append({"doi": doi, "error": str(e)})
+                        status_text.error(f"✗ Failed {idx}/{len(dois)}: {str(e)}")
+
+                    progress_bar.progress(idx / len(dois))
+
+                # Clear progress indicators
+                progress_bar.empty()
+                status_text.empty()
+
+                # Show summary
+                if added_works:
+                    st.success(f"Successfully added {len(added_works)} work(s)!")
+
+                    st.markdown("---")
+                    st.subheader("Added Works Summary")
+
+                    for idx, work in enumerate(added_works):
+                        with st.expander(f"📄 {work['title'][:80]}...", expanded=False):
+                            st.markdown(f"**Citation:** {work['citation']}")
+                            st.markdown(f"**DOI:** {work['doi']}")
+
+                            # Show authors
+                            if work["authors"]:
+                                author_names = [
+                                    auth.get("author", {}).get(
+                                        "display_name", "Unknown"
+                                    )
+                                    for auth in work["authors"][:5]
+                                ]
+                                if len(work["authors"]) > 5:
+                                    author_names.append(
+                                        f"... and {len(work['authors']) - 5} more"
+                                    )
+                                st.markdown(f"**Authors:** {', '.join(author_names)}")
+
+                            # Copy buttons for citation and BibTeX
+                            st.markdown("---")
+                            st.markdown("**📋 Copy Citation:**")
+                            st.code(work["citation"], language="text")
+
+                            # BibTeX copy button
+                            from litdb.bibtex import dump_bibtex
+
+                            # We need to get the full extra data for bibtex
+                            work_result = db_conn.execute(
+                                "SELECT extra FROM sources WHERE source = ?",
+                                (work["doi"],),
+                            ).fetchone()
+
+                            if work_result:
+                                extra_json = work_result[0]
+                                if extra_json:
+                                    try:
+                                        extra_data = json.loads(extra_json)
+                                        bibtex = dump_bibtex(extra_data)
+                                        if bibtex:
+                                            st.markdown("**📋 Copy BibTeX:**")
+                                            st.code(bibtex, language="bibtex")
+                                    except Exception:
+                                        pass
+
+                            # Tags section
+                            st.markdown("---")
+                            st.markdown("**🏷️ Tags:**")
+
+                            # Get current tags
+                            current_tags = get_tags_for_source(work["doi"])
+
+                            # Display existing tags with remove buttons
+                            if current_tags:
+                                cols = st.columns(len(current_tags) + 1)
+                                for tag_idx, tag in enumerate(current_tags):
+                                    with cols[tag_idx]:
+                                        if st.button(
+                                            f"🗑️ {tag}", key=f"rm_tag_add_{idx}_{tag}"
+                                        ):
+                                            if remove_tag_from_source(work["doi"], tag):
+                                                st.success(f"Removed tag: {tag}")
+                                                st.rerun()
+                            else:
+                                st.caption("No tags yet")
+
+                            # Add new tag
+                            new_tag_col1, new_tag_col2 = st.columns([3, 1])
+                            with new_tag_col1:
+                                new_tag = st.text_input(
+                                    "Add tag",
+                                    key=f"new_tag_add_{idx}",
+                                    placeholder="Enter tag name...",
+                                    label_visibility="collapsed",
+                                )
+                            with new_tag_col2:
+                                if st.button("➕ Add", key=f"add_tag_btn_{idx}"):
+                                    if new_tag and new_tag.strip():
+                                        if add_tag_to_source(
+                                            work["doi"], new_tag.strip()
+                                        ):
+                                            st.success(f"Added tag: {new_tag}")
+                                            st.rerun()
+                                        else:
+                                            st.warning("Tag already exists")
+
+                            # Add Related Works buttons
+                            st.markdown("---")
+                            st.markdown("**Add Related Works:**")
+                            col1, col2, col3 = st.columns(3)
+
+                            with col1:
+                                if st.button(
+                                    "📚 Add References", key=f"refs_add_{idx}"
+                                ):
+                                    with st.spinner("Adding references..."):
+                                        try:
+                                            add_work(
+                                                work["doi"],
+                                                references=True,
+                                                related=False,
+                                                citing=False,
+                                            )
+                                            st.success("References added!")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+
+                            with col2:
+                                if st.button(
+                                    "🔗 Add Related", key=f"related_add_{idx}"
+                                ):
+                                    with st.spinner("Adding related works..."):
+                                        try:
+                                            add_work(
+                                                work["doi"],
+                                                references=False,
+                                                related=True,
+                                                citing=False,
+                                            )
+                                            st.success("Related works added!")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+
+                            with col3:
+                                if st.button("📖 Add Citing", key=f"citing_add_{idx}"):
+                                    with st.spinner("Adding citing works..."):
+                                        try:
+                                            add_work(
+                                                work["doi"],
+                                                references=False,
+                                                related=False,
+                                                citing=True,
+                                            )
+                                            st.success("Citing works added!")
+                                        except Exception as e:
+                                            st.error(f"Error: {e}")
+
+                if failed_works:
+                    st.error(f"Failed to add {len(failed_works)} work(s)")
+                    with st.expander("Show failed works"):
+                        for failed in failed_works:
+                            st.text(f"❌ {failed['doi']}: {failed['error']}")
+
             else:
                 st.warning("Please enter at least one DOI")
 
@@ -2107,6 +2471,145 @@ def tab_manage_filters():
     Manage saved search filters and queries. These are used by the CLI's `watch` and `follow` commands.
     """)
 
+    # Custom CSS for light blue button
+    st.markdown(
+        """
+    <style>
+    div.stButton > button[kind="secondary"] {
+        background-color: #4A90E2;
+        color: white;
+        border: none;
+    }
+    div.stButton > button[kind="secondary"]:hover {
+        background-color: #357ABD;
+        color: white;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    # Update all filters button at the top
+    if st.button(
+        "🔄 Update All Filters", use_container_width=True, key="update_filters_btn"
+    ):
+        st.session_state.update_filters_clicked = True
+        st.rerun()
+
+    # Process filter updates if button was clicked
+    if st.session_state.get("update_filters_clicked", False):
+        st.session_state.update_filters_clicked = False
+
+        # Import here where we actually use it
+        from litdb.db import update_filter
+        import os
+
+        # Set offline mode to speed up embeddings
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+        # Get all filters
+        filters = db.execute(
+            "SELECT filter, description, last_updated FROM queries"
+        ).fetchall()
+
+        if not filters:
+            st.info("No filters to update")
+        else:
+            st.markdown("---")
+            st.subheader(f"Updating {len(filters)} Filters")
+
+            # Container for results and errors
+            all_results = {}
+            total_new_works = 0
+            errors = []
+
+            # Progress bar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            for idx, (filter_expr, description, last_updated) in enumerate(filters, 1):
+                status_text.markdown(
+                    f"**Processing filter {idx}/{len(filters)}:** `{filter_expr[:50]}...`"
+                )
+
+                try:
+                    # Update this filter
+                    results = update_filter(filter_expr, last_updated, silent=True)
+
+                    if results:
+                        all_results[filter_expr] = {
+                            "description": description,
+                            "results": results,
+                            "count": len(results),
+                        }
+                        total_new_works += len(results)
+                        status_text.success(
+                            f"✓ Filter {idx}/{len(filters)}: Found {len(results)} new works"
+                        )
+                    else:
+                        status_text.info(f"✓ Filter {idx}/{len(filters)}: No new works")
+
+                except Exception as e:
+                    error_msg = f"Filter {idx}: {str(e)}"
+                    errors.append(error_msg)
+                    status_text.error(
+                        f"✗ Filter {idx}/{len(filters)}: Error - {str(e)}"
+                    )
+
+                progress_bar.progress(idx / len(filters))
+
+            # Clear progress indicators
+            progress_bar.empty()
+            status_text.empty()
+
+            # Display summary
+            if total_new_works > 0:
+                st.success(
+                    f"✓ Update complete! Processed **{len(filters)}** filters. "
+                    f"Added **{total_new_works}** new works from **{len(all_results)}** filter(s)."
+                )
+            else:
+                st.info(
+                    f"✓ Update complete! Processed **{len(filters)}** filters. "
+                    f"No new works found (all filters are up to date)."
+                )
+
+            # Show errors if any occurred
+            if errors:
+                st.warning(f"⚠️ {len(errors)} filter(s) had errors:")
+                with st.expander("Show errors"):
+                    for error in errors[:20]:  # Show first 20
+                        st.text(error)
+                    if len(errors) > 20:
+                        st.text(f"... and {len(errors) - 20} more errors")
+
+            # Display results organized by filter
+            if all_results:
+                st.markdown("---")
+                st.subheader("New Results by Filter")
+
+                for filter_expr, data in all_results.items():
+                    description = data["description"] or "No description"
+                    count = data["count"]
+                    results = data["results"]
+
+                    with st.expander(
+                        f"**{description}** ({count} new works) - `{filter_expr}`",
+                        expanded=False,
+                    ):
+                        for i, (source, text, extra) in enumerate(results[:10], 1):
+                            # Format citation
+                            try:
+                                citation = format_citation(json.dumps(extra))
+                                st.markdown(f"{i}. {citation}")
+                            except Exception:
+                                st.markdown(f"{i}. {source}")
+
+                        if count > 10:
+                            st.info(f"... and {count - 10} more works")
+
+    st.markdown("---")
+
     # Add new query
     st.subheader("Add New Query")
 
@@ -2156,6 +2659,78 @@ def tab_manage_filters():
             with col3:
                 if st.button("Delete", key=f"delete_query_{i}"):
                     st.info("Query deletion coming soon...")
+
+            # Add expander to show articles belonging to this filter
+            # We'll match based on the OpenAlex ID pattern in the filter
+            # For author.id filters, we can search for that author ID in the extra field
+            with st.expander("📚 Show articles from this filter"):
+                # Use a button to trigger lazy loading
+                load_key = f"load_articles_{i}"
+                if load_key not in st.session_state:
+                    st.session_state[load_key] = False
+
+                if not st.session_state[load_key]:
+                    if st.button("Load articles", key=f"btn_{load_key}"):
+                        st.session_state[load_key] = True
+                        st.rerun()
+                else:
+                    try:
+                        # Query all sources and filter based on the filter expression
+                        # This is a simplified approach - we look for articles in the database
+                        # that contain the filter ID in their extra metadata
+
+                        # Extract the ID from the filter (e.g., "author.id:A123" -> "A123")
+                        filter_parts = filter_text.split(":")
+                        if len(filter_parts) >= 2:
+                            filter_id = ":".join(
+                                filter_parts[1:]
+                            )  # Handle IDs with colons
+
+                            # Query for articles that might match this filter
+                            articles = db.execute(
+                                "SELECT source, text, extra FROM sources WHERE extra LIKE ? LIMIT 50",
+                                (f"%{filter_id}%",),
+                            ).fetchall()
+
+                            if articles:
+                                st.info(
+                                    f"Found {len(articles)} article(s) (showing up to 50)"
+                                )
+
+                                for idx, (source, text, extra) in enumerate(
+                                    articles, 1
+                                ):
+                                    try:
+                                        extra_data = json.loads(extra) if extra else {}
+                                        citation = format_citation(extra)
+
+                                        if citation:
+                                            st.markdown(f"{idx}. {citation}")
+                                        else:
+                                            title = extra_data.get(
+                                                "display_name", source
+                                            )
+                                            st.markdown(f"{idx}. {title}")
+
+                                        # Show source link
+                                        st.caption(f"[{source}]({source})")
+
+                                        if idx < len(articles):
+                                            st.markdown("---")
+
+                                    except Exception as e:
+                                        st.caption(
+                                            f"Error formatting article {idx}: {str(e)}"
+                                        )
+                            else:
+                                st.info(
+                                    f"No articles found matching filter ID pattern: {filter_id}"
+                                )
+                        else:
+                            st.warning("Could not parse filter expression")
+
+                    except Exception as e:
+                        st.error(f"Error loading articles: {str(e)}")
 
             st.markdown("---")
     else:
