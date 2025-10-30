@@ -22,15 +22,12 @@ The mcp server provides three tools:
 about_litdb: Describes the server and database location.
 
 vsearch: Performs a vector search in your litdb database. Returns formatted
-summaries with title, authors, year, DOI, similarity score, and abstract snippet
-(limited to avoid token limits).
+summaries with title, authors, year, DOI, similarity score, and full abstract.
 
 openalex: Performs a keyword search in OpenAlex API. Returns formatted summaries
-with title, authors, year, venue, DOI, citation count, and abstract snippet
-(limited to avoid token limits).
+with title, authors, year, venue, DOI, citation count, and full abstract.
 
-All tools return concise, readable text to avoid hitting Claude Desktop's context
-limits.
+All tools return formatted, readable text with complete abstracts.
 
 """
 
@@ -109,12 +106,11 @@ def vsearch(query: str, n: int = 3) -> str:
             # Get publication year
             year = extra_data.get("publication_year", "")
 
-            # Get abstract snippet (first 300 chars)
+            # Get abstract (full text)
             abstract = extra_data.get("abstract", "")
             if not abstract and text:
-                abstract = text[:300] + "..." if len(text) > 300 else text
-            elif len(abstract) > 300:
-                abstract = abstract[:300] + "..."
+                # Use first 500 chars of full text if no abstract
+                abstract = text[:500] + "..." if len(text) > 500 else text
 
             result_text = f"{i}. {title}"
             if authors:
@@ -166,20 +162,17 @@ def openalex(query: str, n: int = 5):
         # Get publication year
         year = work.get("publication_year", "")
 
-        # Get abstract snippet (first 300 chars)
+        # Get abstract (full text)
         abstract_inv = work.get("abstract_inverted_index", {})
         if abstract_inv:
-            # Reconstruct abstract from inverted index (simplified)
-            words = []
-            for word, positions in sorted(
-                abstract_inv.items(), key=lambda x: min(x[1]) if x[1] else 0
-            ):
-                words.append(word)
-                if len(" ".join(words)) > 300:
-                    break
-            abstract = " ".join(words)
-            if len(abstract) > 300:
-                abstract = abstract[:300] + "..."
+            # Reconstruct abstract from inverted index
+            word_positions = []
+            for word, positions in abstract_inv.items():
+                for pos in positions:
+                    word_positions.append((pos, word))
+            # Sort by position and join
+            word_positions.sort()
+            abstract = " ".join(word for pos, word in word_positions)
         else:
             abstract = ""
 
