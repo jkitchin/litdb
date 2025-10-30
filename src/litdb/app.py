@@ -88,6 +88,7 @@ def render_sidebar():
             "📤 Export",
             "🔬 Research",
             "➕ Add Content",
+            "📋 NSF COA",
         ],
     )
 
@@ -3229,6 +3230,124 @@ focus the response and ask them what they would like.""",
             st.rerun()
 
 
+def tab_nsf_coa():
+    """NSF COA (Collaborators and Other Affiliations) generator tab."""
+    st.title("📋 NSF Collaborators and Other Affiliations (COA)")
+
+    st.markdown("""
+    Generate Table 4 for NSF COA using your ORCID. This will retrieve your publications
+    from the last 4 years and create an Excel file with all co-authors and their affiliations.
+    """)
+
+    # ORCID input
+    with st.form("nsf_coa_form"):
+        orcid_input = st.text_input(
+            "ORCID",
+            placeholder="e.g., 0000-0003-2625-9232 or https://orcid.org/0000-0003-2625-9232",
+            help="Enter your ORCID identifier",
+        )
+
+        email_input = st.text_input(
+            "Email (optional)",
+            placeholder="your.email@example.com",
+            help="Optional: Provide your email for OpenAlex API polite pool (faster response)",
+        )
+
+        submitted = st.form_submit_button("Generate COA")
+
+    if submitted and orcid_input:
+        with st.spinner(
+            "Generating COA... This may take a few minutes depending on publication count."
+        ):
+            try:
+                import tempfile
+                import os
+                from litdb.coa import get_coa
+
+                # Create a temporary directory to store the file
+                temp_dir = tempfile.mkdtemp()
+                original_dir = os.getcwd()
+
+                try:
+                    # Change to temp directory so the file is created there
+                    os.chdir(temp_dir)
+
+                    # Call get_coa which creates the Excel file
+                    get_coa(orcid_input, email=email_input if email_input else None)
+
+                    # Find the generated file
+                    files = [f for f in os.listdir(temp_dir) if f.endswith(".xlsx")]
+
+                    if files:
+                        coa_file = files[0]
+                        file_path = os.path.join(temp_dir, coa_file)
+
+                        # Read the file
+                        with open(file_path, "rb") as f:
+                            file_data = f.read()
+
+                        st.success("✓ COA generated successfully!")
+
+                        # Provide download button
+                        st.download_button(
+                            label="📥 Download COA Excel File",
+                            data=file_data,
+                            file_name=coa_file,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
+
+                        # Show some statistics
+                        import pandas as pd
+
+                        df = pd.read_excel(file_path, sheet_name="Table 4")
+
+                        st.markdown("---")
+                        st.subheader("Summary")
+                        st.info(
+                            f"Found **{len(df)}** unique co-authors from your publications in the last 4 years."
+                        )
+
+                        # Show preview
+                        with st.expander("Preview Table 4 (first 10 rows)"):
+                            st.dataframe(df.head(10))
+
+                    else:
+                        st.error("Failed to generate COA file")
+
+                finally:
+                    # Change back to original directory
+                    os.chdir(original_dir)
+
+                    # Clean up temp files
+                    import shutil
+
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+
+            except Exception as e:
+                error_msg = str(e)
+                if "Unexpected API response" in error_msg:
+                    st.error("❌ OpenAlex API error. Please check:")
+                    st.markdown("""
+                    - Is the ORCID correct?
+                    - Does the ORCID have publications in OpenAlex?
+                    - Try again in a few moments (API may be temporarily unavailable)
+                    """)
+                elif "KeyError" in error_msg:
+                    st.error(
+                        "❌ API response format error. The OpenAlex API may have changed or is returning unexpected data."
+                    )
+                else:
+                    st.error(f"❌ Error generating COA: {error_msg}")
+
+                import traceback
+
+                with st.expander("Show technical error details"):
+                    st.code(traceback.format_exc())
+
+    elif submitted and not orcid_input:
+        st.warning("Please enter an ORCID")
+
+
 def main():
     """Main application entry point."""
     # Get version from package metadata
@@ -3272,6 +3391,8 @@ def main():
         tab_export()
     elif selected_tab == "🔬 Research":
         tab_research()
+    elif selected_tab == "📋 NSF COA":
+        tab_nsf_coa()
 
 
 if __name__ == "__main__":
