@@ -9,23 +9,28 @@ script.
 
 You can install the server using:
 
-> litdb_mcp install /path/to/litdb.libsql
+> litdb install mcp-server
 
 and uninstall it with
 
-> litdb_mcp uninstall
+> litdb install uninstall-mcp
 
 This should work on Windows, but is untested there.
 
 The mcp server provides three tools:
 
-about: Just describes the server.
+about_litdb: Describes the server and database location.
 
-vsearch: Performs a vector search from a query. The query is determined by
-Claude.
+vsearch: Performs a vector search in your litdb database. Returns formatted
+summaries with title, authors, year, DOI, similarity score, and abstract snippet
+(limited to avoid token limits).
 
-openalex: Performs a keyword search from a query. the query is determined by
-Claude.
+openalex: Performs a keyword search in OpenAlex API. Returns formatted summaries
+with title, authors, year, venue, DOI, citation count, and abstract snippet
+(limited to avoid token limits).
+
+All tools return concise, readable text to avoid hitting Claude Desktop's context
+limits.
 
 """
 
@@ -82,7 +87,50 @@ def vsearch(query: str, n: int = 3) -> str:
 
     results = c.fetchall()
 
-    return str(results)
+    # Format results concisely to avoid hitting token limits
+    formatted_results = []
+    for i, (source, text, extra, distance) in enumerate(results, 1):
+        try:
+            extra_data = json.loads(extra) if extra else {}
+            title = extra_data.get("title") or extra_data.get(
+                "display_name", "No title"
+            )
+
+            # Get authors (limit to first 3)
+            authors = []
+            if extra_data.get("authorships"):
+                authors = [
+                    a.get("author", {}).get("display_name", "Unknown")
+                    for a in extra_data["authorships"][:3]
+                ]
+                if len(extra_data["authorships"]) > 3:
+                    authors.append("et al.")
+
+            # Get publication year
+            year = extra_data.get("publication_year", "")
+
+            # Get abstract snippet (first 300 chars)
+            abstract = extra_data.get("abstract", "")
+            if not abstract and text:
+                abstract = text[:300] + "..." if len(text) > 300 else text
+            elif len(abstract) > 300:
+                abstract = abstract[:300] + "..."
+
+            result_text = f"{i}. {title}"
+            if authors:
+                result_text += f"\n   Authors: {', '.join(authors)}"
+            if year:
+                result_text += f"\n   Year: {year}"
+            result_text += f"\n   Source: {source}"
+            result_text += f"\n   Similarity: {1 - distance:.3f}"
+            if abstract:
+                result_text += f"\n   Abstract: {abstract}"
+
+            formatted_results.append(result_text)
+        except Exception as e:
+            formatted_results.append(f"{i}. {source}\n   Error: {str(e)}")
+
+    return "\n\n".join(formatted_results)
 
 
 @mcp.tool()
@@ -97,7 +145,74 @@ def openalex(query: str, n: int = 5):
 
     resp = requests.get("https://api.openalex.org/works", params)
     data = resp.json()
-    return data
+
+    # Format results concisely to avoid hitting token limits
+    results = data.get("results", [])
+    formatted_results = []
+
+    for i, work in enumerate(results, 1):
+        title = work.get("title") or work.get("display_name", "No title")
+
+        # Get authors (limit to first 3)
+        authors = []
+        if work.get("authorships"):
+            authors = [
+                a.get("author", {}).get("display_name", "Unknown")
+                for a in work["authorships"][:3]
+            ]
+            if len(work["authorships"]) > 3:
+                authors.append("et al.")
+
+        # Get publication year
+        year = work.get("publication_year", "")
+
+        # Get abstract snippet (first 300 chars)
+        abstract_inv = work.get("abstract_inverted_index", {})
+        if abstract_inv:
+            # Reconstruct abstract from inverted index (simplified)
+            words = []
+            for word, positions in sorted(
+                abstract_inv.items(), key=lambda x: min(x[1]) if x[1] else 0
+            ):
+                words.append(word)
+                if len(" ".join(words)) > 300:
+                    break
+            abstract = " ".join(words)
+            if len(abstract) > 300:
+                abstract = abstract[:300] + "..."
+        else:
+            abstract = ""
+
+        # Get DOI or OpenAlex ID
+        doi = work.get("doi") or work.get("id", "")
+
+        # Get journal/venue
+        venue = ""
+        if work.get("host_venue"):
+            venue = work["host_venue"].get("display_name", "")
+        elif work.get("primary_location", {}).get("source"):
+            venue = work["primary_location"]["source"].get("display_name", "")
+
+        result_text = f"{i}. {title}"
+        if authors:
+            result_text += f"\n   Authors: {', '.join(authors)}"
+        if year:
+            result_text += f"\n   Year: {year}"
+        if venue:
+            result_text += f"\n   Venue: {venue}"
+        if doi:
+            result_text += f"\n   DOI/ID: {doi}"
+        result_text += f"\n   Citations: {work.get('cited_by_count', 0)}"
+        if abstract:
+            result_text += f"\n   Abstract: {abstract}"
+
+        formatted_results.append(result_text)
+
+    if not formatted_results:
+        return "No results found for this query."
+
+    header = f"Found {data.get('meta', {}).get('count', len(results))} total results (showing {len(results)}):\n\n"
+    return header + "\n\n".join(formatted_results)
 
 
 def main():
