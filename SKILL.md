@@ -17,6 +17,56 @@ Litdb is a Python CLI tool that:
 - Supports local file indexing (PDFs, DOCX, PPTX, HTML, Jupyter notebooks, etc.)
 - Integrates with Claude Desktop via MCP
 
+## MCP Server Integration
+
+Litdb provides an MCP (Model Context Protocol) server that integrates with Claude Desktop, giving Claude direct access to your literature database. Users install it with `litdb install mcp-server` and uninstall with `litdb install uninstall-mcp`.
+
+### Available MCP Tools
+
+When helping users work with Claude Desktop's litdb integration, these tools are available:
+
+**CORE TOOLS:**
+
+- `about_litdb`: Describes the server and shows database location
+- `vsearch(query, n=3)`: Vector search in the database. Returns formatted summaries with title, authors, year, DOI, similarity score, and full abstract
+- `openalex(query, n=5)`: Keyword search in OpenAlex API. Returns formatted summaries with title, authors, year, venue, DOI, citation count, and full abstract
+
+**SEARCH TOOLS:**
+
+- `fulltext_search(query, n=3)`: Full-text search using SQLite FTS5 with BM25 ranking. Supports FTS5 query syntax (AND, OR, NOT). Returns snippets and relevance scores
+- `find_similar(source, n=3)`: Find articles similar to a given source using vector similarity. Great for "more like this" discovery
+
+**METADATA & CITATION TOOLS:**
+
+- `get_source_details(source)`: Get complete details for a specific source including full metadata, abstract, and citation information
+- `get_citation(source)`: Generate a formatted citation string for a source
+- `get_bibtex(source)`: Generate a BibTeX entry for a source (for LaTeX/bibliography managers)
+
+**ORGANIZATION TOOLS:**
+
+- `list_tags()`: List all defined tags in the database
+- `get_tagged_articles(tag)`: Get all articles with a specific tag
+
+**NSF GRANT TOOLS:**
+
+- `generate_nsf_coa(orcid, email=None)`: Generate NSF Collaborators and Other Affiliations (COA) Table 4. Creates an Excel file with co-authors from publications in the last 4 years, formatted for NSF grant applications. The email parameter is optional but recommended for OpenAlex API polite pool
+
+All MCP tools return formatted, readable text with complete information. The source parameter can be a DOI, URL, or file path.
+
+### MCP vs CLI
+
+**Use MCP tools when:**
+- User is working in Claude Desktop
+- Need interactive, conversational access to the database
+- Want to integrate literature search into a broader workflow
+- Building complex queries through conversation
+
+**Use CLI commands when:**
+- User is working in terminal/shell
+- Need automation or scripting
+- Want to batch process operations
+- Need access to administrative commands (init, index, update-filters)
+
 ## Using Litdb Commands in Claude Code
 
 **IMPORTANT**: You can execute litdb commands directly using the Bash tool. When users ask for help with litdb:

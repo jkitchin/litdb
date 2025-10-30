@@ -438,10 +438,24 @@ def format_org_mode(topic_structure, classified_articles, summaries):
     output.append("")
 
     for main_topic in sorted(topic_structure.keys()):
+        subtopics = topic_structure[main_topic]
+
+        # Check if this main topic has any articles at all
+        has_articles = False
+        for subtopic in subtopics:
+            articles = classified_articles.get(main_topic, {}).get(subtopic, [])
+            if articles:
+                has_articles = True
+                break
+
+        # Skip this main topic if it has no articles
+        if not has_articles:
+            continue
+
+        # Print main topic header only if it has articles
         output.append(f"* {main_topic}")
         output.append("")
 
-        subtopics = topic_structure[main_topic]
         for subtopic in subtopics:
             # Check if we have articles for this subtopic
             articles = classified_articles.get(main_topic, {}).get(subtopic, [])
