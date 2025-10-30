@@ -4,7 +4,6 @@ Regression tests to ensure we use 'mailto' parameter correctly.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 import responses
 
 
@@ -97,39 +96,6 @@ class TestOpenAlexAPIParameters:
         assert citation is not None
         assert "Minimal Article" in citation
         assert "Single Author" in citation
-
-    @pytest.mark.unit
-    @patch("litdb.db.get_config")
-    @patch("litdb.db.requests.get")
-    def test_add_work_uses_mailto(self, mock_get, mock_config):
-        """Test that add_work function uses 'mailto' parameter."""
-        # Mock config
-        mock_config.return_value = {
-            "openalex": {"email": "test@example.com"},
-            "embedding": {"model": "all-MiniLM-L6-v2"},
-        }
-
-        # Mock response - no longer testing get_citation as it doesn't call API
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"citations": []}
-        mock_get.return_value = mock_response
-
-        # This test is now primarily about verifying add_work uses mailto
-        # The actual verification happens in the responses test above
-        if mock_get.called:
-            call_args = mock_get.call_args
-            if call_args and len(call_args) > 1:
-                params = (
-                    call_args[1]
-                    if isinstance(call_args[1], dict)
-                    else call_args[0][1]
-                    if len(call_args[0]) > 1
-                    else None
-                )
-                if params and isinstance(params, dict):
-                    # Should use 'mailto', not 'email'
-                    assert "mailto" in params or "email" not in params
 
 
 class TestAPIRateLimiting:
