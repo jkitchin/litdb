@@ -96,7 +96,7 @@ class TestInstallMcpServerCommand:
                 lib_dir.mkdir(parents=True)
 
                 result = runner.invoke(
-                    cli, ["install", "mcp-server", "--db", str(db_path)]
+                    cli, ["install", "mcp-server", "--db", str(db_path), "-y"]
                 )
 
                 # Check command succeeded
@@ -117,6 +117,68 @@ class TestInstallMcpServerCommand:
                     config["mcpServers"]["litdb"]["command"]
                     == "/usr/local/bin/litdb_mcp"
                 )
+
+    @pytest.mark.unit
+    @patch("shutil.which")
+    def test_install_mcp_server_with_confirmation(self, mock_which, tmp_path):
+        """Test MCP server installation with user confirmation."""
+        runner = CliRunner()
+
+        # Setup mocks
+        mock_which.return_value = "/usr/local/bin/litdb_mcp"
+
+        # Create a fake database
+        db_path = tmp_path / "test.libsql"
+        db_path.write_text("fake db")
+
+        # Mock platform to be Mac
+        import platform
+
+        with patch.object(platform, "system", return_value="Darwin"):
+            # Mock Path.home() to use our test directory
+            with patch("pathlib.Path.home", return_value=tmp_path):
+                # Create the config directory structure
+                lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
+                lib_dir.mkdir(parents=True)
+
+                # Test with 'y' input
+                result = runner.invoke(
+                    cli, ["install", "mcp-server", "--db", str(db_path)], input="y\n"
+                )
+
+                # Check command succeeded
+                assert result.exit_code == 0
+                assert "MCP Server Installation Details:" in result.output
+                assert "Continue with installation?" in result.output
+                assert "Successfully installed litdb MCP server" in result.output
+
+    @pytest.mark.unit
+    @patch("shutil.which")
+    def test_install_mcp_server_cancelled(self, mock_which, tmp_path):
+        """Test MCP server installation cancelled by user."""
+        runner = CliRunner()
+
+        # Setup mocks
+        mock_which.return_value = "/usr/local/bin/litdb_mcp"
+
+        # Create a fake database
+        db_path = tmp_path / "test.libsql"
+        db_path.write_text("fake db")
+
+        # Mock platform to be Mac
+        import platform
+
+        with patch.object(platform, "system", return_value="Darwin"):
+            # Mock Path.home() to use our test directory
+            with patch("pathlib.Path.home", return_value=tmp_path):
+                # Test with 'n' input (cancel)
+                result = runner.invoke(
+                    cli, ["install", "mcp-server", "--db", str(db_path)], input="n\n"
+                )
+
+                # Check command was cancelled
+                assert result.exit_code == 1
+                assert "Installation cancelled" in result.output
 
 
 class TestUninstallMcpCommand:
