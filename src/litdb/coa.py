@@ -10,9 +10,10 @@ import requests
 import base64
 
 
-def get_coa(orcid):
+def get_coa(orcid, email=None):
     """Generate Table 4 for the NSF COA.
     ORCID: str the author orcid to retrieve results for.
+    email: str optional email for OpenAlex API (for polite pool)
     """
 
     url = "https://api.openalex.org/works"
@@ -32,15 +33,25 @@ def get_coa(orcid):
             f",publication_year:>{four_years_ago - 1}"
         )
 
-        r = requests.get(
-            url,
-            params={
-                "filter": _filter,
-                "email": "jkitchin@andrew.cmu.edu",
-                "cursor": next_cursor,
-            },
-        )
+        params = {
+            "filter": _filter,
+            "cursor": next_cursor,
+        }
+
+        # Only include mailto if email is provided
+        if email:
+            params["mailto"] = email
+
+        r = requests.get(url, params=params)
+        r.raise_for_status()  # Raise exception for bad status codes
         data = r.json()
+
+        # Check if the response has the expected structure
+        if "results" not in data:
+            raise ValueError(
+                f"Unexpected API response. Status: {r.status_code}, Response: {data}"
+            )
+
         pubs += data["results"]
         next_cursor = data["meta"].get("next_cursor", None)
 
@@ -71,7 +82,11 @@ def get_coa(orcid):
     for batch in batched(oaids, 50):
         url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
 
-        params = {"per-page": 50, "email": "jkitchin@andrew.cmu.edu"}
+        params = {"per-page": 50}
+
+        # Only include mailto if email is provided
+        if email:
+            params["mailto"] = email
 
         d = requests.get(url, params=params)
 
