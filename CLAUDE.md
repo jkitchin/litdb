@@ -1,0 +1,1 @@
+- to publish I run "uv build" and then "uv publish"
