@@ -599,26 +599,34 @@ def generate_nsf_coa(orcid: str, email: str = None) -> str:
     """Generate NSF Collaborators and Other Affiliations (COA) Table 4.
 
     Creates an Excel file with co-authors from publications in the last 4 years.
+    The file will be saved directly to your Downloads folder.
 
     Args:
         orcid: The ORCID identifier (with or without https://orcid.org/ prefix).
         email: Optional email for OpenAlex API polite pool (recommended for better rate limits).
 
     Returns:
-        Status message with the filename of the generated Excel file.
+        Success message with file location.
     """
     try:
-        get_coa(orcid, email)
-        # The get_coa function prints the filename, so we extract it from the pattern
-        import datetime
+        file_path = get_coa(orcid, email)
+        if file_path is None:
+            # Running in Jupyter - get_coa handles display itself
+            return "COA generated and displayed in Jupyter"
 
-        orcid_clean = orcid.replace("https://orcid.org/", "")
-        today = datetime.date.today().strftime("%Y-%m-%d.xlsx")
-        filename = f"{orcid_clean}-{today}"
+        return f"""✅ NSF COA Excel file successfully generated!
 
-        return f"Successfully generated NSF COA file: {filename}\n\nThe file contains:\n- Table 4: Unique co-authors with their affiliations and last active dates\n- All authors sheet: Complete list of all co-authors from each publication\n\nThis includes all co-authors from publications in the last 4 years."
+📁 File saved to: {file_path}
+
+The Excel file contains:
+• Table 4: Unique co-authors with their affiliations and last active dates
+• All authors sheet: Complete list of all co-authors from each publication
+
+This includes all co-authors from publications in the last 4 years.
+
+You can open the file from your Downloads folder or use the path above to locate it."""
     except Exception as e:
-        return f"Error generating NSF COA file: {str(e)}"
+        return f"❌ Failed to generate NSF COA file: {str(e)}\n\nMake sure you have write access to your Downloads folder."
 
 
 def main():

@@ -8,6 +8,7 @@ import pandas as pd
 from nameparser import HumanName
 import requests
 import base64
+from io import BytesIO
 
 
 def get_coa(orcid, email=None):
@@ -121,10 +122,21 @@ def get_coa(orcid, email=None):
     )
 
     today = datetime.date.today().strftime("%Y-%m-%d.xlsx")
-    coa_file = f"{orcid}-{today}"
+    filename = f"{orcid}-{today}"
+
+    # Determine output path
+    if get_ipython():
+        # Jupyter: use in-memory buffer
+        buffer = BytesIO()
+        xw = pd.ExcelWriter(buffer, engine="xlsxwriter")
+    else:
+        # MCP/CLI: save to Downloads folder
+        from pathlib import Path
+
+        downloads_path = Path.home() / "Downloads" / filename
+        xw = pd.ExcelWriter(str(downloads_path), engine="xlsxwriter")
 
     # Table 4
-    xw = pd.ExcelWriter(coa_file, engine="xlsxwriter")
     df.to_excel(xw, index=False, sheet_name="Table 4")
 
     sheet = xw.sheets["Table 4"]
@@ -159,9 +171,12 @@ def get_coa(orcid, email=None):
     xw.close()
 
     if get_ipython():
-        with open(coa_file, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
-            uri = f'<pre>{coa_file}</pre><br><a href="data:text/plain;base64,{b64}" download="{coa_file}">Download COA</a>'
-            display(HTML(uri))
+        # Jupyter: display download link
+        excel_bytes = buffer.getvalue()
+        b64 = base64.b64encode(excel_bytes).decode("utf-8")
+        uri = f'<pre>{filename}</pre><br><a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">Download COA</a>'
+        display(HTML(uri))
+        return None
     else:
-        print(f"Created {coa_file}")
+        # Return path for MCP server / CLI
+        return str(downloads_path)
