@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import libsql
@@ -229,7 +230,16 @@ def get_citation(openalex_data):
         return None
 
 
-def add_work(workid, references=False, citing=False, related=False):
+def add_work(
+    workid,
+    references=False,
+    citing=False,
+    related=False,
+    yes=False,
+    max_citing=None,
+    max_references=None,
+    max_related=None,
+):
     """Add a single work to litdb.
 
     workid is the doi (full url), or it could be an OpenAlex workid. DOI is
@@ -238,6 +248,10 @@ def add_work(workid, references=False, citing=False, related=False):
     if references is truthy, also add them.
     if citing is truthy, also add them.
     if related is truthy, also add them.
+    if yes is truthy, bypass interactive prompts and proceed automatically.
+    max_citing limits the number of citing works to download (None = use prompt logic, -1 = no limit).
+    max_references limits the number of references to download (None = all, -1 = no limit).
+    max_related limits the number of related works to download (None = all, -1 = no limit).
 
     """
     config = get_config()
@@ -260,7 +274,12 @@ def add_work(workid, references=False, citing=False, related=False):
     add_source(workid, get_text(data), data)
 
     if references:
-        for wid in tqdm(data["referenced_works"]):
+        # Apply limit: None or -1 means all, otherwise limit to max_references
+        ref_works = data["referenced_works"]
+        if max_references is not None and max_references != -1:
+            ref_works = ref_works[:max_references]
+
+        for wid in tqdm(ref_works):
             rdata = get_data("https://api.openalex.org/works/" + wid, params)
             source = rdata.get("doi") or rdata.get("id")
             if source is None:
@@ -272,7 +291,12 @@ def add_work(workid, references=False, citing=False, related=False):
             add_source(source, text, rdata)
 
     if related:
-        for wid in tqdm(data["related_works"]):
+        # Apply limit: None or -1 means all, otherwise limit to max_related
+        rel_works = data["related_works"]
+        if max_related is not None and max_related != -1:
+            rel_works = rel_works[:max_related]
+
+        for wid in tqdm(rel_works):
             rdata = get_data("https://api.openalex.org/works/" + wid, params)
             source = rdata.get("doi") or rdata.get("id")
             if source is None:
@@ -284,9 +308,12 @@ def add_work(workid, references=False, citing=False, related=False):
             add_source(source, text, rdata)
 
     if citing:
-        CURL = data["cited_by_api_url"]
+        # Construct the citing works URL manually since OpenAlex API no longer includes cited_by_api_url
+        work_id = data["id"].split("/")[-1]  # Extract work ID from the full URL
+        CURL = f"https://api.openalex.org/works?filter=cites:{work_id}"
         next_cursor = "*"
         params.update(cursor=next_cursor)
+        citing_downloaded = 0
         while next_cursor:
             cdata = get_data(CURL, params)
             next_cursor = cdata["meta"]["next_cursor"]
@@ -294,24 +321,58 @@ def add_work(workid, references=False, citing=False, related=False):
             if next_cursor is None:
                 break
 
-            # TODO: should the max citations to trigger this be configurable in litdb.toml
-            trigger = config["openalex"].get("citation_count_trigger", 100)
             count = cdata["meta"]["count"]
-            if count > trigger:
-                r = input(
-                    f"Found {count} citations. Do you want to download them all? (n/y): "
-                )
-                if r.lower().startswith("n"):
-                    break
-                else:
+
+            # Handle max_citing limit
+            if max_citing is not None:
+                # -1 means no limit, download all
+                if max_citing == -1:
+                    pass  # Download all
+                # Positive number: limit to that many
+                elif max_citing > 0:
+                    if citing_downloaded >= max_citing:
+                        print(f"Reached limit of {max_citing} citing works.")
+                        break
+                    # Don't prompt if we're within the limit
                     pass
+            # No max_citing specified, use existing trigger logic
+            else:
+                # TODO: should the max citations to trigger this be configurable in litdb.toml
+                trigger = config["openalex"].get("citation_count_trigger", 100)
+                if count > trigger:
+                    # Option 1: --yes flag bypasses prompt
+                    if yes:
+                        # Download all
+                        pass
+                    # Option 2: Check if non-interactive mode (piped, scripted, etc.)
+                    elif not sys.stdin.isatty():
+                        # Non-interactive: default to NO (safer)
+                        print(
+                            f"Found {count} citations. Non-interactive mode, skipping."
+                        )
+                        break
+                    # Option 3: Normal interactive prompt
+                    else:
+                        r = input(
+                            f"Found {count} citations. Do you want to download them all? (n/y): "
+                        )
+                        if r.lower().startswith("n"):
+                            break
+                        else:
+                            pass
 
             for work in tqdm(cdata["results"]):
+                # Check if we've reached the limit
+                if max_citing is not None and max_citing > 0:
+                    if citing_downloaded >= max_citing:
+                        break
+
                 source = work.get("doi") or work["id"]
                 text = get_text(work)
                 work["citation"] = get_citation(work)
                 work["bibtex"] = dump_bibtex(work)
                 add_source(source, text, work)
+                citing_downloaded += 1
 
 
 def add_author(oaid):
