@@ -9,6 +9,7 @@ Commands:
 """
 
 import json
+import sys
 from difflib import SequenceMatcher
 
 import click
@@ -24,7 +25,10 @@ from . import manage
 @click.option("--references", is_flag=True)
 @click.option("--related", is_flag=True)
 @click.option("--citing", is_flag=True)
-def crossref(query, references, related, citing):
+@click.option(
+    "-y", "--yes", is_flag=True, help="Auto-add all results (bypass selection prompt)."
+)
+def crossref(query, references, related, citing, yes):
     """Add entries to litdb from a crossref query."""
     query = " ".join(query)
     resp = requests.get("https://api.crossref.org/works", params={"query": query})
@@ -43,10 +47,24 @@ def crossref(query, references, related, citing):
                 f"{i}. {' '.join(title)}, {authors}, {source} ({year}), https://doi.org/{item['DOI']}."
             )
 
-        toadd = input("Enter space separated numbers to add, or return to quit. ")
+        # Handle selection based on yes flag or interactive mode
+        if yes:
+            # Add all results
+            toadd = list(range(len(data["message"]["items"])))
+            richprint("[green]Adding all results (--yes mode)[/green]")
+        elif not sys.stdin.isatty():
+            # Non-interactive mode: skip to avoid hanging
+            richprint("[yellow]Non-interactive mode, skipping selection.[/yellow]")
+            return
+        else:
+            # Interactive prompt
+            toadd = input("Enter space separated numbers to add, or return to quit. ")
+            if toadd:
+                toadd = [int(x) for x in toadd.split(" ")]
+            else:
+                return
 
         if toadd:
-            toadd = [int(x) for x in toadd.split(" ")]
             dois = [
                 "https://doi.org/" + data["message"]["items"][i]["DOI"] for i in toadd
             ]
@@ -58,6 +76,7 @@ def crossref(query, references, related, citing):
                     related=related,
                     references=references,
                     citing=citing,
+                    yes=yes,
                 )
 
 
@@ -66,8 +85,11 @@ def crossref(query, references, related, citing):
 @click.option("--references", is_flag=True, help="Add references too.")
 @click.option("--related", is_flag=True, help="Add related too.")
 @click.option("--citing", is_flag=True, help="Add citing too.")
+@click.option(
+    "-y", "--yes", is_flag=True, help="Auto-confirm all matches (bypass prompts)."
+)
 @click.option("--model", default=None, help="LLM model to use for parsing.")
-def fromtext(text, references, related, citing, model):
+def fromtext(text, references, related, citing, yes, model):
     """Extract and add references from pasted TEXT.
 
     TEXT should be a string containing academic references (from PDFs, websites, etc.).
@@ -238,6 +260,16 @@ Text:
                             "   [green]High confidence match, adding automatically[/green]"
                         )
                         dois_to_add.append(best_doi)
+                    # Auto-add if --yes flag is set
+                    elif yes:
+                        richprint("   [green]Adding (--yes mode)[/green]")
+                        dois_to_add.append(best_doi)
+                    # Non-interactive mode: skip to avoid hanging
+                    elif not sys.stdin.isatty():
+                        richprint(
+                            "   [yellow]Non-interactive mode, skipping low-confidence match[/yellow]"
+                        )
+                    # Interactive prompt
                     else:
                         confirm = input("   Add this? [y/N]: ")
                         if confirm.lower().startswith("y"):
@@ -262,6 +294,7 @@ Text:
                 references=references,
                 related=related,
                 citing=citing,
+                yes=yes,
             )
         richprint("[green]✓ Done![/green]")
     else:
