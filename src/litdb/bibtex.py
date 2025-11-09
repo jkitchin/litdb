@@ -15,6 +15,11 @@ entry_type_by_crossref_type = {
     "book-part": "inbook",
     "other": "misc",
     "paratext": "misc",  # new line added
+    "erratum": "misc",  # new line added
+    "letter": "article",  # new line added
+    "editorial": "article",  # new line added
+    "libguides": "misc",  # new line added
+    "supplementary-materials": "misc",  # new line added
     "book": "book",
     "journal-volume": "misc",
     "book-set": "misc",
@@ -46,7 +51,8 @@ def dump_bibtex(work):
             "Unable to generate a bibtex entry. This was probably an entry added by url or other non-doi source."
         )
         return None
-    wtype = work.get("type_crossref")
+    # Try type_crossref first (for backwards compatibility), then fall back to type
+    wtype = work.get("type_crossref") or work.get("type")
     if wtype is None:
         print(f"Unable to generate a bibtex entry for {work.get('id')}")
         return None
