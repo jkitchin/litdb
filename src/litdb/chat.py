@@ -1,22 +1,20 @@
 """LitGPT using litellm."""
 
+import importlib
+import logging
 import os
+import pydoc
+import re
 import readline
 import subprocess
-
 import warnings
 
 import numpy as np
+from docling.document_converter import DocumentConverter
+from docling.exceptions import ConversionError
 from litellm import completion
 from rich import print as richprint
 from sentence_transformers import SentenceTransformer
-
-import pydoc
-import re
-import importlib
-from docling.document_converter import DocumentConverter
-from docling.exceptions import ConversionError
-import logging
 
 # Try to import backoff (optional dependency in crawl extra)
 try:
@@ -220,6 +218,10 @@ def get_completion(model, messages, max_tokens=None):
 
     except KeyboardInterrupt:
         pass
+    except AttributeError as e:
+        # Suppress litellm TranscriptionCreateParams.__annotations__ errors
+        if "__annotations__" not in str(e):
+            raise
 
     return output
 

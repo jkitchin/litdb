@@ -53,6 +53,27 @@ def init():
 @click.option("--related", is_flag=True, help="Add related too.")
 @click.option("--citing", is_flag=True, help="Add citing too.")
 @click.option("--all", is_flag=True, help="Add references, related and citing.")
+@click.option(
+    "-y", "--yes", is_flag=True, help="Auto-confirm prompts (bypass interactive mode)."
+)
+@click.option(
+    "--max-citing",
+    type=int,
+    default=None,
+    help="Max citing works to download (None=prompt, -1=no limit).",
+)
+@click.option(
+    "--max-references",
+    type=int,
+    default=None,
+    help="Max references to download (None=all, -1=no limit).",
+)
+@click.option(
+    "--max-related",
+    type=int,
+    default=None,
+    help="Max related works to download (None=all, -1=no limit).",
+)
 @click.option("-t", "--tag", "tags", multiple=True)
 def add(
     sources,
@@ -60,6 +81,10 @@ def add(
     citing=False,
     related=False,
     all=False,
+    yes=False,
+    max_citing=None,
+    max_references=None,
+    max_related=None,
     verbose=False,
     tags=None,
 ):
@@ -86,7 +111,16 @@ def add(
             if all:
                 references, citing, related = True, True, True
 
-            add_work(source, references, citing, related)
+            add_work(
+                source,
+                references,
+                citing,
+                related,
+                yes,
+                max_citing,
+                max_references,
+                max_related,
+            )
 
         # works from an author
         elif "orcid" in source or source.lower().startswith("https://openalex.org/a"):
