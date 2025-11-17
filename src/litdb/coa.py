@@ -18,21 +18,51 @@ def get_coa(orcid, email=None):
     """
     print(f"Starting COA generation for ORCID: {orcid}")
 
+    # First, find the correct author profile (handle duplicate ORCID profiles)
+    orcid = orcid.replace("https://orcid.org/", "")
+    orcid_url = f"https://orcid.org/{orcid}"
+
+    print(f"Finding author profile for ORCID {orcid}...")
+    authors_url = "https://api.openalex.org/authors"
+    author_params = {"filter": f"orcid:{orcid_url}"}
+    if email:
+        author_params["mailto"] = email
+
+    author_resp = requests.get(authors_url, params=author_params)
+    author_resp.raise_for_status()
+    author_data = author_resp.json()
+
+    if not author_data["results"]:
+        raise ValueError(f"No author found for ORCID {orcid_url}")
+
+    # If multiple profiles exist with same ORCID, use the one with most works
+    if len(author_data["results"]) > 1:
+        print(
+            f"  Warning: Found {len(author_data['results'])} author profiles with this ORCID"
+        )
+        for a in author_data["results"]:
+            print(
+                f"    - {a['display_name']}: {a['works_count']} works (ID: {a['id']})"
+            )
+
+    # Select author with most works
+    author = max(author_data["results"], key=lambda x: x.get("works_count", 0))
+    author_id = author["id"].replace("https://openalex.org/", "")
+    print(
+        f"  Using profile: {author['display_name']} ({author['works_count']} total works)"
+    )
+
     url = "https://api.openalex.org/works"
-
     next_cursor = "*"
-
     pubs = []
 
     current_year = datetime.datetime.now().year
     four_years_ago = current_year - 4
     print(f"Fetching publications from {four_years_ago} to {current_year}...")
 
-    orcid = orcid.replace("https://orcid.org/", "")
-
     while next_cursor:
         _filter = (
-            f"author.orcid:https://orcid.org/{orcid}"
+            f"author.id:https://openalex.org/{author_id}"
             f",publication_year:>{four_years_ago - 1}"
         )
 
@@ -60,6 +90,13 @@ def get_coa(orcid, email=None):
 
     print(f"Found {len(pubs)} publications")
 
+    # Show publication years distribution
+    year_counts = {}
+    for pub in pubs:
+        year = pub.get("publication_year", "Unknown")
+        year_counts[year] = year_counts.get(year, 0) + 1
+    print("Publications by year:", dict(sorted(year_counts.items(), reverse=True)))
+
     # We get all the authors from all the papers first.
     print("Extracting authors from publications...")
     authors = []
@@ -72,7 +109,12 @@ def get_coa(orcid, email=None):
 
         aus = pub["authorships"]
         for au in aus:
-            hn = HumanName(au["author"]["display_name"])
+            # Skip authors with no display name
+            display_name = au["author"].get("display_name")
+            if not display_name:
+                continue
+
+            hn = HumanName(display_name)
             name = f"{hn.last}, {hn.first} {hn.middle or ''}"
 
             authors += [[name, year, last_active, au["author"]["id"], pub["id"]]]
