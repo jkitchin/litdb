@@ -1,6 +1,7 @@
 """Setup and add things to the database."""
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -9,16 +10,21 @@ import libsql
 
 from .utils import get_config
 
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from tqdm import tqdm
-import datetime
-import bibtexparser
-from rich import print
+# Suppress sentence_transformers INFO logs and progress bars
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TQDM_DISABLE"] = "1"
 
-from litdb.openalex import get_data, get_text
-from litdb.bibtex import dump_bibtex
+import numpy as np  # noqa: E402
+from sentence_transformers import SentenceTransformer  # noqa: E402
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: E402
+from tqdm import tqdm  # noqa: E402
+import datetime  # noqa: E402
+import bibtexparser  # noqa: E402
+from rich import print  # noqa: E402
+
+from litdb.openalex import get_data, get_text  # noqa: E402
+from litdb.bibtex import dump_bibtex  # noqa: E402
 
 
 def get_db():
