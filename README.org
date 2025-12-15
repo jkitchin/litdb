@@ -1087,11 +1087,3 @@ Many of these projects require you to make an account. There are freemium levels
   - Another tool that runs LLMs locally, and says it can index your files so you can chat with them.
 
 With all these options, why does litdb exist? There are a lot of answers to that. First, I wanted to make it. I learned a lot about vector search by doing it. Second, I wanted a free, extensible solution for literature search that could also work for my local files while never putting data in the cloud, and that would work in Emacs. The projects above are very nice, easy to use, no or low-code solutions, and if that is what you are looking for, look there! If you want to hack on things yourself, look here.
-
-* Tasks
-
-** DONE create a Claude skill for litdb
-CLOSED: [2025-10-21 Tue 20:26] DEADLINE: <2025-10-22 Wed>
-
-** DONE Make a nicer streamlit app for the front end.
-CLOSED: [2025-10-28 Tue 10:40]
