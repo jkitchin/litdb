@@ -55,10 +55,9 @@ dependencies = [
   "gmft",
   # Development tools
   "ruff>=0.13.3",
-  # Pin torch versions to avoid torchvision::nms registration conflict
-  # See: https://github.com/huggingface/transformers/issues/41146
-  "torch<2.8.0",
-  "torchvision<0.20.0",
+  "torch",
+  "torchvision",
+  "fastmcp>=2.13.3",
 ]
 
 [project.scripts]

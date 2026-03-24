@@ -245,6 +245,7 @@ def add_work(
     max_citing=None,
     max_references=None,
     max_related=None,
+    verbose=False,
 ):
     """Add a single work to litdb.
 
@@ -258,6 +259,7 @@ def add_work(
     max_citing limits the number of citing works to download (None = use prompt logic, -1 = no limit).
     max_references limits the number of references to download (None = all, -1 = no limit).
     max_related limits the number of related works to download (None = all, -1 = no limit).
+    verbose prints details about each work being added.
 
     """
     config = get_config()
@@ -277,6 +279,13 @@ def add_work(
     data["citation"] = get_citation(data)
     data["bibtex"] = dump_bibtex(data)
 
+    if verbose:
+        title = data.get("title", "No title")
+        doi = data.get("doi", "No DOI")
+        year = data.get("publication_year", "Unknown year")
+        print(f"Adding: {title[:80]}{'...' if len(title) > 80 else ''}")
+        print(f"  DOI: {doi} | Year: {year}")
+
     add_source(workid, get_text(data), data)
 
     if references:
@@ -286,11 +295,21 @@ def add_work(
             ref_works = ref_works[:max_references]
 
         for wid in tqdm(ref_works):
-            rdata = get_data("https://api.openalex.org/works/" + wid, params)
+            # Extract work ID from full URL (e.g., https://openalex.org/W3103133276 -> W3103133276)
+            work_id = wid.split("/")[-1] if "/" in wid else wid
+            api_url = "https://api.openalex.org/works/" + work_id
+            rdata = get_data(api_url, params)
             source = rdata.get("doi") or rdata.get("id")
             if source is None:
-                print(f"Something failed for {wid}. continuing")
+                print(f"Referenced work not found (may be removed/merged): {work_id}")
+                print(f"  API URL: {api_url}")
                 continue
+            if verbose:
+                title = rdata.get("title", "No title") or "No title"
+                year = rdata.get("publication_year", "Unknown")
+                print(
+                    f"  [ref] {title[:70]}{'...' if len(title) > 70 else ''} ({year})"
+                )
             text = get_text(rdata)
             rdata["citation"] = get_citation(rdata)
             rdata["bibtex"] = dump_bibtex(rdata)
@@ -303,11 +322,21 @@ def add_work(
             rel_works = rel_works[:max_related]
 
         for wid in tqdm(rel_works):
-            rdata = get_data("https://api.openalex.org/works/" + wid, params)
+            # Extract work ID from full URL (e.g., https://openalex.org/W3103133276 -> W3103133276)
+            work_id = wid.split("/")[-1] if "/" in wid else wid
+            api_url = "https://api.openalex.org/works/" + work_id
+            rdata = get_data(api_url, params)
             source = rdata.get("doi") or rdata.get("id")
             if source is None:
-                print(f"Something failed for {wid}. continuing")
+                print(f"Related work not found (may be removed/merged): {work_id}")
+                print(f"  API URL: {api_url}")
                 continue
+            if verbose:
+                title = rdata.get("title", "No title") or "No title"
+                year = rdata.get("publication_year", "Unknown")
+                print(
+                    f"  [rel] {title[:70]}{'...' if len(title) > 70 else ''} ({year})"
+                )
             text = get_text(rdata)
             rdata["citation"] = get_citation(rdata)
             rdata["bibtex"] = dump_bibtex(rdata)
@@ -374,6 +403,12 @@ def add_work(
                         break
 
                 source = work.get("doi") or work["id"]
+                if verbose:
+                    title = work.get("title", "No title") or "No title"
+                    year = work.get("publication_year", "Unknown")
+                    print(
+                        f"  [cit] {title[:70]}{'...' if len(title) > 70 else ''} ({year})"
+                    )
                 text = get_text(work)
                 work["citation"] = get_citation(work)
                 work["bibtex"] = dump_bibtex(work)

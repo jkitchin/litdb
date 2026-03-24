@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/jkitchin/Dropbox/emacs/projects/projects/litdb/**)",
+      "Bash(python mcp_server.py:*)",
+      "Bash(timeout 2 python:*)",
+      "Bash(echo:*)",
+      "Bash(python:*)",
+      "Bash(timeout 5 python:*)",
+      "Bash(pip uninstall:*)",
+      "Bash(pip install:*)",
+      "Read(//Users/jkitchin/.cache/huggingface/**)",
+      "Bash(timeout 60 python:*)",
+      "Bash(timeout 15 python:*)",
+      "Bash(lsof:*)",
+      "Read(//private/tmp/**)",
+      "Bash(git log:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

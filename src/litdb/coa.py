@@ -109,9 +109,9 @@ def get_coa(orcid, email=None):
 
         aus = pub["authorships"]
         for au in aus:
-            # Skip authors with no display name
+            # Skip authors with no display name or no OpenAlex ID
             display_name = au["author"].get("display_name")
-            if not display_name:
+            if not display_name or not au["author"].get("id"):
                 continue
 
             hn = HumanName(display_name)
