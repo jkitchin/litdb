@@ -75,6 +75,9 @@ def init():
     help="Max related works to download (None=all, -1=no limit).",
 )
 @click.option("-t", "--tag", "tags", multiple=True)
+@click.option(
+    "-v", "--verbose", is_flag=True, help="Show details of works being added."
+)
 def add(
     sources,
     references=False,
@@ -120,6 +123,7 @@ def add(
                 max_citing,
                 max_references,
                 max_related,
+                verbose,
             )
 
         # works from an author
