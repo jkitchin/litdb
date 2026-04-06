@@ -10,9 +10,10 @@ import requests
 import base64
 
 
-def get_coa(orcid):
+def get_coa(orcid, email=None):
     """Generate Table 4 for the NSF COA.
     ORCID: str the author orcid to retrieve results for.
+    email: str optional email for OpenAlex API (for polite pool)
     """
 
     url = "https://api.openalex.org/works"
@@ -32,14 +33,14 @@ def get_coa(orcid):
             f",publication_year:>{four_years_ago - 1}"
         )
 
-        r = requests.get(
-            url,
-            params={
-                "filter": _filter,
-                "email": "jkitchin@andrew.cmu.edu",
-                "cursor": next_cursor,
-            },
-        )
+        params = {
+            "filter": _filter,
+            "cursor": next_cursor,
+        }
+        if email:
+            params["mailto"] = email
+
+        r = requests.get(url, params=params)
         data = r.json()
         pubs += data["results"]
         next_cursor = data["meta"].get("next_cursor", None)
@@ -71,7 +72,9 @@ def get_coa(orcid):
     for batch in batched(oaids, 50):
         url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
 
-        params = {"per-page": 50, "email": "jkitchin@andrew.cmu.edu"}
+        params = {"per-page": 50}
+        if email:
+            params["mailto"] = email
 
         d = requests.get(url, params=params)
 
@@ -156,5 +159,6 @@ if __name__ == "__main__":
     import sys
 
     orcid = sys.argv[1]
+    email = sys.argv[2] if len(sys.argv) > 2 else None
 
-    get_coa(orcid)
+    get_coa(orcid, email=email)

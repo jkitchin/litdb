@@ -55,7 +55,7 @@ class TestOpenAlexAPIParameters:
             "authorships": [
                 {"author": {"display_name": f"Author {i}"}} for i in range(1, 11)
             ],
-            "host_venue": {"display_name": "Test Journal"},
+            "primary_location": {"source": {"display_name": "Test Journal"}},
             "publication_year": 2024,
             "biblio": {
                 "volume": "10",
