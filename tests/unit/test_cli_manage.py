@@ -23,7 +23,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", False, False, False, False, None, None, None
+            "https://doi.org/10.1234/test",
+            False,
+            False,
+            False,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
@@ -35,7 +43,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", False, False, False, False, None, None, None
+            "https://doi.org/10.1234/test",
+            False,
+            False,
+            False,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
@@ -47,7 +63,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", True, False, False, False, None, None, None
+            "https://doi.org/10.1234/test",
+            True,
+            False,
+            False,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
@@ -59,7 +83,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", False, True, False, False, None, None, None
+            "https://doi.org/10.1234/test",
+            False,
+            True,
+            False,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
@@ -71,7 +103,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", False, False, True, False, None, None, None
+            "https://doi.org/10.1234/test",
+            False,
+            False,
+            True,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
@@ -83,7 +123,15 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         mock_add_work.assert_called_once_with(
-            "https://doi.org/10.1234/test", True, True, True, False, None, None, None
+            "https://doi.org/10.1234/test",
+            True,
+            True,
+            True,
+            False,
+            None,
+            None,
+            None,
+            False,
         )
 
     @pytest.mark.unit
