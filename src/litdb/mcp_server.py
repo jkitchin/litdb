@@ -159,14 +159,20 @@ def vsearch(query: str, n: int = 3) -> str:
 
 
 @mcp.tool()
-def openalex(query: str, n: int = 5):
+def openalex(query: str, n: int = 5, email: str = None, api_key: str = None):
     """Run a simple keyword query in OpenAlex.
 
     Args:
       query: string, natural language query.
       n: int, number of results to return.
+      email: optional email for OpenAlex polite pool.
+      api_key: optional OpenAlex API key.
     """
     params = {"filter": f"default.search:{query}", "per_page": n}
+    if email:
+        params["mailto"] = email
+    if api_key:
+        params["api_key"] = api_key
 
     resp = requests.get("https://api.openalex.org/works", params)
     data = resp.json()
@@ -210,9 +216,7 @@ def openalex(query: str, n: int = 5):
 
         # Get journal/venue
         venue = ""
-        if work.get("host_venue"):
-            venue = work["host_venue"].get("display_name", "")
-        elif work.get("primary_location", {}).get("source"):
+        if work.get("primary_location", {}).get("source"):
             venue = work["primary_location"]["source"].get("display_name", "")
 
         result_text = f"{i}. {title}"
@@ -418,9 +422,7 @@ def get_source_details(source: str) -> str:
         citation = extra_data.get("citation", "")
         abstract = extra_data.get("abstract", "")
         venue = ""
-        if extra_data.get("host_venue"):
-            venue = extra_data["host_venue"].get("display_name", "")
-        elif extra_data.get("primary_location", {}).get("source"):
+        if extra_data.get("primary_location", {}).get("source"):
             venue = extra_data["primary_location"]["source"].get("display_name", "")
 
         cited_by_count = extra_data.get("cited_by_count", 0)

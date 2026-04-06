@@ -194,8 +194,9 @@ def get_citation(openalex_data):
                 parts.append(", ".join(authors))
 
         # Journal/venue
-        host_venue = openalex_data.get("host_venue") or {}
-        venue = host_venue.get("display_name")
+        pl = openalex_data.get("primary_location") or {}
+        src = pl.get("source") or {}
+        venue = src.get("display_name")
         if venue:
             parts.append(venue)
 

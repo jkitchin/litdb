@@ -205,10 +205,11 @@ def format_citation(extra):
             parts.append(data["title"])
 
         # Journal/venue
-        if "host_venue" in data and data["host_venue"]:
-            venue = data["host_venue"].get("display_name", "")
-            if venue:
-                parts.append(f"*{venue}*")
+        pl = data.get("primary_location") or {}
+        src = pl.get("source") or {}
+        venue = src.get("display_name", "")
+        if venue:
+            parts.append(f"*{venue}*")
 
         return ". ".join(parts) if parts else None
     except Exception:
@@ -1061,10 +1062,11 @@ def tab_openalex_search():
                     st.markdown(f"**Citations:** {citation_count}")
 
                     # Venue
-                    if work.get("host_venue") and work["host_venue"].get(
-                        "display_name"
-                    ):
-                        st.markdown(f"**Venue:** {work['host_venue']['display_name']}")
+                    pl = work.get("primary_location") or {}
+                    src = pl.get("source") or {}
+                    venue_name = src.get("display_name")
+                    if venue_name:
+                        st.markdown(f"**Venue:** {venue_name}")
 
                     # Abstract preview
                     if work.get("abstract_inverted_index"):

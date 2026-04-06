@@ -114,7 +114,7 @@ def _populate_entry(entry, work):
     elif entry_type == "misc":
         _set_if(entry, "author", _author(work))
         _set_if(entry, "title", work.get("title"))
-        _set_if(entry, "howpublished", (work.get("host_venue") or {}).get("url"))
+        _set_if(entry, "howpublished", _primary_location_url(work))
         _set_if(entry, "year", _year(work))
     elif entry_type == "phdthesis":
         _set_if(entry, "author", _author(work))
@@ -124,7 +124,7 @@ def _populate_entry(entry, work):
     elif entry_type == "proceedings":
         _set_if(entry, "editor", _author(work))
         _set_if(entry, "title", work.get("title"))
-        _set_if(entry, "series", _host_venue_display_name(work))
+        _set_if(entry, "series", _primary_location_display_name(work))
         _set_if(entry, "volume", _volume(work))
         _set_if(entry, "publisher", _publisher(work))
         _set_if(entry, "year", _year(work))
@@ -132,7 +132,7 @@ def _populate_entry(entry, work):
         _set_if(entry, "author", _author(work))
         _set_if(entry, "title", work.get("title"))
         _set_if(entry, "year", _year(work))
-        _set_if(entry, "howpublished", (work.get("host_venue") or {}).get("url"))
+        _set_if(entry, "howpublished", _primary_location_url(work))
 
 
 def _set_if(entry, key, value):
@@ -145,7 +145,7 @@ def _year(work):
 
 
 def _book_title(work):
-    return (work.get("host_venue") or {}).get("display_name")
+    return _primary_location_display_name(work)
 
 
 def _school(work):
@@ -174,11 +174,20 @@ def _journal_name(work):
 
 
 def _publisher(work):
-    return (work.get("host_venue") or {}).get("publisher")
+    pl = work.get("primary_location") or {}
+    src = pl.get("source") or {}
+    return src.get("host_organization_name")
 
 
-def _host_venue_display_name(work):
-    return (work.get("host_venue") or {}).get("display_name")
+def _primary_location_display_name(work):
+    pl = work.get("primary_location") or {}
+    src = pl.get("source") or {}
+    return src.get("display_name")
+
+
+def _primary_location_url(work):
+    pl = work.get("primary_location") or {}
+    return pl.get("landing_page_url") or pl.get("pdf_url")
 
 
 def _volume(work):
