@@ -27,6 +27,44 @@ from litdb.openalex import get_data, get_text  # noqa: E402
 from litdb.bibtex import dump_bibtex  # noqa: E402
 
 
+def _check_embedding_config(db, config):
+    """Check if embedding config has changed and warn the user.
+
+    Stores the embedding model, chunk_size, and chunk_overlap in the metadata
+    table. If any of these differ from what's in the config file, prints a
+    warning telling the user to run 'litdb update-embeddings'.
+    """
+    emb_config = {
+        "model": config["embedding"]["model"],
+        "chunk_size": config["embedding"]["chunk_size"],
+        "chunk_overlap": config["embedding"]["chunk_overlap"],
+    }
+    current = json.dumps(emb_config, sort_keys=True)
+
+    row = db.execute(
+        "select value from metadata where key = 'embedding_config'"
+    ).fetchone()
+
+    if row is None:
+        # First time: store the config
+        db.execute(
+            "insert into metadata(key, value) values ('embedding_config', ?)",
+            (current,),
+        )
+        db.commit()
+    elif row[0] != current:
+        stored = json.loads(row[0])
+        changes = []
+        for k in emb_config:
+            if emb_config[k] != stored.get(k):
+                changes.append(f"  {k}: {stored.get(k)} -> {emb_config[k]}")
+        print(
+            "[bold yellow]Warning:[/bold yellow] Embedding config has changed:\n"
+            + "\n".join(changes)
+            + "\nRun [bold]litdb update-embeddings[/bold] to rebuild embeddings."
+        )
+
+
 def get_db():
     """Get or create the database."""
     config = get_config()
@@ -113,6 +151,14 @@ def get_db():
             embedding F32_BLOB({dim}),
             date_added text)"""
         )
+
+        db.execute(
+            """create table if not exists
+            metadata(key text primary key, value text)"""
+        )
+
+        # Store embedding config and warn if it changed
+        _check_embedding_config(db, config)
 
         db.execute(
             """create index if not exists image_idx

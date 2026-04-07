@@ -333,4 +333,21 @@ def update_embeddings():
     db.execute(
         """create index if not exists embedding_idx ON sources (libsql_vector_idx(embedding))"""
     )
+
+    # Update stored embedding config so the warning doesn't persist
+    import json
+
+    emb_config = json.dumps(
+        {
+            "model": config["embedding"]["model"],
+            "chunk_size": config["embedding"]["chunk_size"],
+            "chunk_overlap": config["embedding"]["chunk_overlap"],
+        },
+        sort_keys=True,
+    )
+    db.execute(
+        """insert or replace into metadata(key, value)
+        values ('embedding_config', ?)""",
+        (emb_config,),
+    )
     db.commit()
