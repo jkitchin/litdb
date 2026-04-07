@@ -97,9 +97,23 @@ def audio(playback=False):
         print("\n" + text + "\n")
 
         if playback:
-            import playsound
+            import platform
+            import subprocess
 
-            playsound.playsound(afile, block=True)
+            try:
+                system = platform.system()
+                if system == "Darwin":
+                    subprocess.run(["afplay", afile], check=True)
+                elif system == "Linux":
+                    subprocess.run(["aplay", afile], check=True)
+                elif system == "Windows":
+                    import winsound
+
+                    winsound.PlaySound(afile, winsound.SND_FILENAME)
+                else:
+                    print("Audio playback not supported on this platform.")
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                print("Audio playback failed. Required system tool not found.")
 
         response = input("Is that what you want to search? ([y]/n/q): ")
         if response.lower().startswith("q"):

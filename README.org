@@ -472,7 +472,7 @@ I haven't found the transcription to be that good on technical scientific terms.
 
 Note that you need to install these libraries for this feature to work:
 
-pyaudio, playsound, SpeechRecognition
+pyaudio, SpeechRecognition
 
 These are not trivial to install, and pyaudio relies on external libraries like portaudio that may not be easy to install. These are currently commented out in pyproject.toml because of these difficulties.
 
