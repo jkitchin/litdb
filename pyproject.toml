@@ -44,7 +44,7 @@ dependencies = [
   "jinja2",
   "pytesseract",
   "pillow",
-  "bibtexparser",
+  "bibtexparser<2",
   # Data processing and COA
   "pandas",
   "more-itertools",
