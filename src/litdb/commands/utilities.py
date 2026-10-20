@@ -147,10 +147,9 @@ def app():
 @click.command()
 def version():
     """Print the version of litdb."""
-    import pkg_resources
+    from importlib.metadata import version as dist_version
 
-    version = pkg_resources.get_distribution("litdb").version
-    print(f"Litdb: version {version}")
+    print(f"Litdb: version {dist_version('litdb')}")
 
 
 @click.command()
