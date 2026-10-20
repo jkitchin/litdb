@@ -22,7 +22,7 @@ dependencies = [
   "toml",
   "tomlkit",
   "requests",
-  "pymupdf4llm",
+  "pymupdf4llm<2",
   "docling",
   "langchain-core",
   "langchain-text-splitters",
