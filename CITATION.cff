@@ -7,6 +7,7 @@ authors:
     given-names: John R.
     orcid: "https://orcid.org/0000-0003-2625-9232"
     affiliation: Carnegie Mellon University
+doi: "10.5281/zenodo.23514948"
 repository-code: "https://github.com/jkitchin/litdb"
 version: "2.2.2"
 date-released: "2026-10-20"

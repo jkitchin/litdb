@@ -7,6 +7,9 @@
   <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Build Status">
 </a>
 <img src="https://img.shields.io/badge/tests-133_passed,_66_skipped-brightgreen" alt="Tests">
+<a href="https://doi.org/10.5281/zenodo.23514948">
+  <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.23514948.svg" alt="DOI">
+</a>
 #+END_HTML
 
 * litdb concept
