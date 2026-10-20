@@ -8,7 +8,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-2625-9232"
     affiliation: Carnegie Mellon University
 repository-code: "https://github.com/jkitchin/litdb"
-version: "2.2.1"
+version: "2.2.2"
 date-released: "2026-10-20"
 license: MIT
 abstract: "Curate and search scientific literature with natural-language queries over a local database of papers."
