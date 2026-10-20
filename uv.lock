@@ -2688,7 +2688,7 @@ requires-dist = [
     { name = "pillow-heif", marker = "extra == 'image'" },
     { name = "pyaudio", marker = "extra == 'all'" },
     { name = "pyaudio", marker = "extra == 'audio'" },
-    { name = "pymupdf4llm" },
+    { name = "pymupdf4llm", specifier = "<2" },
     { name = "pypandoc", marker = "extra == 'all'" },
     { name = "pypandoc", marker = "extra == 'research'" },
     { name = "pyperclip", marker = "extra == 'all'" },
