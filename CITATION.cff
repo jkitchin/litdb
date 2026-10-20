@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "litdb: a literature database"
+type: software
+authors:
+  - family-names: Kitchin
+    given-names: John R.
+    orcid: "https://orcid.org/0000-0003-2625-9232"
+    affiliation: Carnegie Mellon University
+repository-code: "https://github.com/jkitchin/litdb"
+version: "2.2.1"
+date-released: "2026-10-20"
+license: MIT
+abstract: "Curate and search scientific literature with natural-language queries over a local database of papers."
+keywords: [literature search, bibliometrics, research tools]
