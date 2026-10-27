@@ -9,8 +9,8 @@ authors:
     affiliation: Carnegie Mellon University
 doi: "10.5281/zenodo.23514948"
 repository-code: "https://github.com/jkitchin/litdb"
-version: "2.2.2"
-date-released: "2026-10-20"
+version: "2.2.3"
+date-released: "2026-10-27"
 license: MIT
 abstract: "Curate and search scientific literature with natural-language queries over a local database of papers."
 keywords: [literature search, bibliometrics, research tools]
