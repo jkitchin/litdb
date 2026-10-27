@@ -1,6 +1,8 @@
 ---
-description: Expert assistant for using litdb - a literature and document database for scientific research
-tools: [Bash, Read, Write, Edit, Glob, Grep]
+name: litdb
+description: Expert assistant for litdb, a local literature and document database for scientific research with vector, full-text and hybrid search, OpenAlex lookups, RAG chat, BibTeX/citation export, tags and filters. Use when the user mentions litdb or litdb.toml, wants to search, add or cite papers in their literature database, follow authors or watch topics in OpenAlex, index local PDFs and documents, or set up the litdb MCP server.
+license: MIT
+compatibility: Requires litdb (uv tool install litdb or pip install litdb) and a litdb.toml project created with litdb init.
 ---
 
 # Litdb Expert Skill
@@ -15,15 +17,22 @@ Litdb is a Python CLI tool that:
 - Enables natural language search using SentenceTransformers
 - Provides RAG (Retrieval Augmented Generation) capabilities with LLMs
 - Supports local file indexing (PDFs, DOCX, PPTX, HTML, Jupyter notebooks, etc.)
-- Integrates with Claude Desktop via MCP
+- Provides an MCP server for Claude Code, Claude Desktop, VS Code, Cursor, Codex and other agents
 
 ## MCP Server Integration
 
-Litdb provides an MCP (Model Context Protocol) server that integrates with Claude Desktop, giving Claude direct access to your literature database. Users install it with `litdb install mcp-server` and uninstall with `litdb install uninstall-mcp`.
+Litdb provides an MCP (Model Context Protocol) server, `litdb_mcp`, that gives an agent direct, read-only access to the literature database. There are two ways to install it:
+
+- Any agent (Claude Code, VS Code, Cursor, Codex, OpenCode, Gemini CLI, ...) with [knowhow](https://github.com/jkitchin/knowhow):
+  `uvx knowhow add jkitchin/litdb --mcp litdb -a claude-code` (add `-g` for all projects, repeat `-a` for more agents).
+  Remove it with `uvx knowhow remove --mcp litdb`.
+- Claude Desktop: `litdb install mcp-server` (uses the database in the current litdb project, or `--db PATH`), and `litdb install uninstall-mcp`.
+
+The server finds the database in this order: the `litdb` environment variable (path to `litdb.libsql`, set by `litdb install mcp-server`), then a `litdb.toml` in the agent's working directory or its parents, then `LITDB_ROOT`. If the MCP tools report no config, set `LITDB_ROOT` to the directory containing `litdb.toml`. The `litdb_mcp` command must be on the agent's PATH (`uv tool install litdb` is the easiest way).
 
 ### Available MCP Tools
 
-When helping users work with Claude Desktop's litdb integration, these tools are available:
+When the litdb MCP server is connected, these tools are available:
 
 **CORE TOOLS:**
 
@@ -56,7 +65,7 @@ All MCP tools return formatted, readable text with complete information. The sou
 ### MCP vs CLI
 
 **Use MCP tools when:**
-- User is working in Claude Desktop
+- The litdb MCP tools are connected (Claude Desktop, or any agent with the server installed)
 - Need interactive, conversational access to the database
 - Want to integrate literature search into a broader workflow
 - Building complex queries through conversation
@@ -337,7 +346,8 @@ litdb coa https://orcid.org/0000-0003-2625-9232
 ## Code Examination
 
 When examining litdb code:
-- Main CLI is in `src/litdb/cli.py`
+- Main CLI is in `src/litdb/cli.py`, with command groups in `src/litdb/commands/`
+- MCP server in `src/litdb/mcp_server.py`
 - Database operations in `src/litdb/db.py`
 - Chat/RAG in `src/litdb/chat.py`
 - OpenAlex integration in `src/litdb/openalex.py`
@@ -351,7 +361,7 @@ When examining litdb code:
 - Vector distance metric: cosine similarity
 - OpenAlex is the primary source for scientific papers
 - Local files are indexed with same vector search capabilities
-- MCP integration allows use with Claude Desktop
+- The MCP server works with Claude Code, Claude Desktop and other MCP-capable agents
 
 ## When User Asks For Help
 

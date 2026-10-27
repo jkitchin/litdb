@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "litdb": {
+      "description": "Search, cite and browse your litdb literature database (read-only). Needs litdb_mcp on PATH and LITDB_ROOT set to the directory with litdb.toml.",
+      "command": "litdb_mcp",
+      "env": {"LITDB_ROOT": "${LITDB_ROOT}"}
+    }
+  }
+}

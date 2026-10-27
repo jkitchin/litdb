@@ -7,13 +7,22 @@ modifying the litdb.
 There is a cli, litdb_mcp, that runs the server. The cli is installed as a
 script.
 
-You can install the server using:
+You can install the server in Claude Desktop using:
 
 > litdb install mcp-server
 
 and uninstall it with
 
 > litdb install uninstall-mcp
+
+For other agents (Claude Code, VS Code, Cursor, Codex, ...) use knowhow, which
+reads mcp/litdb.json from the litdb repository:
+
+> uvx knowhow add jkitchin/litdb --mcp litdb -a claude-code
+
+The database is the `litdb` environment variable if it is set (Claude Desktop
+install), otherwise litdb.libsql next to the litdb.toml found from the working
+directory or LITDB_ROOT.
 
 This should work on Windows, but is untested there.
 
@@ -59,6 +68,7 @@ All tools return formatted, readable text with complete information.
 
 from mcp.server.fastmcp import FastMCP
 import requests
+import contextlib
 import json
 import platform
 import os
@@ -77,6 +87,29 @@ from .coa import get_coa
 mcp = FastMCP("litdb")
 
 
+def get_db_path():
+    """Return the path to the litdb database.
+
+    Uses the litdb environment variable if it is set, otherwise the
+    litdb.libsql next to the litdb.toml found by get_config.
+    """
+    if os.environ.get("litdb"):
+        return os.environ["litdb"]
+
+    from .utils import get_config
+
+    # stdout is the MCP stdio transport, so keep get_config messages off it
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            config = get_config()
+    except SystemExit:
+        raise RuntimeError(
+            "No litdb.toml found. Set LITDB_ROOT to the directory containing"
+            " litdb.toml, or set litdb to the path of litdb.libsql."
+        )
+    return os.path.join(config["root"], "litdb.libsql")
+
+
 # Note I added _litdb here because Claude Desktop had trouble with other
 # functions named about...
 @mcp.tool()
@@ -87,7 +120,7 @@ def about_litdb():
     The MCP server has three tools, this one, a vector search tool, and an
     OpenAlex search integration.
 
-    Using the db at {os.environ["litdb"]}.
+    Using the db at {get_db_path()}.
     """
 
 
@@ -98,7 +131,7 @@ def vsearch(query: str, n: int = 3) -> str:
     QUERY: string, natural language query.
     N: int, number of results to return.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     model = SentenceTransformer("all-MiniLM-L6-v2")
     emb = model.encode([query]).astype(np.float32).tobytes()
@@ -252,7 +285,7 @@ def fulltext_search(query: str, n: int = 3) -> str:
     Returns:
         Formatted results with source, BM25 score, and text snippet.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     results = db.execute(
         """select
@@ -316,7 +349,7 @@ def find_similar(source: str, n: int = 3) -> str:
     Returns:
         Formatted list of similar articles with metadata.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     # Get the embedding for the source
     try:
@@ -392,7 +425,7 @@ def get_source_details(source: str) -> str:
     Returns:
         Complete source information including full text and metadata.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     result = db.execute(
         """select source, text, extra from sources where source = ?""",
@@ -464,7 +497,7 @@ def get_citation(source: str) -> str:
     Returns:
         Formatted citation string.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     result = db.execute(
         """select json_extract(extra, '$.citation') from sources where source = ?""",
@@ -492,7 +525,7 @@ def get_bibtex(source: str) -> str:
     Returns:
         BibTeX formatted entry.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     result = db.execute(
         """select extra from sources where source = ?""", (source,)
@@ -521,7 +554,7 @@ def list_tags() -> str:
     Returns:
         List of all tags.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     results = db.execute("select tag from tags").fetchall()
 
@@ -542,7 +575,7 @@ def get_tagged_articles(tag: str) -> str:
     Returns:
         Formatted list of articles with the specified tag.
     """
-    db = libsql.connect(os.environ["litdb"])
+    db = libsql.connect(get_db_path())
 
     results = db.execute(
         """select
@@ -638,14 +671,17 @@ def main():
     will do that in the Claude Desktop. With no arguments it just runs the
     server.
     """
+    # Called with no arguments
+    if len(sys.argv) == 1:
+        mcp.run(transport="stdio")
+        return
+
     if platform.system() == "Darwin":
         cfgfile = "~/Library/Application Support/Claude/claude_desktop_config.json"
     elif platform.system() == "Windows":
         cfgfile = r"%APPDATA%\Claude\claude_desktop_config.json"
     else:
-        raise Exception(
-            "Only Mac and Windows are supported for the claude-light mcp server"
-        )
+        raise Exception("Claude Desktop install is only supported on Mac and Windows")
 
     cfgfile = os.path.expandvars(cfgfile)
     cfgfile = os.path.expanduser(cfgfile)
@@ -656,11 +692,7 @@ def main():
     else:
         cfg = {}
 
-    # Called with no arguments
-    if len(sys.argv) == 1:
-        mcp.run(transport="stdio")
-
-    elif sys.argv[1] == "install":
+    if sys.argv[1] == "install":
         db = sys.argv[2]
 
         setup = {

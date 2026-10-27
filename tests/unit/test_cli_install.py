@@ -41,8 +41,9 @@ class TestInstallClaudeSkillCommand:
                 litdb, "__file__", str(tmp_path / "src" / "litdb" / "__init__.py")
             ):
                 # Create a fake SKILL.md in the right location
-                skill_dir = tmp_path / "SKILL.md"
-                skill_dir.write_text("# Test Skill")
+                skill_dir = tmp_path / "skills" / "litdb"
+                skill_dir.mkdir(parents=True)
+                (skill_dir / "SKILL.md").write_text("# Test Skill")
 
                 result = runner.invoke(cli, ["install", "claude-skill"])
 

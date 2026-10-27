@@ -56,7 +56,13 @@ source .venv/bin/activate
 uv pip install litdb
 #+END_SRC
 
-You have to activate that virtual env to use litdb, which may be annoying.
+You have to activate that virtual env to use litdb, which may be annoying. An alternative is to install litdb as a uv tool, which puts ~litdb~ and ~litdb_mcp~ on your PATH in their own environment:
+
+#+BEGIN_SRC sh
+uv tool install litdb
+#+END_SRC
+
+This is also the easiest way to make the MCP server available to AI agents. See [[*Using litdb with AI agents (skill and MCP server)]].
 
 ** Recent additions
 
@@ -709,16 +715,93 @@ litdb schema paper.pdf '{"title": ["str", None], "year": ["int", 2024]}'
 
 The schema command first converts the document to markdown using Docling, then uses an LLM with structured output to extract the requested fields. The LLM model used is configured in the ~[llm]~ section of your ~litdb.toml~ file.
 
-** Claude Desktop + MCP
+** Using litdb with AI agents (skill and MCP server)
+
+litdb comes with two things for AI coding agents such as Claude Code, VS Code (GitHub Copilot), Cursor, Codex, OpenCode and Gemini CLI:
+
+- An *agent skill* ([[./skills/litdb/SKILL.md][skills/litdb/SKILL.md]]) that teaches the agent how to use the litdb CLI: adding papers, searching, filters, tags, exporting BibTeX, and so on.
+- An *MCP server* (~litdb_mcp~) that gives the agent direct, read-only tools for your database: ~vsearch~, ~fulltext_search~, ~find_similar~, ~openalex~, ~get_source_details~, ~get_citation~, ~get_bibtex~, ~list_tags~, ~get_tagged_articles~ and ~generate_nsf_coa~.
+
+The easiest way to install both is [[https://github.com/jkitchin/knowhow][knowhow]], which needs nothing installed besides [[https://github.com/astral-sh/uv][uv]]. The skill follows the [[https://agentskills.io/specification][Agent Skills specification]], so it also works with ~npx skills~.
+
+*** Install the skill
 
 #+BEGIN_SRC sh
-litdb_mcp install /path/to/litdb.libsql
+# See what litdb offers
+uvx knowhow add jkitchin/litdb --list
+
+# Install the skill in the current project
+uvx knowhow add jkitchin/litdb --skill litdb
+
+# or for your user, in every project
+uvx knowhow add jkitchin/litdb --skill litdb -g
 #+END_SRC
 
-Then, restart Claude Desktop.
+The skill is copied to ~.agents/skills/litdb~ (read by VS Code, Codex, OpenCode, Gemini CLI, Cursor and Copilot) and linked into ~.claude/skills/litdb~ for Claude Code. Then ask your agent things like "add the references of 10.1021/jp047349j to my litdb" or "make a bibtex file of everything tagged thesis".
 
-Now in the Claude Desktop app you can use prompts like "Search my litdb for references on alloy segregation" or "Search OpenAlex for articles on alloy segregation."
+Keep it up to date with ~uvx knowhow check~ and ~uvx knowhow upgrade~, and remove it with ~uvx knowhow remove litdb~.
 
+If you work from a clone of this repository, ~litdb install claude-skill~ also copies the skill to ~~/.claude/skills/litdb~.
+
+*** Install the MCP server
+
+The MCP server runs the ~litdb_mcp~ command, so first make sure it is on your PATH (~uv tool install litdb~ does this). The server is defined in [[./mcp/litdb.json][mcp/litdb.json]], and knowhow translates it into each agent's config format:
+
+#+BEGIN_SRC sh
+# Claude Code, in this project (writes .mcp.json)
+uvx knowhow add jkitchin/litdb --mcp litdb -a claude-code
+
+# Claude Code for all your projects
+uvx knowhow add jkitchin/litdb --mcp litdb -a claude-code -g
+
+# Several agents at once
+uvx knowhow add jkitchin/litdb --mcp litdb -a claude-code -a vscode -a cursor -a codex
+#+END_SRC
+
+knowhow shows you the server config and asks for confirmation before installing it (add ~-y~ to skip the prompt).
+
+The server needs to know which database to use. It looks for:
+
+1. the ~litdb~ environment variable, the path to a ~litdb.libsql~ file;
+2. a ~litdb.toml~ in the agent's working directory or one of its parents;
+3. the ~LITDB_ROOT~ environment variable, the directory that contains ~litdb.toml~.
+
+The installed config passes ~LITDB_ROOT~ through from your environment, so set it in your shell profile before starting the agent:
+
+#+BEGIN_SRC sh
+export LITDB_ROOT=~/litdb   # the directory with litdb.toml and litdb.libsql
+#+END_SRC
+
+To check it works in Claude Code, run ~/mcp~ and look for ~litdb~, or ask "what is in my litdb about alloy segregation?". Remove the server with ~uvx knowhow remove --mcp litdb~.
+
+If you prefer to configure an agent by hand, this is the config (Claude Code ~.mcp.json~ format):
+
+#+BEGIN_SRC json
+{
+  "mcpServers": {
+    "litdb": {
+      "command": "litdb_mcp",
+      "env": {"LITDB_ROOT": "/path/to/your/litdb"}
+    }
+  }
+}
+#+END_SRC
+
+or with the Claude Code CLI:
+
+#+BEGIN_SRC sh
+claude mcp add litdb --scope user -e LITDB_ROOT=/path/to/your/litdb -- litdb_mcp
+#+END_SRC
+
+*** Claude Desktop
+
+Claude Desktop is not supported by knowhow. Instead, run this from your litdb directory (the one with ~litdb.toml~), or pass ~--db /path/to/litdb.libsql~:
+
+#+BEGIN_SRC sh
+litdb install mcp-server
+#+END_SRC
+
+Then restart Claude Desktop. Now you can use prompts like "Search my litdb for references on alloy segregation" or "Search OpenAlex for articles on alloy segregation." Uninstall it with ~litdb install uninstall-mcp~.
 
 * Adding local files
 
