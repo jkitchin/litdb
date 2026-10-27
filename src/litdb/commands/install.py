@@ -25,18 +25,24 @@ def install():
 def install_claude_skill():
     """Install the litdb skill for Claude Code.
 
-    Copies SKILL.md from the litdb repository to ~/.claude/skills/litdb/
+    Copies skills/litdb/SKILL.md from the litdb repository to
+    ~/.claude/skills/litdb/. This needs a source checkout of litdb; otherwise use
+    knowhow: uvx knowhow add jkitchin/litdb --skill litdb -g
     """
     # Find the SKILL.md file in the package
     try:
         import litdb
 
         litdb_dir = Path(litdb.__file__).parent.parent.parent
-        skill_source = litdb_dir / "SKILL.md"
+        skill_source = litdb_dir / "skills" / "litdb" / "SKILL.md"
 
         if not skill_source.exists():
             richprint("[red]Error: SKILL.md not found in litdb repository[/red]")
             richprint(f"[yellow]Looked in: {skill_source}[/yellow]")
+            richprint(
+                "[yellow]Install it with knowhow instead: "
+                "uvx knowhow add jkitchin/litdb --skill litdb -g[/yellow]"
+            )
             raise click.Abort()
 
         # Create target directory
