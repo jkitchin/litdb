@@ -1,0 +1,16 @@
+name: Validate skills
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Validate skills and MCP config with knowhow
+        run: uvx knowhow validate . --strict
