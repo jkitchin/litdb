@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
 - **NSF COA generation**: `nameparser` 3.0 (released 2026-11-08) removed `HumanName`, which `coa.py` and `doe_collaborators.py` use, so fresh installs failed on COA generation. Pinned `nameparser<3`.
 
+- **hybrid-search**: results were ranked in reverse (worst match first), full-text scores were normalized with the vector-score range, a source missing from one list counted as a perfect match there, and `-n 1` (or equal scores) crashed with `ZeroDivisionError`. Scores are now normalized per list and summed, higher is better, and at most `n` results are returned.
+
 ### Changed
 
 - Declared `requires-python = ">=3.11"`, matching the CI test matrix
