@@ -31,3 +31,6 @@ htmlcov/
 
 # Personal data files
 src/litdb/*.xlsx
+
+# Local experiments
+sandbox/
