@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-11-18
+
 ### Fixed
 
 - **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
