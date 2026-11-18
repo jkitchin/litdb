@@ -12,10 +12,11 @@ from urllib3.util import Retry
 def get_data(url, params=None):
     """Get json data for URL and PARAMS with rate limiting.
 
-    If the request fails, print the reason and return an empty result set
-    ({"meta": {"next_cursor": None}, "results": []}) so callers can iterate it.
+    A non-200 response prints the status and returns an empty result set.
+    A network failure (including exhausted retries on 429/5xx) or an invalid
+    JSON body is re-raised, so callers such as update_filter do not mistake
+    it for "no new results" and advance their last_updated watermark.
     """
-    empty = {"meta": {"next_cursor": None}, "results": []}
     try:
         retry = Retry(
             total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504]
@@ -33,13 +34,13 @@ def get_data(url, params=None):
             print("status code: ", req.status_code)
             print("text: ", req.text)
             print("url: ", req.url)
-            return empty
+            return {"meta": {"next_cursor": None}, "results": []}
 
     except (requests.RequestException, ValueError) as e:
         # RequestException covers connection errors and exhausted retries;
         # ValueError covers a 200 response whose body is not valid JSON.
         print(f"OpenAlex request failed: {e}")
-        return empty
+        raise
 
 
 def html_to_text(html_string):

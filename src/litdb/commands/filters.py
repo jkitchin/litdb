@@ -12,6 +12,7 @@ import os
 import click
 from jinja2 import Template
 from rich import print as richprint
+from rich.markup import escape
 from tqdm import tqdm
 
 from ..db import get_db, update_filter
@@ -84,7 +85,9 @@ def update_filters(fmt, silent):
                 source, text, extra = result
                 richprint(Template(fmt).render(**locals()))
         except Exception as e:  # noqa: BLE001 - one bad filter must not stop the rest
-            richprint(f"[yellow]Skipping filter {f!r}: {e}[/yellow]")
+            richprint(
+                f"[yellow]Skipping filter {escape(repr(f))}: {escape(str(e))}[/yellow]"
+            )
             continue
 
 

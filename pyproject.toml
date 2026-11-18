@@ -62,7 +62,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "ruff>=0.13.3",
+  "ruff>=0.17.5",
 ]
 
 [project.scripts]

@@ -40,8 +40,12 @@ class TestOpenAlexAPIParameters:
             assert "email=" not in url
 
     @pytest.mark.unit
-    def test_get_data_returns_empty_results_on_connection_error(self):
-        """A network failure returns an iterable empty result, not None."""
+    def test_get_data_raises_on_connection_error(self):
+        """A network failure raises instead of looking like "no results".
+
+        update_filter advances its last_updated watermark after a clean
+        run, so an empty result here would silently drop new works.
+        """
         import requests
 
         from litdb.openalex import get_data
@@ -52,9 +56,8 @@ class TestOpenAlexAPIParameters:
                 "https://api.openalex.org/works",
                 body=requests.ConnectionError("network down"),
             )
-            data = get_data("https://api.openalex.org/works", {"filter": "x"})
-
-        assert data == {"meta": {"next_cursor": None}, "results": []}
+            with pytest.raises(requests.ConnectionError):
+                get_data("https://api.openalex.org/works", {"filter": "x"})
 
     @pytest.mark.unit
     def test_get_citation_includes_all_authors(self):
