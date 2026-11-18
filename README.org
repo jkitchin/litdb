@@ -6,7 +6,15 @@
 <a href="https://github.com/jkitchin/litdb/actions/workflows/build.yml">
   <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Build Status">
 </a>
-<img src="https://img.shields.io/badge/tests-133_passed,_66_skipped-brightgreen" alt="Tests">
+<a href="https://github.com/jkitchin/litdb/actions/workflows/test.yml">
+  <img src="https://github.com/jkitchin/litdb/actions/workflows/test.yml/badge.svg" alt="CI">
+</a>
+<a href="https://pypi.org/project/litdb/">
+  <img src="https://img.shields.io/pypi/v/litdb.svg" alt="PyPI">
+</a>
+<a href="https://pepy.tech/projects/litdb">
+  <img src="https://static.pepy.tech/personalized-badge/litdb?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads">
+</a>
 <a href="https://doi.org/10.5281/zenodo.23514948">
   <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.23514948.svg" alt="DOI">
 </a>
