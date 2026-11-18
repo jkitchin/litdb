@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`update-filters`**: a failing filter is now reported instead of silently skipped, and Ctrl-C is no longer swallowed
 - **YouTube transcripts**: closed a leaked file descriptor from `tempfile.mkstemp`
 
+- **hybrid-search**: results were ranked in reverse (worst match first), full-text scores were normalized with the vector-score range, a source missing from one list counted as a perfect match there, and `-n 1` (or equal scores) crashed with `ZeroDivisionError`. Scores are now normalized per list and summed, higher is better, and at most `n` results are returned.
+
 ### Changed
 
 - Declared `requires-python = ">=3.11"`, matching the CI test matrix

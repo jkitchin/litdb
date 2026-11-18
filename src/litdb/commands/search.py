@@ -278,6 +278,36 @@ def similar(source, n, emacs, fmt):
             richprint(template.render(**locals()))
 
 
+def _minmax(pairs):
+    """Min-max normalize (key, value) pairs to a dict of values in [0, 1].
+
+    If every value is equal, each one gets 1.0 so it still counts as a match.
+    """
+    if not pairs:
+        return {}
+    values = [v for _, v in pairs]
+    lo, hi = min(values), max(values)
+    if hi == lo:
+        return {k: 1.0 for k, _ in pairs}
+    return {k: (v - lo) / (hi - lo) for k, v in pairs}
+
+
+def combine_hybrid_scores(vscores, tscores):
+    """Combine vector and full-text scores into one relevance score per source.
+
+    vscores: (source, cosine distance) pairs from vsearch; lower is better.
+    tscores: (source, -bm25 rank) pairs from fulltext; higher is better.
+
+    Each list is min-max normalized to a similarity in [0, 1] (1 = best match
+    in that list), and the two similarities are summed. A source missing from
+    one list contributes 0 for that list. Higher combined scores are better.
+    """
+    # negate distances so that, like the text scores, higher is better
+    vsim = _minmax([(k, -d) for k, d in vscores])
+    tsim = _minmax(tscores)
+    return {k: vsim.get(k, 0.0) + tsim.get(k, 0.0) for k in vsim.keys() | tsim.keys()}
+
+
 @click.command()
 @click.argument("vector_query")
 @click.argument("text_query")
@@ -308,21 +338,11 @@ def hybrid_search(vector_query, text_query, n, fmt):
         # reverse this here.
         tscores = [(result[0], -result[-1]) for result in tresults]
 
-    # Normalize scores
-    minv, maxv = min([x[1] for x in vscores]), max([x[1] for x in vscores])
-    mint, maxt = min([x[1] for x in tscores]), max([x[1] for x in tscores])
+    combined_scores = combine_hybrid_scores(vscores, tscores)
 
-    vscores = {oaid: (score - minv) / (maxv - minv) for oaid, score in vscores}
-    tscores = {oaid: (score - minv) / (maxv - minv) for oaid, score in tscores}
-
-    combined_scores = {}
-    for oaid in set(vscores.keys()).union(tscores.keys()):
-        vscore = vscores.get(oaid, 0)
-        tscore = tscores.get(oaid, 0)
-        cscore = 1 / (1 + vscore) + 1 / (1 + tscore)
-        combined_scores[oaid] = cscore
-
-    sorted_results = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)
+    sorted_results = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)[
+        :n
+    ]
     results = []
     for oaid, score in sorted_results:
         c = db.execute(

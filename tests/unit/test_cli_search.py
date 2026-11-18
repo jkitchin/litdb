@@ -212,6 +212,37 @@ class TestHybridSearchCommand:
         assert mock_db.execute.call_count >= 2
 
     @pytest.mark.unit
+    def test_combine_ranks_best_match_first(self):
+        """A source that is best in both lists ranks first; missing counts as 0."""
+        from litdb.commands.search import combine_hybrid_scores
+
+        # vector: cosine distance, lower is better
+        vscores = [("a", 0.1), ("b", 0.5), ("c", 0.9)]
+        # text: -bm25 rank, higher is better
+        tscores = [("a", 3.0), ("c", 1.0), ("d", 2.0)]
+        combined = combine_hybrid_scores(vscores, tscores)
+
+        ranked = sorted(combined, key=combined.get, reverse=True)
+        assert ranked[0] == "a"
+        assert combined["a"] == pytest.approx(2.0)
+        assert combined["c"] == pytest.approx(0.0)
+        # b only in vector list (mid), d only in text list (mid)
+        assert combined["b"] == pytest.approx(0.5)
+        assert combined["d"] == pytest.approx(0.5)
+
+    @pytest.mark.unit
+    def test_combine_handles_single_and_empty_results(self):
+        """One result per list (or equal scores) must not divide by zero."""
+        from litdb.commands.search import combine_hybrid_scores
+
+        assert combine_hybrid_scores([("a", 0.3)], [("a", 1.2)]) == {"a": 1.0 + 1.0}
+        assert combine_hybrid_scores([("a", 0.3), ("b", 0.3)], []) == {
+            "a": 1.0,
+            "b": 1.0,
+        }
+        assert combine_hybrid_scores([], []) == {}
+
+    @pytest.mark.unit
     def test_hybrid_search_command_exists(self):
         """Test that hybrid-search command is properly registered."""
         runner = CliRunner()
