@@ -16,7 +16,7 @@
   <img src="https://static.pepy.tech/personalized-badge/litdb?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="PyPI Downloads">
 </a>
 <a href="https://doi.org/10.5281/zenodo.23514948">
-  <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.23514948.svg" alt="DOI">
+  <img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23514948-blue.svg" alt="DOI">
 </a>
 #+END_HTML
 
