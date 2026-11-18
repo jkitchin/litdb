@@ -11,12 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
 - **NSF COA generation**: `nameparser` 3.0 (released 2026-11-08) removed `HumanName`, which `coa.py` and `doe_collaborators.py` use, so fresh installs failed on COA generation. Pinned `nameparser<3`.
+- **OpenAlex**: `get_data` returned `None` on connection errors, so callers crashed iterating the result; it now returns an empty result set
+- **`litdb research`**: the citation list printed the literal word "source" instead of the source
+- **`update-filters`**: a failing filter is now reported instead of silently skipped, and Ctrl-C is no longer swallowed
+- **YouTube transcripts**: closed a leaked file descriptor from `tempfile.mkstemp`
 
 ### Changed
 
 - Declared `requires-python = ">=3.11"`, matching the CI test matrix
 - Refreshed `uv.lock` (transformers 5, sentence-transformers 6, pandas 3, langchain-core 1, docling 2.150, pillow 13, torch 2.15)
 - Moved `ruff` from runtime dependencies to a `dev` dependency group
+- Upgraded ruff to 0.17.5 (lock and pre-commit) and fixed its findings; broad `except Exception` handlers are narrowed or annotated, with per-file ignores only for the Streamlit app and MCP server boundaries
 - Removed the Python 2-era `docx` package from the `research` and `all` extras; it installed into the same `docx` module as `python-docx`
 - Moved developer notes out of the repository root: `REFACTORING_PLAN.md`, `deep-research.org`, and the Semantic Scholar `swagger.json` are now in `docs/`, and `test_fromtext.sh` is in `scripts/`
 

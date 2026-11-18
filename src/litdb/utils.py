@@ -1,8 +1,9 @@
 """Utility functions used in litdb."""
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import toml
 import tomlkit
 

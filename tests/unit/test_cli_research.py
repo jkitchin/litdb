@@ -4,9 +4,10 @@ These tests cover research functionality that will be moved to
 commands/research_commands.py during refactoring.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
 from litdb.cli import cli
 
@@ -93,9 +94,11 @@ class TestResearchCommand:
         mock_os.path.abspath.return_value = "/path/output.md"
 
         runner = CliRunner()
-        with patch("builtins.open", create=True):
-            with patch("litdb.commands.research_commands.webbrowser"):
-                result = runner.invoke(cli, ["research", "AI", "-o", "output.md"])
+        with (
+            patch("builtins.open", create=True),
+            patch("litdb.commands.research_commands.webbrowser"),
+        ):
+            result = runner.invoke(cli, ["research", "AI", "-o", "output.md"])
 
         assert result.exit_code == 0
 

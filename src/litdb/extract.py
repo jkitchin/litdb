@@ -5,16 +5,15 @@ Extract tables and structured data from a pdf.
 
 import json
 from ast import literal_eval
-from .utils import get_config
-from docling.document_converter import DocumentConverter
-
-from gmft.auto import AutoTableFormatter, AutoTableDetector
-from gmft.pdf_bindings import PyPDFium2Document
+from typing import Any
 
 import litellm
-
-from typing import Any, Optional, Dict, Tuple
+from docling.document_converter import DocumentConverter
+from gmft.auto import AutoTableDetector, AutoTableFormatter
+from gmft.pdf_bindings import PyPDFium2Document
 from pydantic import BaseModel, create_model
+
+from .utils import get_config
 
 
 def extract_tables(pdf, extract=None):
@@ -52,7 +51,7 @@ def parse_schema_dsl(dsl: str) -> type[BaseModel]:
     field_defs = [f.strip() for f in dsl.split(",") if f.strip()]
 
     # We'll store field definitions in a dict: field_name -> (type, default)
-    fields: Dict[str, Tuple[Any, Any]] = {}
+    fields: dict[str, tuple[Any, Any]] = {}
 
     for field_def in field_defs:
         # e.g. "email?:str=foo"
@@ -108,9 +107,9 @@ def parse_schema_dsl(dsl: str) -> type[BaseModel]:
             is_optional = True
             field_name = field_name[:-1].strip()
 
-        # 4) If optional, the type becomes Optional[field_type]
+        # 4) If optional, the type becomes field_type | None
         if is_optional:
-            field_type = Optional[field_type]
+            field_type = field_type | None
 
         # 5) If no default was specified and it's optional, default to None
         if default_value is None and is_optional:

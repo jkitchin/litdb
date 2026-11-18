@@ -19,18 +19,18 @@ you to bring up related items to continue.
 continue it.
 """
 
-import numpy as np
 import asyncio
 import json
 import os
 
-from sentence_transformers import SentenceTransformer
-from litellm import completion
+import numpy as np
 from langchain_core.documents import Document
+from litellm import completion
+from sentence_transformers import SentenceTransformer
 
-from .utils import get_config
 from .db import get_db
 from .openalex import get_data, get_text
+from .utils import get_config
 
 
 def research_env():

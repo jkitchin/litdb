@@ -14,15 +14,15 @@ import json
 import os
 
 import click
-from jinja2 import Template
 import numpy as np
+from jinja2 import Template
 from rich import print as richprint
 from sentence_transformers import SentenceTransformer
 
-from ..utils import get_config
-from ..db import get_db, add_work
-from ..lsearch import llm_oa_search
+from ..db import add_work, get_db
 from ..images import image_query
+from ..lsearch import llm_oa_search
+from ..utils import get_config
 
 
 # Lazy database initialization - get db when needed
@@ -38,8 +38,8 @@ def screenshot():
     Use OCR to get text from an image on the clipboard (probably from a
     screenshot) and do a vector search on the text.
     """
-    from PIL import ImageGrab
     import pytesseract
+    from PIL import ImageGrab
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

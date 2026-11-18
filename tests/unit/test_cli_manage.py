@@ -4,9 +4,10 @@ These tests cover the commands that will be moved to commands/manage.py
 during refactoring.
 """
 
+from unittest.mock import MagicMock, mock_open, patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock, mock_open
 
 from litdb.cli import cli
 
@@ -262,21 +263,18 @@ class TestRemoveCommand:
         # TODO: Set up test database with known entry
         # TODO: Remove it
         # TODO: Verify it's gone
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires test database")
     def test_remove_multiple_sources(self, test_db):
         """Test removing multiple sources at once."""
         # TODO: Test with multiple sources
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires test database")
     def test_remove_nonexistent_source(self, test_db):
         """Test removing a source that doesn't exist."""
         # Should complete without error even if source doesn't exist
-        pass
 
 
 class TestIndexCommand:
@@ -300,7 +298,6 @@ class TestIndexCommand:
         # TODO: Run index command
         # TODO: Verify files were added to database
         # TODO: Verify directories table was updated
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires test database")
@@ -309,7 +306,6 @@ class TestIndexCommand:
         # TODO: Add a file to db first
         # TODO: Run index on directory containing that file
         # TODO: Verify it wasn't added twice
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires test database")
@@ -319,7 +315,6 @@ class TestIndexCommand:
         # TODO: Check directories table has correct timestamp
         # TODO: Index again
         # TODO: Verify timestamp was updated
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires test database")
@@ -328,7 +323,6 @@ class TestIndexCommand:
         # TODO: Create nested directory structure
         # TODO: Run index on parent
         # TODO: Verify files from subdirectories were added
-        pass
 
 
 class TestReindexCommand:
@@ -350,7 +344,6 @@ class TestReindexCommand:
         # TODO: Add directories to directories table
         # TODO: Run reindex
         # TODO: Verify all were reindexed
-        pass
 
 
 class TestUpdateEmbeddingsCommand:
@@ -371,4 +364,3 @@ class TestUpdateEmbeddingsCommand:
         # TODO: Add sources without embeddings
         # TODO: Run update-embeddings
         # TODO: Verify embeddings were generated
-        pass

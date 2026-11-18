@@ -9,10 +9,9 @@ provides:
 /fulltext
 """
 
-from fastapi import FastAPI
 import uvicorn
+from fastapi import FastAPI
 from pydantic import BaseModel
-
 
 app = FastAPI()
 

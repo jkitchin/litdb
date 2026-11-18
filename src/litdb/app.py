@@ -190,7 +190,7 @@ def format_citation(extra):
         parts = []
 
         # Authors
-        if "authorships" in data and data["authorships"]:
+        if data.get("authorships"):
             authors = [a["author"]["display_name"] for a in data["authorships"][:3]]
             if len(data["authorships"]) > 3:
                 authors.append("et al.")
@@ -303,7 +303,7 @@ def tab_search():
                     try:
                         extra_data = json.loads(extra)
                         doi = extra_data.get("doi") or extra_data.get("id")
-                        if doi and (doi.startswith("http") or doi.startswith("10.")):
+                        if doi and (doi.startswith(("http", "10."))):
                             dois_to_process.append(doi)
                     except Exception:
                         pass
@@ -405,8 +405,8 @@ Adding: references, citations, and related works...
             # Execute query if needed
             if should_run_query:
                 # Vector search - we need to compute embedding first
-                from sentence_transformers import SentenceTransformer
                 import numpy as np
+                from sentence_transformers import SentenceTransformer
 
                 config = get_config()
                 model = SentenceTransformer(config["embedding"]["model"])
@@ -477,10 +477,11 @@ Adding: references, citations, and related works...
                         cols = st.columns(len(current_tags) + 1)
                         for idx, tag in enumerate(current_tags):
                             with cols[idx]:
-                                if st.button(f"🗑️ {tag}", key=f"rm_tag_v_{i}_{tag}"):
-                                    if remove_tag_from_source(source, tag):
-                                        st.success(f"Removed tag: {tag}")
-                                        st.rerun()
+                                if st.button(
+                                    f"🗑️ {tag}", key=f"rm_tag_v_{i}_{tag}"
+                                ) and remove_tag_from_source(source, tag):
+                                    st.success(f"Removed tag: {tag}")
+                                    st.rerun()
                     else:
                         st.caption("No tags yet")
 
@@ -494,13 +495,16 @@ Adding: references, citations, and related works...
                             label_visibility="collapsed",
                         )
                     with new_tag_col2:
-                        if st.button("➕ Add", key=f"add_tag_v_{i}"):
-                            if new_tag and new_tag.strip():
-                                if add_tag_to_source(source, new_tag.strip()):
-                                    st.success(f"Added tag: {new_tag}")
-                                    st.rerun()
-                                else:
-                                    st.warning("Tag already exists")
+                        if (
+                            st.button("➕ Add", key=f"add_tag_v_{i}")
+                            and new_tag
+                            and new_tag.strip()
+                        ):
+                            if add_tag_to_source(source, new_tag.strip()):
+                                st.success(f"Added tag: {new_tag}")
+                                st.rerun()
+                            else:
+                                st.warning("Tag already exists")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -511,7 +515,7 @@ Adding: references, citations, and related works...
                         except Exception:
                             pass
 
-                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                    if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
                         col1, col2, col3 = st.columns(3)
@@ -642,7 +646,7 @@ Adding: references, citations, and related works...
                         except Exception:
                             pass
 
-                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                    if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
                         col1, col2, col3 = st.columns(3)
@@ -709,8 +713,8 @@ Adding: references, citations, and related works...
             # Execute queries if needed
             if should_run_query:
                 # Vector search
-                from sentence_transformers import SentenceTransformer
                 import numpy as np
+                from sentence_transformers import SentenceTransformer
 
                 config = get_config()
                 model = SentenceTransformer(config["embedding"]["model"])
@@ -794,7 +798,7 @@ Adding: references, citations, and related works...
                         except Exception:
                             pass
 
-                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                    if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
                         col1, col2, col3 = st.columns(3)
@@ -906,7 +910,7 @@ Adding: references, citations, and related works...
                         except Exception:
                             pass
 
-                    if doi and (doi.startswith("http") or doi.startswith("10.")):
+                    if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
                         col1, col2, col3 = st.columns(3)
@@ -1252,9 +1256,10 @@ def tab_semantic_scholar_search():
 
                     # Abstract
                     abstract = paper.get("abstract")
-                    if abstract:
-                        if st.checkbox("📄 Show Abstract", key=f"abstract_ss_{i}"):
-                            st.write(abstract)
+                    if abstract and st.checkbox(
+                        "📄 Show Abstract", key=f"abstract_ss_{i}"
+                    ):
+                        st.write(abstract)
 
                     # Add paper button
                     st.markdown("---")
@@ -1381,10 +1386,11 @@ def tab_suggest_reviewers():
 
         try:
             # Perform vector search to find similar papers
-            from sentence_transformers import SentenceTransformer
-            import numpy as np
             from collections import Counter
+
+            import numpy as np
             from more_itertools import batched
+            from sentence_transformers import SentenceTransformer
 
             config = get_config()
             db = get_db()
@@ -1646,7 +1652,7 @@ def tab_add_content():
                         ).fetchone()
 
                         if work_info:
-                            source, text, extra = work_info
+                            _source, _text, extra = work_info
                             extra_data = json.loads(extra) if extra else {}
                             citation = format_citation(extra)
 
@@ -1669,7 +1675,7 @@ def tab_add_content():
 
                     except Exception as e:
                         failed_works.append({"doi": doi, "error": str(e)})
-                        status_text.error(f"✗ Failed {idx}/{len(dois)}: {str(e)}")
+                        status_text.error(f"✗ Failed {idx}/{len(dois)}: {e!s}")
 
                     progress_bar.progress(idx / len(dois))
 
@@ -1743,10 +1749,9 @@ def tab_add_content():
                                     with cols[tag_idx]:
                                         if st.button(
                                             f"🗑️ {tag}", key=f"rm_tag_add_{idx}_{tag}"
-                                        ):
-                                            if remove_tag_from_source(work["doi"], tag):
-                                                st.success(f"Removed tag: {tag}")
-                                                st.rerun()
+                                        ) and remove_tag_from_source(work["doi"], tag):
+                                            st.success(f"Removed tag: {tag}")
+                                            st.rerun()
                             else:
                                 st.caption("No tags yet")
 
@@ -1760,15 +1765,16 @@ def tab_add_content():
                                     label_visibility="collapsed",
                                 )
                             with new_tag_col2:
-                                if st.button("➕ Add", key=f"add_tag_btn_{idx}"):
-                                    if new_tag and new_tag.strip():
-                                        if add_tag_to_source(
-                                            work["doi"], new_tag.strip()
-                                        ):
-                                            st.success(f"Added tag: {new_tag}")
-                                            st.rerun()
-                                        else:
-                                            st.warning("Tag already exists")
+                                if (
+                                    st.button("➕ Add", key=f"add_tag_btn_{idx}")
+                                    and new_tag
+                                    and new_tag.strip()
+                                ):
+                                    if add_tag_to_source(work["doi"], new_tag.strip()):
+                                        st.success(f"Added tag: {new_tag}")
+                                        st.rerun()
+                                    else:
+                                        st.warning("Tag already exists")
 
                             # Add Related Works buttons
                             st.markdown("---")
@@ -1874,8 +1880,10 @@ def tab_add_content():
 
         if fromtext_submitted:
             if text_input:
-                import requests
                 from difflib import SequenceMatcher
+
+                import requests
+
                 from litdb.chat import get_completion
 
                 with st.spinner("Extracting references using LLM..."):
@@ -2176,8 +2184,8 @@ Text:
                 file_submitted = st.form_submit_button("Add File")
 
             if file_submitted and uploaded_file:
-                import tempfile
                 import pathlib
+                import tempfile
 
                 # Save uploaded file to temporary location
                 with tempfile.NamedTemporaryFile(
@@ -2189,8 +2197,9 @@ Text:
                 try:
                     with st.spinner(f"Processing {uploaded_file.name}..."):
                         # Import the add logic
-                        from litdb.commands.manage import add as cli_add
                         from click import Context
+
+                        from litdb.commands.manage import add as cli_add
 
                         # Call the add function
                         with Context(cli_add) as ctx:
@@ -2222,8 +2231,9 @@ Text:
                     try:
                         with st.spinner(f"Processing {url_input}..."):
                             # Import the add logic
-                            from litdb.commands.manage import add as cli_add
                             from click import Context
+
+                            from litdb.commands.manage import add as cli_add
 
                             # Call the add function
                             with Context(cli_add) as ctx:
@@ -2301,8 +2311,9 @@ Text:
                             successfully_added = []
                             failed_to_add = []
 
-                            from litdb.commands.manage import add as cli_add
                             from click import Context
+
+                            from litdb.commands.manage import add as cli_add
 
                             for i, fname in enumerate(new_files):
                                 status_text.text(
@@ -2504,8 +2515,9 @@ def tab_manage_filters():
         st.session_state.update_filters_clicked = False
 
         # Import here where we actually use it
-        from litdb.db import update_filter
         import os
+
+        from litdb.db import update_filter
 
         # Set offline mode to speed up embeddings
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -2553,11 +2565,9 @@ def tab_manage_filters():
                         status_text.info(f"✓ Filter {idx}/{len(filters)}: No new works")
 
                 except Exception as e:
-                    error_msg = f"Filter {idx}: {str(e)}"
+                    error_msg = f"Filter {idx}: {e!s}"
                     errors.append(error_msg)
-                    status_text.error(
-                        f"✗ Filter {idx}/{len(filters)}: Error - {str(e)}"
-                    )
+                    status_text.error(f"✗ Filter {idx}/{len(filters)}: Error - {e!s}")
 
                 progress_bar.progress(idx / len(filters))
 
@@ -2723,7 +2733,7 @@ def tab_manage_filters():
 
                                     except Exception as e:
                                         st.caption(
-                                            f"Error formatting article {idx}: {str(e)}"
+                                            f"Error formatting article {idx}: {e!s}"
                                         )
                             else:
                                 st.info(
@@ -2733,7 +2743,7 @@ def tab_manage_filters():
                             st.warning("Could not parse filter expression")
 
                     except Exception as e:
-                        st.error(f"Error loading articles: {str(e)}")
+                        st.error(f"Error loading articles: {e!s}")
 
             st.markdown("---")
     else:
@@ -3113,10 +3123,10 @@ focus the response and ask them what they would like.""",
                     st.session_state.research_step = "results"
                     st.rerun()
 
-                except Exception as inner_e:
+                except Exception:
                     status_placeholder.empty()
                     progress_bar.empty()
-                    raise inner_e
+                    raise
 
             except ImportError:
                 st.error("Deep research requires gpt_researcher to be installed")
@@ -3262,8 +3272,9 @@ def tab_nsf_coa():
             "Generating COA... This may take a few minutes depending on publication count."
         ):
             try:
-                import tempfile
                 import os
+                import tempfile
+
                 from litdb.coa import get_coa
 
                 # Create a temporary directory to store the file

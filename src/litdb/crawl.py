@@ -1,13 +1,13 @@
 """Crawl a website and add each page to a litdb."""
 
-from docling.document_converter import DocumentConverter
-from tqdm import tqdm
-from .db import add_source
-
 import scrapy
-from scrapy.crawler import CrawlerProcess
+from docling.document_converter import DocumentConverter
 from scrapy import signals
+from scrapy.crawler import CrawlerProcess
 from scrapy.signalmanager import dispatcher
+from tqdm import tqdm
+
+from .db import add_source
 
 
 class LinkExtractorSpider(scrapy.Spider):
@@ -17,7 +17,7 @@ class LinkExtractorSpider(scrapy.Spider):
 
     def __init__(self, start_url, *args, **kwargs):
         """Construct a spider instance."""
-        super(LinkExtractorSpider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.start_urls = [start_url]
 
     def parse(self, response):
@@ -50,8 +50,7 @@ def extract_links(root_url):
     process.start()  # The script will block here until the crawling is finished
 
     # Yield each extracted link
-    for link in extracted_links:
-        yield link
+    yield from extracted_links
 
 
 def spider(root):
@@ -63,5 +62,5 @@ def spider(root):
         try:
             md = converter.convert(url).document.export_to_markdown()
             add_source(url, md, {"from": "crawl"})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one bad URL must not stop the crawl
             print(e)

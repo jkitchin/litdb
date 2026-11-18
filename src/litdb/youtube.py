@@ -13,10 +13,11 @@ def get_youtube_doc(url):
     Returns:
        doc, citation
     """
-    import yt_dlp
     import webvtt
+    import yt_dlp
 
     fd, path = tempfile.mkstemp()
+    os.close(fd)
 
     ydl_opts = {
         "writeautomaticsub": True,

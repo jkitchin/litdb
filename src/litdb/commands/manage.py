@@ -9,27 +9,27 @@ Commands:
 - update_embeddings: Update embeddings for sources
 """
 
-import os
 import datetime
+import os
 import pathlib
 
 import bs4
 import click
-from docx import Document
 import nbformat
+import requests
+from docx import Document
 from nbconvert import MarkdownExporter
 from pptx import Presentation
-import requests
 from rich import print as richprint
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-from ..utils import get_config, init_litdb
-from ..db import get_db, add_source, add_work, add_author, add_bibtex
-from ..pdf import add_pdf
-from ..youtube import get_youtube_doc
-from ..audio import is_audio_url, get_audio_text
+from ..audio import get_audio_text, is_audio_url
+from ..db import add_author, add_bibtex, add_source, add_work, get_db
 from ..images import add_image, image_extensions
+from ..pdf import add_pdf
+from ..utils import get_config, init_litdb
+from ..youtube import get_youtube_doc
 
 
 @click.command()
@@ -190,7 +190,7 @@ def add(
             markdown_exporter = MarkdownExporter()
 
             # Convert the notebook to Markdown
-            (body, resources) = markdown_exporter.from_notebook_node(notebook)
+            (body, _resources) = markdown_exporter.from_notebook_node(notebook)
 
             add_source(source, body)
 

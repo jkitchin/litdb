@@ -18,7 +18,6 @@ from rich import print as richprint
 @click.group()
 def install():
     """Install litdb integrations for Claude tools."""
-    pass
 
 
 @install.command("claude-skill")
@@ -57,7 +56,7 @@ def install_claude_skill():
         richprint(f"[blue]Skill installed to: {skill_target}[/blue]")
         richprint("[yellow]Restart Claude Code to use the litdb skill[/yellow]")
 
-    except Exception as e:
+    except OSError as e:
         richprint(f"[red]Error installing Claude Code skill: {e}[/red]")
         raise click.Abort()
 

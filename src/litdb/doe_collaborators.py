@@ -1,13 +1,12 @@
-#!/usr/bin/env python
-
-from more_itertools import batched
+import base64
 import datetime
+
+import pandas as pd
+import requests
 from IPython import get_ipython
 from IPython.display import HTML, display
-import pandas as pd
+from more_itertools import batched
 from nameparser import HumanName
-import requests
-import base64
 
 
 def get_coa(orcid, email=None):
@@ -67,7 +66,7 @@ def get_coa(orcid, email=None):
     # Now, get all the affiliations. This assumes the first one is most recent.
     # I could also use the last known institution, but this is sometimes empty
     # too.
-    oaids = set([row[3].replace("https://openalex.org/", "") for row in authors])
+    oaids = {row[3].replace("https://openalex.org/", "") for row in authors}
     affiliations = {}
     for batch in batched(oaids, 50):
         url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"

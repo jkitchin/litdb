@@ -212,11 +212,9 @@ class TestExtractTablesPlaceholder:
     def test_extract_tables_basic(self):
         """Test basic table extraction from PDF."""
         # TODO: Implement when PDF fixtures are available
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires PDF fixture files")
     def test_extract_specific_tables(self):
         """Test extracting specific tables by index."""
         # TODO: Implement when PDF fixtures are available
-        pass

@@ -1,7 +1,7 @@
+import os
+
 import litdb.lab  # noqa: F401
 
-
-import os
 # Set this before importing any transformers modules
 # This suppresses this warning
 

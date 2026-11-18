@@ -4,9 +4,10 @@ These tests cover review functionality that will be moved to
 commands/review.py during refactoring.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
 from litdb.cli import cli
 

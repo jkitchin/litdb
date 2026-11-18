@@ -16,7 +16,6 @@ from rich import print as richprint
 
 from ..db import get_db
 
-
 # Lazy database initialization
 _db = None
 

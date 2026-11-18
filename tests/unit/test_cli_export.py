@@ -4,9 +4,10 @@ These tests cover export functionality that will be moved to
 commands/export.py during refactoring.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
 from litdb.cli import cli
 
@@ -70,7 +71,6 @@ class TestBibtexCommand:
         """Test bibtex generation with filtering."""
         # TODO: Determine filter syntax
         # TODO: Test filtering
-        pass
 
 
 class TestCitationCommand:
@@ -124,7 +124,6 @@ class TestCitationCommand:
     def test_citation_format(self):
         """Test citation with different formats."""
         # TODO: Check if format is configurable
-        pass
 
 
 class TestShowCommand:
@@ -175,7 +174,6 @@ class TestShowCommand:
     def test_show_with_full_text(self):
         """Test showing source with full text."""
         # TODO: Check if there's a flag for full text
-        pass
 
 
 class TestOpenCommand:
@@ -222,7 +220,6 @@ class TestOpenCommand:
         # TODO: Create test file
         # TODO: Mock file opener
         # TODO: Test opening
-        pass
 
 
 class TestAboutCommand:
