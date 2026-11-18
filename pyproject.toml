@@ -16,6 +16,7 @@ maintainers = [
 ]
 description = "A literature database tool with GPT integration."
 license = "MIT"
+requires-python = ">=3.11"
 readme = {file = "README.org", content-type = "text/plain"}
 dependencies = [
   # Core dependencies - always installed
@@ -53,11 +54,15 @@ dependencies = [
   "IPython",
   # Table extraction
   "gmft",
-  # Development tools
-  "ruff>=0.13.3",
   "torch",
   "torchvision",
-  "fastmcp>=2.13.3",
+  # mcp 2.x removed mcp.server.fastmcp, which mcp_server.py uses
+  "mcp>=1.22,<2",
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.13.3",
 ]
 
 [project.scripts]
@@ -91,7 +96,6 @@ research = [
   "langchain_anthropic",
   "mistune",
   "htmldocx",
-  "docx",
   "md2pdf",
   "pypandoc",
 ]
@@ -121,7 +125,7 @@ image = [
 
 # MCP server for Claude Desktop
 mcp = [
-  "mcp[cli]",
+  "mcp[cli]>=1.22,<2",
 ]
 
 # Audio recording and transcription (requires external libraries)
@@ -140,7 +144,6 @@ all = [
   "langchain_anthropic",
   "mistune",
   "htmldocx",
-  "docx",
   "md2pdf",
   "pypandoc",
   "streamlit",
@@ -150,7 +153,7 @@ all = [
   "backoff",
   "pyperclip",
   "pillow_heif",
-  "mcp[cli]",
+  "mcp[cli]>=1.22,<2",
   "pyaudio",
   "SpeechRecognition",
 ]
