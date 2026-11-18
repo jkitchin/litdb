@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
+
+### Changed
+
+- Declared `requires-python = ">=3.11"`, matching the CI test matrix
+- Moved `ruff` from runtime dependencies to a `dev` dependency group
+- Removed the Python 2-era `docx` package from the `research` and `all` extras; it installed into the same `docx` module as `python-docx`
+- Moved developer notes out of the repository root: `REFACTORING_PLAN.md`, `deep-research.org`, and the Semantic Scholar `swagger.json` are now in `docs/`, and `test_fromtext.sh` is in `scripts/`
+
+### Removed
+
+- Purged `sandbox/` (including a committed Box `.env`), a personal data spreadsheet, and `.claude/settings.local.json` files from the git history. The leaked Box app has been deleted.
+
+### Documentation
+
+- README: added CI, PyPI, and downloads badges; replaced the static test-count badge
+
+## [2.2.3] - 2026-10-27
+
+### Added
+
+- The litdb skill and MCP server can be installed with `knowhow`
+- Zenodo concept DOI in `CITATION.cff` and a README badge
+
+### CI
+
+- Publish to PyPI automatically when a GitHub release is published
+- Validate skills with `knowhow` on push and pull requests
+
+## [2.2.2] - 2026-10-20
+
+### Added
+
+- CLI options for non-interactive mode and download limits
+- Warn the user when the embedding configuration has changed
+- Verbose output and better affiliation assignment for NSF COA generation
+- `CITATION.cff`
+
+### Fixed
+
+- Adapted to OpenAlex API breaking changes, added missing work types, and replaced the deprecated `host_venue` with `primary_location`
+- Authors with missing OpenAlex IDs no longer break COA generation; duplicate COA profiles resolved
+- torch compatibility issues
+- Suppressed verbose `sentence_transformers` output
+- Removed the `playsound` dependency in favor of platform-native audio playback
+- Pinned `bibtexparser<2` (litdb uses the 1.x API) and `pymupdf4llm<2` (the 2.0 PyPI release was an empty wheel)
+- Read the litdb version with `importlib.metadata`; `pkg_resources` is gone on Python 3.12+
+
+### CI
+
+- Lint with the ruff version locked in `uv.lock` instead of the latest release
+
+## [2.2.1] - 2025-10-31
+
+### Fixed
+
+- Read-only file system error in the MCP server's NSF COA generation
+
+## [2.2.0] - 2025-10-30
+
+### Added
+
+- `litdb install` commands for the Claude Code skill and the MCP server
+- NSF COA generator tab in the Streamlit app, with ORCID input
+- NSF COA generation tool in the MCP server
+
+### Fixed
+
+- Citations are generated from OpenAlex metadata with full author lists
+- `mcp-server` install uses the current config database
+- MCP tools return concise summaries and full abstracts, avoiding token-limit errors
+- Lazy loading for article display in the Manage Filters tab
+
+## [2.1.9] - 2025-10-26
+
+### Added
+
+- Optional dependency groups (`research`, `app`, `youtube`, `crawl`, `image`, `mcp`, `audio`, `futurehouse`, `all`)
+- Interactive research and file/directory upload in the Streamlit app
+- Filter descriptions in the Manage Filters tab, and the version in the app sidebar
+
 ### Refactored
 
 - **CLI Architecture**: Completed major refactoring of CLI codebase
@@ -28,6 +111,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Optional-dependency imports are lazy, so the core install works without the extras
+- Updated langchain imports for the split package structure
+- Removed `playsound`, which is incompatible with Python 3.12+
+- Updated the FutureHouse client API and show full citations in search
+- Copy buttons now display in Streamlit search results
 - **Tests**: Fixed failing CI tests in `test_cli_openalex.py`
   - Fixed `test_unpaywall_basic` - Added missing mock response fields
   - Fixed `test_follow_remove` - Added proper mocks for `add_author()` and `get_openalex_db()`
