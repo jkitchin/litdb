@@ -282,8 +282,8 @@ def suggest_reviewers(query, n):
         ]
         s += ["\n" + "From these papers:"]
         for i, row in enumerate(results):
-            _source, citation, extra, _distance = row
-            s += [f"{i + 1:2d}. {citation} (source)\n\n"]
+            source, citation, _extra, _distance = row
+            s += [f"{i + 1:2d}. {citation} ({source})\n\n"]
 
         console = Console(color_system="truecolor")
         with console.pager():

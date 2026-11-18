@@ -18,7 +18,7 @@ First, outline the strategy to add this feature.
 
 * Semantic Scholar integration
 
-[[./swagger.json]]
+[[./docs/semantic-scholar-swagger.json]]
 
 summarize the api points for semantic scholar
 

@@ -11,9 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
 - **NSF COA generation**: `nameparser` 3.0 (released 2026-11-08) removed `HumanName`, which `coa.py` and `doe_collaborators.py` use, so fresh installs failed on COA generation. Pinned `nameparser<3`.
-- **OpenAlex**: `get_data` returned `None` on connection errors, so callers crashed iterating the result; it now returns an empty result set
-- **`litdb research`**: the citation list printed the literal word "source" instead of the source
-- **`update-filters`**: a failing filter is now reported instead of silently skipped, and Ctrl-C is no longer swallowed
+- **OpenAlex**: on a network failure (including exhausted retries on 429/5xx), `get_data` returned `None`, so callers crashed with an unhelpful `TypeError`; it now prints the reason and re-raises the request error
+- **`litdb suggest-reviewers`**: the list of matching papers printed the literal word "source" instead of each paper's source
+- **`update-filters`**: a filter that fails (e.g. OpenAlex is unreachable) is now reported and skipped, keeping its `last_updated` date so the next run retries the same window; previously a bare `except` hid the error and swallowed Ctrl-C
 - **YouTube transcripts**: closed a leaked file descriptor from `tempfile.mkstemp`
 
 - **hybrid-search**: results were ranked in reverse (worst match first), full-text scores were normalized with the vector-score range, a source missing from one list counted as a perfect match there, and `-n 1` (or equal scores) crashed with `ZeroDivisionError`. Scores are now normalized per list and summed, higher is better, and at most `n` results are returned.

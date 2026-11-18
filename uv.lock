@@ -4233,7 +4233,7 @@ requires-dist = [
 provides-extras = ["test", "futurehouse", "research", "app", "youtube", "crawl", "image", "mcp", "audio", "all"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.13.3" }]
+dev = [{ name = "ruff", specifier = ">=0.17.5" }]
 
 [[package]]
 name = "litellm"
