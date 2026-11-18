@@ -49,7 +49,7 @@ dependencies = [
   # Data processing and COA
   "pandas",
   "more-itertools",
-  "nameparser",
+  "nameparser<3",  # 3.0 removed HumanName (used in coa.py, doe_collaborators.py)
   "tabulate",
   "IPython",
   # Table extraction
