@@ -18,10 +18,9 @@ import click
 from jinja2 import Template
 from rich import print as richprint
 
-from ..utils import get_config
-from ..db import get_db
 from ..bibtex import dump_bibtex
-
+from ..db import get_db
+from ..utils import get_config
 
 # Lazy database initialization
 _db = None

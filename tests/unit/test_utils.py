@@ -1,7 +1,8 @@
 """Unit tests for litdb.utils module."""
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 class TestGetConfig:
@@ -44,11 +45,9 @@ class TestInitLitdb:
     def test_init_creates_toml(self):
         """Test that init_litdb creates a litdb.toml file."""
         # TODO: Implement with proper file system mocking
-        pass
 
     @pytest.mark.unit
     @pytest.mark.skip(reason="Requires file system mocking")
     def test_init_creates_database(self):
         """Test that init_litdb creates a database."""
         # TODO: Implement with proper file system mocking
-        pass

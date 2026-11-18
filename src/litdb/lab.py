@@ -1,8 +1,9 @@
 """Jupyter Lab interface for litdb."""
 
 import shlex
-from IPython.core.magic import Magics, magics_class, line_cell_magic
+
 from IPython import get_ipython
+from IPython.core.magic import Magics, line_cell_magic, magics_class
 
 
 @magics_class

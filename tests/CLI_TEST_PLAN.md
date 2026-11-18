@@ -175,13 +175,14 @@ from click.testing import CliRunner
 from litdb.cli import cli
 import pytest
 
+
 class TestAddCommand:
     """Test the 'add' command."""
 
     def test_add_doi_basic(self, test_db, mock_openalex):
         """Test adding a work by DOI."""
         runner = CliRunner()
-        result = runner.invoke(cli, ['add', 'https://doi.org/10.1234'])
+        result = runner.invoke(cli, ["add", "https://doi.org/10.1234"])
 
         assert result.exit_code == 0
         assert "Added" in result.output
@@ -190,7 +191,7 @@ class TestAddCommand:
     def test_add_invalid_doi(self):
         """Test error handling for invalid DOI."""
         runner = CliRunner()
-        result = runner.invoke(cli, ['add', 'invalid'])
+        result = runner.invoke(cli, ["add", "invalid"])
 
         assert result.exit_code != 0
         assert "Error" in result.output

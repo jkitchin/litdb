@@ -4,10 +4,11 @@ These tests cover search functionality that will be moved to
 commands/search.py during refactoring.
 """
 
+from unittest.mock import MagicMock, patch
+
+import numpy as np
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
-import numpy as np
 
 from litdb.cli import cli
 
@@ -392,4 +393,3 @@ class TestScreenshotCommand:
     def test_screenshot_with_clipboard_image(self):
         """Test screenshot search with actual clipboard image."""
         # TODO: Mock ImageGrab and pytesseract
-        pass

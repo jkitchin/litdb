@@ -4,9 +4,10 @@ Tests for claude-skill and mcp-server installation commands.
 """
 
 import json
+from unittest.mock import patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch
 
 from litdb.cli import cli
 
@@ -89,35 +90,36 @@ class TestInstallMcpServerCommand:
         # Mock platform to be Mac
         import platform
 
-        with patch.object(platform, "system", return_value="Darwin"):
-            # Mock Path.home() to use our test directory
-            with patch("pathlib.Path.home", return_value=tmp_path):
-                # Create the config directory structure
-                lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
-                lib_dir.mkdir(parents=True)
+        # Mock Path.home() to use our test directory
+        with (
+            patch.object(platform, "system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=tmp_path),
+        ):
+            # Create the config directory structure
+            lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
+            lib_dir.mkdir(parents=True)
 
-                result = runner.invoke(
-                    cli, ["install", "mcp-server", "--db", str(db_path), "-y"]
-                )
+            result = runner.invoke(
+                cli, ["install", "mcp-server", "--db", str(db_path), "-y"]
+            )
 
-                # Check command succeeded
-                assert result.exit_code == 0
-                assert "Successfully installed litdb MCP server" in result.output
+            # Check command succeeded
+            assert result.exit_code == 0
+            assert "Successfully installed litdb MCP server" in result.output
 
-                # Check config file was created
-                config_path = lib_dir / "claude_desktop_config.json"
-                assert config_path.exists()
+            # Check config file was created
+            config_path = lib_dir / "claude_desktop_config.json"
+            assert config_path.exists()
 
-                # Check config content
-                with open(config_path) as f:
-                    config = json.load(f)
+            # Check config content
+            with open(config_path) as f:
+                config = json.load(f)
 
-                assert "mcpServers" in config
-                assert "litdb" in config["mcpServers"]
-                assert (
-                    config["mcpServers"]["litdb"]["command"]
-                    == "/usr/local/bin/litdb_mcp"
-                )
+            assert "mcpServers" in config
+            assert "litdb" in config["mcpServers"]
+            assert (
+                config["mcpServers"]["litdb"]["command"] == "/usr/local/bin/litdb_mcp"
+            )
 
     @pytest.mark.unit
     @patch("shutil.which")
@@ -135,23 +137,25 @@ class TestInstallMcpServerCommand:
         # Mock platform to be Mac
         import platform
 
-        with patch.object(platform, "system", return_value="Darwin"):
-            # Mock Path.home() to use our test directory
-            with patch("pathlib.Path.home", return_value=tmp_path):
-                # Create the config directory structure
-                lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
-                lib_dir.mkdir(parents=True)
+        # Mock Path.home() to use our test directory
+        with (
+            patch.object(platform, "system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=tmp_path),
+        ):
+            # Create the config directory structure
+            lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
+            lib_dir.mkdir(parents=True)
 
-                # Test with 'y' input
-                result = runner.invoke(
-                    cli, ["install", "mcp-server", "--db", str(db_path)], input="y\n"
-                )
+            # Test with 'y' input
+            result = runner.invoke(
+                cli, ["install", "mcp-server", "--db", str(db_path)], input="y\n"
+            )
 
-                # Check command succeeded
-                assert result.exit_code == 0
-                assert "MCP Server Installation Details:" in result.output
-                assert "Continue with installation?" in result.output
-                assert "Successfully installed litdb MCP server" in result.output
+            # Check command succeeded
+            assert result.exit_code == 0
+            assert "MCP Server Installation Details:" in result.output
+            assert "Continue with installation?" in result.output
+            assert "Successfully installed litdb MCP server" in result.output
 
     @pytest.mark.unit
     @patch("shutil.which")
@@ -169,17 +173,19 @@ class TestInstallMcpServerCommand:
         # Mock platform to be Mac
         import platform
 
-        with patch.object(platform, "system", return_value="Darwin"):
-            # Mock Path.home() to use our test directory
-            with patch("pathlib.Path.home", return_value=tmp_path):
-                # Test with 'n' input (cancel)
-                result = runner.invoke(
-                    cli, ["install", "mcp-server", "--db", str(db_path)], input="n\n"
-                )
+        # Mock Path.home() to use our test directory
+        with (
+            patch.object(platform, "system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=tmp_path),
+        ):
+            # Test with 'n' input (cancel)
+            result = runner.invoke(
+                cli, ["install", "mcp-server", "--db", str(db_path)], input="n\n"
+            )
 
-                # Check command was cancelled
-                assert result.exit_code == 1
-                assert "Installation cancelled" in result.output
+            # Check command was cancelled
+            assert result.exit_code == 1
+            assert "Installation cancelled" in result.output
 
 
 class TestUninstallMcpCommand:
@@ -202,39 +208,39 @@ class TestUninstallMcpCommand:
         # Mock platform to be Mac
         import platform
 
-        with patch.object(platform, "system", return_value="Darwin"):
-            # Mock Path.home() to use our test directory
-            with patch("pathlib.Path.home", return_value=tmp_path):
-                # Create the config directory structure
-                lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
-                lib_dir.mkdir(parents=True)
+        # Mock Path.home() to use our test directory
+        with (
+            patch.object(platform, "system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=tmp_path),
+        ):
+            # Create the config directory structure
+            lib_dir = tmp_path / "Library" / "Application Support" / "Claude"
+            lib_dir.mkdir(parents=True)
 
-                # Create existing config with litdb
-                config_path = lib_dir / "claude_desktop_config.json"
-                config = {
-                    "mcpServers": {
-                        "litdb": {
-                            "command": "/usr/local/bin/litdb_mcp",
-                            "env": {"litdb": "/path/to/db"},
-                        },
-                        "other": {"command": "/other/command"},
-                    }
+            # Create existing config with litdb
+            config_path = lib_dir / "claude_desktop_config.json"
+            config = {
+                "mcpServers": {
+                    "litdb": {
+                        "command": "/usr/local/bin/litdb_mcp",
+                        "env": {"litdb": "/path/to/db"},
+                    },
+                    "other": {"command": "/other/command"},
                 }
-                with open(config_path, "w") as f:
-                    json.dump(config, f)
+            }
+            with open(config_path, "w") as f:
+                json.dump(config, f)
 
-                # Run uninstall
-                result = runner.invoke(cli, ["install", "uninstall-mcp"])
+            # Run uninstall
+            result = runner.invoke(cli, ["install", "uninstall-mcp"])
 
-                # Check command succeeded
-                assert result.exit_code == 0
-                assert "Successfully uninstalled litdb MCP server" in result.output
+            # Check command succeeded
+            assert result.exit_code == 0
+            assert "Successfully uninstalled litdb MCP server" in result.output
 
-                # Check config was updated
-                with open(config_path) as f:
-                    updated_config = json.load(f)
+            # Check config was updated
+            with open(config_path) as f:
+                updated_config = json.load(f)
 
-                assert "litdb" not in updated_config["mcpServers"]
-                assert (
-                    "other" in updated_config["mcpServers"]
-                )  # Other servers preserved
+            assert "litdb" not in updated_config["mcpServers"]
+            assert "other" in updated_config["mcpServers"]  # Other servers preserved

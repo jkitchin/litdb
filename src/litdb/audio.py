@@ -1,9 +1,10 @@
 """Library for audio sources."""
 
-import requests
-from transformers import pipeline
 import os
 import tempfile
+
+import requests
+from transformers import pipeline
 
 
 def is_audio_url(url):
@@ -63,7 +64,7 @@ def get_audio_text(path):
     except requests.exceptions.RequestException as e:
         print(f"Error fetching audio from URL: {e}")
         return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - whisper/ffmpeg raise many types
         print(f"Error during transcription: {e}")
         return None
 
@@ -73,9 +74,10 @@ def record():
 
     Returns the audio filename it is recorded in.
     """
-    import pyaudio
-    import wave
     import threading
+    import wave
+
+    import pyaudio
 
     # Parameters for recording
     FORMAT = pyaudio.paInt16
@@ -112,12 +114,11 @@ def record():
         stream.close()
 
         # Save the recorded data as a WAV file
-        wf = wave.open(audio_file, "wb")
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(audio.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-        wf.close()
+        with wave.open(audio_file, "wb") as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(audio.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b"".join(frames))
         print("    Done recording. Transcribing...")
 
     # Event to signal when to stop recording

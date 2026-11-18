@@ -3,29 +3,27 @@
 The main command is litdb. There are subcommands for the actions.
 """
 
+import logging
 import warnings
 
 import click
-
-from .db import get_db
+from transformers.utils import logging as tulogging
 
 # Import command modules
 from .commands import (
-    manage,
-    search,
+    data_processing,
     export,
-    tags,
-    review,
     filters,
+    install,
+    manage,
     openalex_commands,
     research_commands,
-    data_processing,
+    review,
+    search,
+    tags,
     utilities,
-    install,
 )
-
-import logging
-from transformers.utils import logging as tulogging
+from .db import get_db
 
 # Disable all Transformers logging
 tulogging.set_verbosity_error()
@@ -49,7 +47,6 @@ except SystemExit:
 @click.group()
 def cli():
     """Group command for litdb."""
-    pass
 
 
 # Register commands from manage module

@@ -25,15 +25,7 @@ class TestInitCommand:
         result = runner.invoke(
             cli,
             ["init"],
-            input="\n".join(
-                [
-                    "test@example.com",  # email
-                    "",  # api key (empty)
-                    "",  # embedding model (use default)
-                    "",  # llm model (use default)
-                    "",  # gpt model (use default)
-                ]
-            ),
+            input="test@example.com\n\n\n\n",
         )
 
         # Check command succeeded
@@ -58,7 +50,7 @@ class TestInitCommand:
         result = runner.invoke(
             cli,
             ["init"],
-            input="\n".join(["test@example.com", "", "", "", ""]),
+            input="test@example.com\n\n\n\n",
         )
 
         assert result.exit_code == 0
@@ -145,7 +137,6 @@ class TestAddCommandPlaceholder:
         """Test adding entries from a bibtex file."""
         # TODO: Create bibtex fixture
         # TODO: Test adding from file
-        pass
 
 
 class TestRemoveCommandPlaceholder:
@@ -158,7 +149,6 @@ class TestRemoveCommandPlaceholder:
         # TODO: Set up test database with known entry
         # TODO: Test removal
         # TODO: Verify it's gone
-        pass
 
 
 class TestVersionCommand:

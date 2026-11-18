@@ -9,12 +9,13 @@ results.
 """
 
 import json
+
+import numpy as np
 from litellm import completion
 from sentence_transformers import SentenceTransformer
-import numpy as np
 
-from .utils import get_config
 from .openalex import get_data, get_text
+from .utils import get_config
 
 # Lazy config initialization
 _config = None

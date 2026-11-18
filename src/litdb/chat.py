@@ -33,9 +33,9 @@ except ImportError:
         full_jitter = None
 
 
-from .utils import get_config
+from .audio import get_audio_text, record
 from .db import get_db
-from .audio import record, get_audio_text
+from .utils import get_config
 
 warnings.filterwarnings("ignore")
 
@@ -155,7 +155,9 @@ def expand_prompt(prompt):
     pattern = r"(^<(.+)$)"
     matches = re.findall(pattern, prompt, re.MULTILINE)
     for _match, cmd in matches:
-        result = subprocess.run(cmd.strip(), shell=True, text=True, capture_output=True)
+        result = subprocess.run(
+            cmd.strip(), shell=True, text=True, capture_output=True, check=False
+        )
         prompt = prompt.replace(_match, result.stdout)
 
     return prompt
@@ -344,8 +346,10 @@ The following subcommands can be used:
 
         elif prompt == "!save":
             with open(input("Filename (chat.txt): ") or "chat.txt", "w") as f:
-                for message in messages:
-                    f.write(f"{message['role']}: {message['content']}\n\n")
+                f.writelines(
+                    f"{message['role']}: {message['content']}\n\n"
+                    for message in messages
+                )
             continue
 
         elif prompt == "!restart":

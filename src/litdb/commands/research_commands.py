@@ -8,20 +8,20 @@ Commands:
 
 import json
 import os
+import webbrowser
 
 import click
+import tabulate
 from IPython import get_ipython
-from IPython.display import display, HTML
+from IPython.display import HTML, display
 from more_itertools import batched
 from rich import print as richprint
 from rich.console import Console
 from rich.markdown import Markdown
-import tabulate
-import webbrowser
 
-from ..utils import get_config
 from ..openalex import get_data
 from ..research import deep_research
+from ..utils import get_config
 from . import search
 
 
@@ -113,7 +113,7 @@ def research(query, report_type, doc_path, output, verbose):
     if doc_path:
         os.environ["DOC_PATH"] = doc_path
 
-    report, result, context, costs, images, sources = deep_research(
+    report, result, context, costs, _images, _sources = deep_research(
         query, report_type, verbose
     )
 
@@ -129,7 +129,7 @@ ${costs}
 {context}
 """
     if output:
-        base, ext = os.path.splitext(output)
+        _base, ext = os.path.splitext(output)
         # I found pypandoc was not good at pdf. lots of bad latex commands that
         # make the pdf build fail.
         # pdfkit relies on wkhtmltopdf which appears discontinued
@@ -143,8 +143,8 @@ ${costs}
 
         elif ext == ".docx":
             import mistune
-            from htmldocx import HtmlToDocx
             from docx import Document
+            from htmldocx import HtmlToDocx
 
             html = mistune.html(s)
             doc = Document()
@@ -205,7 +205,7 @@ def suggest_reviewers(query, n):
     authors = []
 
     for i, row in enumerate(results):
-        source, citation, extra, distance = row
+        _source, _citation, extra, _distance = row
 
         d = json.loads(extra)
 
@@ -268,8 +268,8 @@ def suggest_reviewers(query, n):
             )
         )
         for i, row in enumerate(results):
-            source, citation, extra, distance = row
-            richprint(f"{i + 1:2d}. {citation} (source)\n\n")
+            source, citation, _extra, _distance = row
+            richprint(f"{i + 1:2d}. {citation} ({source})\n\n")
 
     else:
         s = ["Potential reviewers"]
@@ -282,7 +282,7 @@ def suggest_reviewers(query, n):
         ]
         s += ["\n" + "From these papers:"]
         for i, row in enumerate(results):
-            source, citation, extra, distance = row
+            _source, citation, extra, _distance = row
             s += [f"{i + 1:2d}. {citation} (source)\n\n"]
 
         console = Console(color_system="truecolor")

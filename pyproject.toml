@@ -205,3 +205,9 @@ directory = "htmlcov"
 
 # (shell-command "uv build")
 # (shell-command "uv publish")
+[tool.ruff.lint.per-file-ignores]
+# The Streamlit UI and the MCP tools are top-level boundaries: any error is
+# shown to the user (st.error / tool result) instead of crashing the page or
+# server, and optional metadata parsing falls back silently.
+"src/litdb/app.py" = ["BLE001", "S110"]
+"src/litdb/mcp_server.py" = ["BLE001"]

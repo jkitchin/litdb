@@ -15,16 +15,17 @@ logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["TQDM_DISABLE"] = "1"
 
-import numpy as np  # noqa: E402
-from sentence_transformers import SentenceTransformer  # noqa: E402
-from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: E402
-from tqdm import tqdm  # noqa: E402
-import datetime  # noqa: E402
-import bibtexparser  # noqa: E402
-from rich import print  # noqa: E402
+import datetime
 
-from litdb.openalex import get_data, get_text  # noqa: E402
-from litdb.bibtex import dump_bibtex  # noqa: E402
+import bibtexparser
+import numpy as np
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from rich import print
+from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
+
+from litdb.bibtex import dump_bibtex
+from litdb.openalex import get_data, get_text
 
 
 def _check_embedding_config(db, config):
@@ -55,9 +56,9 @@ def _check_embedding_config(db, config):
     elif row[0] != current:
         stored = json.loads(row[0])
         changes = []
-        for k in emb_config:
-            if emb_config[k] != stored.get(k):
-                changes.append(f"  {k}: {stored.get(k)} -> {emb_config[k]}")
+        for k, v in emb_config.items():
+            if v != stored.get(k):
+                changes.append(f"  {k}: {stored.get(k)} -> {v}")
         print(
             "[bold yellow]Warning:[/bold yellow] Embedding config has changed:\n"
             + "\n".join(changes)
@@ -278,7 +279,7 @@ def get_citation(openalex_data):
 
         return " ".join(parts) if parts else None
 
-    except Exception as e:
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as e:
         print(f"Error generating citation: {e}")
         return None
 
@@ -411,12 +412,10 @@ def add_work(
                 if max_citing == -1:
                     pass  # Download all
                 # Positive number: limit to that many
-                elif max_citing > 0:
-                    if citing_downloaded >= max_citing:
-                        print(f"Reached limit of {max_citing} citing works.")
-                        break
+                elif max_citing > 0 and citing_downloaded >= max_citing:
+                    print(f"Reached limit of {max_citing} citing works.")
+                    break
                     # Don't prompt if we're within the limit
-                    pass
             # No max_citing specified, use existing trigger logic
             else:
                 # TODO: should the max citations to trigger this be configurable in litdb.toml
@@ -445,9 +444,12 @@ def add_work(
 
             for work in tqdm(cdata["results"]):
                 # Check if we've reached the limit
-                if max_citing is not None and max_citing > 0:
-                    if citing_downloaded >= max_citing:
-                        break
+                if (
+                    max_citing is not None
+                    and max_citing > 0
+                    and citing_downloaded >= max_citing
+                ):
+                    break
 
                 source = work.get("doi") or work["id"]
                 if verbose:
@@ -579,8 +581,8 @@ def update_filter(f, last_updated=None, silent=False):
 def add_bibtex(bibfile):
     """Add entries with a DOI from bibfile."""
 
-    with open(bibfile, "r", encoding="utf-8", errors="replace") as bibfile:
-        bib_database = bibtexparser.load(bibfile)
+    with open(bibfile, encoding="utf-8", errors="replace") as f:
+        bib_database = bibtexparser.load(f)
 
         for entry in tqdm(bib_database.entries):
             if "doi" in entry:

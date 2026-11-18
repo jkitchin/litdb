@@ -16,7 +16,7 @@ import click
 import requests
 from rich import print as richprint
 
-from ..extract import extract_tables, extract_schema
+from ..extract import extract_schema, extract_tables
 from . import manage
 
 
@@ -162,7 +162,7 @@ Text:
         richprint(f"[red]Error parsing LLM output as JSON: {e}[/red]")
         richprint(f"LLM output was:\n{llm_output}")
         return
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - litellm raises provider-specific types
         richprint(f"[red]Error getting LLM completion: {e}[/red]")
         return
 
@@ -279,7 +279,7 @@ Text:
                 else:
                     richprint(f"   [red]CrossRef API error: {resp.status_code}[/red]")
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - keep going with the next reference
                 richprint(f"   [red]Error querying CrossRef: {e}[/red]")
 
         richprint()  # blank line between references

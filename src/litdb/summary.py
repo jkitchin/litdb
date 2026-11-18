@@ -207,7 +207,7 @@ Return ONLY the JSON object, no other text.
                 all_topics.extend(topics)
                 article_topics[source] = topics
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - skip a failed LLM batch
             richprint(
                 f"[yellow]Warning: Error processing batch {batch_start + 1}-{min(batch_start + batch_size, len(articles))}: {e}[/yellow]"
             )
@@ -279,7 +279,7 @@ Return only the JSON, no other text.
         else:
             richprint("[red]Error: LLM did not return valid topic structure[/red]")
             return {}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - LLM call boundary
         richprint(f"[red]Error aggregating topics: {e}[/red]")
         return {}
 
@@ -369,7 +369,7 @@ Return ONLY the JSON object, no other text.
                     subtopic = classification.get("subtopic")
                     result[source] = (main_topic, subtopic)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - skip a failed LLM batch
             richprint(
                 f"[yellow]Warning: Error classifying batch {batch_start + 1}-{min(batch_start + batch_size, len(articles))}: {e}[/yellow]"
             )
@@ -416,7 +416,7 @@ Write 2-3 paragraphs summarizing the key findings and trends. Reference the arti
         output = get_completion(model, messages)
         richprint()
         return output
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - LLM call boundary
         richprint(f"[red]Error generating summary for {subtopic_name}: {e}[/red]")
         return f"Error generating summary for {subtopic_name}."
 
@@ -527,7 +527,7 @@ def generate_summary(since="1 week", output_file=None, model=None):
 
     # Step 2: Extract topics from all articles in batch
     richprint("[bold cyan]Step 2:[/bold cyan] Extracting topics from all articles...")
-    all_topics, article_topics = extract_topics_batch(articles, model)
+    all_topics, _article_topics = extract_topics_batch(articles, model)
 
     richprint(f"Extracted {len(all_topics)} total topics\n")
 

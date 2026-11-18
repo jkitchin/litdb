@@ -5,7 +5,7 @@ Focus on testing the robust_json_parse function which handles LLM output.
 
 import pytest
 
-from litdb.summary import robust_json_parse, ARTICLE_TYPES, format_org_mode
+from litdb.summary import ARTICLE_TYPES, format_org_mode, robust_json_parse
 
 
 class TestRobustJsonParse:
@@ -200,14 +200,12 @@ class TestGetArticlesSincePlaceholder:
     def test_get_articles_since_basic(self):
         """Test basic article retrieval by date."""
         # TODO: Implement with test database
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires database setup")
     def test_get_articles_filters_by_type(self):
         """Test that only article types are returned."""
         # TODO: Implement with test database
-        pass
 
 
 class TestGenerateSummaryPlaceholder:
@@ -221,7 +219,6 @@ class TestGenerateSummaryPlaceholder:
     def test_generate_summary_end_to_end(self):
         """Test full summary generation workflow."""
         # TODO: Implement with mocked LLM and test database
-        pass
 
 
 class TestFormatOrgMode:

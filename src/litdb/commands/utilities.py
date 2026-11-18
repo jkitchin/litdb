@@ -10,9 +10,9 @@ Commands:
 """
 
 import os
+import webbrowser
 
 import click
-import webbrowser
 
 from ..audio import get_audio_text, record
 from ..chat import chat

@@ -1,20 +1,21 @@
 """OpenAlex plugin for litdb."""
 
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
+from ratelimit import limits
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
-
-from ratelimit import limits
 
 
 # limit openalex calls to 10 per second
 @limits(calls=10, period=1)
 def get_data(url, params=None):
-    """Get json data for URL and PARAMS with rate limiting. If this request
-    fails, it prints the status code, but returns an empty dictionary.
+    """Get json data for URL and PARAMS with rate limiting.
 
+    If the request fails, print the reason and return an empty result set
+    ({"meta": {"next_cursor": None}, "results": []}) so callers can iterate it.
     """
+    empty = {"meta": {"next_cursor": None}, "results": []}
     try:
         retry = Retry(
             total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504]
@@ -32,10 +33,13 @@ def get_data(url, params=None):
             print("status code: ", req.status_code)
             print("text: ", req.text)
             print("url: ", req.url)
-            return {"meta": {"next_cursor": None}, "results": []}
+            return empty
 
-    except Exception as e:
-        print(e)
+    except (requests.RequestException, ValueError) as e:
+        # RequestException covers connection errors and exhausted retries;
+        # ValueError covers a 200 response whose body is not valid JSON.
+        print(f"OpenAlex request failed: {e}")
+        return empty
 
 
 def html_to_text(html_string):

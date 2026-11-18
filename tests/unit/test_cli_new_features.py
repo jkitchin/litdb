@@ -4,9 +4,10 @@ These commands were recently added in v2.1.8 and need comprehensive testing
 before refactoring to commands/review.py and commands/extract.py.
 """
 
+from unittest.mock import patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch
 
 from litdb.cli import cli
 
@@ -143,21 +144,18 @@ class TestExtractCommand:
         """Test extracting all tables from PDF."""
         # TODO: Create PDF fixture with tables
         # TODO: Test extraction
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires PDF fixture")
     def test_extract_specific_tables(self):
         """Test extracting specific tables with -t flag."""
         # TODO: Test with -t 1 -t 3
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires PDF fixture")
     def test_extract_output_format(self):
         """Test extract with different output formats."""
         # TODO: Test with -f option
-        pass
 
 
 class TestSchemaCommand:

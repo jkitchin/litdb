@@ -1,8 +1,8 @@
 """plugin to add a PDF to litdb."""
 
-import litdb.db
-
 import pymupdf4llm
+
+import litdb.db
 
 
 def add_pdf(sources):

@@ -14,7 +14,6 @@ from jinja2 import Template
 from ..db import get_db
 from ..summary import generate_summary
 
-
 # Lazy database initialization
 _db = None
 

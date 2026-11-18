@@ -66,22 +66,21 @@ All tools return formatted, readable text with complete information.
 
 """
 
-from mcp.server.fastmcp import FastMCP
-import requests
 import contextlib
 import json
-import platform
 import os
+import platform
 import shutil
 import sys
 
-from sentence_transformers import SentenceTransformer
-import numpy as np
 import libsql
+import numpy as np
+import requests
+from mcp.server.fastmcp import FastMCP
+from sentence_transformers import SentenceTransformer
 
 from .bibtex import dump_bibtex
 from .coa import get_coa
-
 
 # Initialize FastMCP server
 mcp = FastMCP("litdb")
@@ -186,13 +185,15 @@ def vsearch(query: str, n: int = 3) -> str:
 
             formatted_results.append(result_text)
         except Exception as e:
-            formatted_results.append(f"{i}. {source}\n   Error: {str(e)}")
+            formatted_results.append(f"{i}. {source}\n   Error: {e!s}")
 
     return "\n\n".join(formatted_results)
 
 
 @mcp.tool()
-def openalex(query: str, n: int = 5, email: str = None, api_key: str = None):
+def openalex(
+    query: str, n: int = 5, email: str | None = None, api_key: str | None = None
+):
     """Run a simple keyword query in OpenAlex.
 
     Args:
@@ -332,7 +333,7 @@ def fulltext_search(query: str, n: int = 3) -> str:
             formatted_results.append(result_text)
         except Exception as e:
             formatted_results.append(
-                f"{i}. {source}\n   Snippet: {snippet}\n   Error: {str(e)}"
+                f"{i}. {source}\n   Snippet: {snippet}\n   Error: {e!s}"
             )
 
     return "\n\n".join(formatted_results)
@@ -362,7 +363,7 @@ def find_similar(source: str, n: int = 3) -> str:
 
         (emb,) = result
     except Exception as e:
-        return f"Error retrieving source embedding: {str(e)}"
+        return f"Error retrieving source embedding: {e!s}"
 
     # Find similar sources (we get n+1 because the first is always the source itself)
     allrows = db.execute(
@@ -410,7 +411,7 @@ def find_similar(source: str, n: int = 3) -> str:
 
             formatted_results.append(result_text)
         except Exception as e:
-            formatted_results.append(f"{i}. {sim_source}\n   Error: {str(e)}")
+            formatted_results.append(f"{i}. {sim_source}\n   Error: {e!s}")
 
     return f"Articles similar to {source}:\n\n" + "\n\n".join(formatted_results)
 
@@ -484,7 +485,7 @@ def get_source_details(source: str) -> str:
 
         return output
     except Exception as e:
-        return f"Error formatting source details: {str(e)}"
+        return f"Error formatting source details: {e!s}"
 
 
 @mcp.tool()
@@ -544,7 +545,7 @@ def get_bibtex(source: str) -> str:
         bibtex = dump_bibtex(extra_data)
         return bibtex
     except Exception as e:
-        return f"Error generating BibTeX: {str(e)}"
+        return f"Error generating BibTeX: {e!s}"
 
 
 @mcp.tool()
@@ -622,7 +623,7 @@ def get_tagged_articles(tag: str) -> str:
 
             formatted_results.append(result_text)
         except Exception as e:
-            formatted_results.append(f"{i}. {source}\n   Error: {str(e)}")
+            formatted_results.append(f"{i}. {source}\n   Error: {e!s}")
 
     return f"Articles tagged with '{tag}' ({len(results)} found):\n\n" + "\n\n".join(
         formatted_results
@@ -630,7 +631,7 @@ def get_tagged_articles(tag: str) -> str:
 
 
 @mcp.tool()
-def generate_nsf_coa(orcid: str, email: str = None) -> str:
+def generate_nsf_coa(orcid: str, email: str | None = None) -> str:
     """Generate NSF Collaborators and Other Affiliations (COA) Table 4.
 
     Creates an Excel file with co-authors from publications in the last 4 years.
@@ -661,7 +662,7 @@ This includes all co-authors from publications in the last 4 years.
 
 You can open the file from your Downloads folder or use the path above to locate it."""
     except Exception as e:
-        return f"❌ Failed to generate NSF COA file: {str(e)}\n\nMake sure you have write access to your Downloads folder."
+        return f"❌ Failed to generate NSF COA file: {e!s}\n\nMake sure you have write access to your Downloads folder."
 
 
 def main():
@@ -681,7 +682,9 @@ def main():
     elif platform.system() == "Windows":
         cfgfile = r"%APPDATA%\Claude\claude_desktop_config.json"
     else:
-        raise Exception("Claude Desktop install is only supported on Mac and Windows")
+        raise RuntimeError(
+            "Claude Desktop install is only supported on Mac and Windows"
+        )
 
     cfgfile = os.path.expandvars(cfgfile)
     cfgfile = os.path.expanduser(cfgfile)

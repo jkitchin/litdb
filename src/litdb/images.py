@@ -5,12 +5,14 @@ search the images either by textual descriptions, or by using similar images.
 
 """
 
-from .db import get_db
-from sentence_transformers import SentenceTransformer
-from PIL import Image
-import numpy as np
 import datetime
 import os
+
+import numpy as np
+from PIL import Image
+from sentence_transformers import SentenceTransformer
+
+from .db import get_db
 
 # Register HEIF support if available (optional dependency)
 try:
@@ -56,8 +58,8 @@ def image_query(query=None, clipboard=False, n=1):
     elif query and not os.path.exists(query):
         emb = model.encode(query)
     elif clipboard:
-        from PIL import ImageGrab
         import pyperclip
+        from PIL import ImageGrab
 
         clip = ImageGrab.grabclipboard()
         if isinstance(clip, Image.Image):

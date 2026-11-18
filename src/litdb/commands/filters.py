@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 from ..db import get_db, update_filter
 
-
 # Lazy database initialization
 _db = None
 
@@ -84,7 +83,8 @@ def update_filters(fmt, silent):
             for result in results:
                 source, text, extra = result
                 richprint(Template(fmt).render(**locals()))
-        except:  # noqa: E722
+        except Exception as e:  # noqa: BLE001 - one bad filter must not stop the rest
+            richprint(f"[yellow]Skipping filter {f!r}: {e}[/yellow]")
             continue
 
 

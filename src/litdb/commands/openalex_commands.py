@@ -16,10 +16,9 @@ import click
 import requests
 from rich import print as richprint
 
-from ..utils import get_config
-from ..db import get_db, add_author
+from ..db import add_author, get_db
 from ..openalex import get_data
-
+from ..utils import get_config
 
 # Lazy database initialization
 _db = None

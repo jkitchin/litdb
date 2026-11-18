@@ -31,17 +31,30 @@ class TestOpenAlexAPIParameters:
             # Call with parameters that would include mailto
             params = {"mailto": "test@example.com", "filter": "test"}
 
-            try:
-                get_data("https://api.openalex.org/works", params)
-            except Exception:
-                # May fail due to other reasons, but we're checking the call
-                pass
+            data = get_data("https://api.openalex.org/works", params)
 
-            # Check that the request was made
-            if len(rsps.calls) > 0:
-                # Verify mailto is in the query string, not email
-                query_string = rsps.calls[0].request.url
-                assert "mailto" in query_string or len(rsps.calls) == 0
+            assert data == {"results": []}
+            assert len(rsps.calls) == 1
+            url = rsps.calls[0].request.url
+            assert "mailto=test%40example.com" in url
+            assert "email=" not in url
+
+    @pytest.mark.unit
+    def test_get_data_returns_empty_results_on_connection_error(self):
+        """A network failure returns an iterable empty result, not None."""
+        import requests
+
+        from litdb.openalex import get_data
+
+        with responses.RequestsMock() as rsps:
+            rsps.add(
+                responses.GET,
+                "https://api.openalex.org/works",
+                body=requests.ConnectionError("network down"),
+            )
+            data = get_data("https://api.openalex.org/works", {"filter": "x"})
+
+        assert data == {"meta": {"next_cursor": None}, "results": []}
 
     @pytest.mark.unit
     def test_get_citation_includes_all_authors(self):
@@ -106,11 +119,9 @@ class TestAPIRateLimiting:
     def test_rate_limiting_respected(self):
         """Test that rate limiting is respected."""
         # TODO: Implement when we have better rate limiting tests
-        pass
 
     @pytest.mark.integration
     @pytest.mark.skip(reason="Requires actual API calls")
     def test_api_key_included_when_available(self):
         """Test that API key is included in requests when configured."""
         # TODO: Implement with test config containing API key
-        pass
