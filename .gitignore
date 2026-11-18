@@ -22,3 +22,12 @@ htmlcov/
 .tox/
 *.py[cod]
 *$py.class
+
+# Secrets and local settings
+.env
+**/.env
+.claude/settings.local.json
+**/.claude/settings.local.json
+
+# Personal data files
+src/litdb/*.xlsx
