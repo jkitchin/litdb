@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **MCP server**: `litdb_mcp` failed to import on fresh installs because the `fastmcp` dependency pulled in `mcp` 2.x, which removed `mcp.server.fastmcp`. litdb now depends on `mcp>=1.22,<2` directly.
+- **NSF COA generation**: `nameparser` 3.0 (released 2026-11-08) removed `HumanName`, which `coa.py` and `doe_collaborators.py` use, so fresh installs failed on COA generation. Pinned `nameparser<3`.
 
 ### Changed
 
 - Declared `requires-python = ">=3.11"`, matching the CI test matrix
+- Refreshed `uv.lock` (transformers 5, sentence-transformers 6, pandas 3, langchain-core 1, docling 2.150, pillow 13, torch 2.15)
 - Moved `ruff` from runtime dependencies to a `dev` dependency group
 - Removed the Python 2-era `docx` package from the `research` and `all` extras; it installed into the same `docx` module as `python-docx`
 - Moved developer notes out of the repository root: `REFACTORING_PLAN.md`, `deep-research.org`, and the Semantic Scholar `swagger.json` are now in `docs/`, and `test_fromtext.sh` is in `scripts/`
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - README: added CI, PyPI, and downloads badges; replaced the static test-count badge
+- README: serve the DOI badge from shields.io; GitHub's image proxy could not load Zenodo's badge, so it showed as a broken image
 
 ## [2.2.3] - 2026-10-27
 
