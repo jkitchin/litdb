@@ -3,9 +3,6 @@
 #+attr_org: :width 600
 [[./litdb.png]]
 #+BEGIN_html
-<a href="https://github.com/jkitchin/litdb/actions/workflows/build.yml">
-  <img src="https://github.com/jkitchin/litdb/actions/workflows/build.yml/badge.svg" alt="Build Status">
-</a>
 <a href="https://github.com/jkitchin/litdb/actions/workflows/test.yml">
   <img src="https://github.com/jkitchin/litdb/actions/workflows/test.yml/badge.svg" alt="CI">
 </a>
