@@ -343,6 +343,19 @@ class TestSimilarCommand:
         assert result.exit_code == 0
         assert "similar" in result.output.lower()
 
+    @pytest.mark.unit
+    @patch("litdb.commands.search.get_db")
+    def test_similar_unknown_source(self, mock_get_db):
+        """A source that is not in the db gives a clear error, not a TypeError."""
+        mock_db = MagicMock()
+        mock_db.execute.return_value.fetchone.return_value = None
+        mock_get_db.return_value = mock_db
+
+        result = CliRunner().invoke(cli, ["similar", "missing.pdf"])
+
+        assert result.exit_code == 1
+        assert "missing.pdf is not in the database" in result.output
+
 
 class TestImageSearchCommand:
     """Test the 'litdb image-search' command."""

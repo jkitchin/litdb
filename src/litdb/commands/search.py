@@ -234,7 +234,10 @@ def lsearch(query, q, n, k):
 @click.option("-n", default=1, help="Number of hits to retrieve")
 def image_search(query, clipboard, n):
     """Search for images using CLIP model."""
-    image_query(" ".join(query), clipboard, n)
+    try:
+        image_query(" ".join(query), clipboard, n)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
 
 
 @click.command()
@@ -249,9 +252,12 @@ def similar(source, n, emacs, fmt):
     FMT is a jinja template with access to source, text, and extra
     """
     db = get_search_db()
-    (emb,) = db.execute(
+    row = db.execute(
         """select embedding from sources where source = ?""", (source,)
     ).fetchone()
+    if row is None:
+        raise click.ClickException(f"{source} is not in the database.")
+    (emb,) = row
 
     allrows = db.execute(
         """select sources.source, sources.text, sources.extra

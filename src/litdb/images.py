@@ -6,11 +6,11 @@ search the images either by textual descriptions, or by using similar images.
 """
 
 import datetime
+import functools
 import os
 
 import numpy as np
 from PIL import Image
-from sentence_transformers import SentenceTransformer
 
 from .db import get_db
 
@@ -24,12 +24,23 @@ except ImportError:
 
 image_extensions = Image.registered_extensions().keys()
 
-model = SentenceTransformer("clip-ViT-B-32")
+
+@functools.cache
+def get_model():
+    """Return the CLIP model, loading it on first use.
+
+    Loading is deferred so that importing this module (which every litdb CLI
+    command does) does not load or download the model.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer("clip-ViT-B-32")
 
 
 def add_image(path):
     """Embed and add the image in path to db."""
     db = get_db()
+    model = get_model()
     emb = model.encode(Image.open(path))
 
     q = """insert or ignore into
@@ -50,25 +61,39 @@ def image_query(query=None, clipboard=False, n=1):
     """Query the image database.
 
     If query is not None, it is either a text description or path to image.
-    If clipboard is True, use an image or text from the clipboard
+    If clipboard is True, use an image or text from the clipboard.
+
+    Raises ValueError if there is nothing to search with.
     """
-    db = get_db()
-    if query and os.path.exists(query):
-        emb = model.encode(Image.open(query))
-    elif query and not os.path.exists(query):
-        emb = model.encode(query)
+    if query:
+        # A path to an existing file is searched as an image; anything else,
+        # including a directory name, is searched as text.
+        source = Image.open(query) if os.path.isfile(query) else query
     elif clipboard:
-        import pyperclip
         from PIL import ImageGrab
 
         clip = ImageGrab.grabclipboard()
         if isinstance(clip, Image.Image):
-            emb = model.encode(clip)
+            source = clip
         else:
-            clip = pyperclip.paste()
-            print(clip)
-            emb = model.encode(clip)
+            try:
+                import pyperclip
+            except ImportError as e:
+                raise ValueError(
+                    "Searching with text from the clipboard needs pyperclip: "
+                    'pip install "litdb[image]"'
+                ) from e
+            source = pyperclip.paste()
+            if not source:
+                raise ValueError("The clipboard has no image or text to search with.")
+            print(source)
+    else:
+        raise ValueError(
+            "Provide a query (text or an image path) or use the clipboard."
+        )
 
+    db = get_db()
+    emb = get_model().encode(source)
     emb = emb.astype(np.float32).tobytes()
 
     q = """select source from vector_top_k('image_idx', ?, ?)
