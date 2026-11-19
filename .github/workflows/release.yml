@@ -25,4 +25,9 @@ jobs:
             exit 1
           fi
       - run: uv build
+      - name: Smoke-test the built wheel in a clean environment
+        run: |
+          uv venv --python 3.12 /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          cd /tmp && /tmp/smoke/bin/litdb --help
       - run: uv publish
