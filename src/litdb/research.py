@@ -26,11 +26,10 @@ import os
 import numpy as np
 from langchain_core.documents import Document
 from litellm import completion
-from sentence_transformers import SentenceTransformer
 
-from .db import get_db
+from .db import get_db, get_model
 from .openalex import get_data, get_text
-from .utils import get_config
+from .utils import extract_json, get_config
 
 
 def research_env():
@@ -50,19 +49,18 @@ def research_env():
     config = get_config()
     gr_config = config.get("gpt-researcher", {})
 
-    # You won't always need this, but it is harmless to set here.
-    os.environ["OLLAMA_BASE_URL"] = "http://localhost:11434"
+    def setting(name, default):
+        """Use litdb.toml, then the environment, then DEFAULT for NAME."""
+        os.environ[name] = gr_config.get(name, os.environ.get(name, default))
 
-    # This may be too clever. You can setup gpt_researcher with environment
-    # variables. If those exist, you might override them from litdb.toml. But,
-    # if they are not set here, I use defaults. I want this to require as little
-    # as possible to just work, but remain flexible to get what you want.
+    # You won't always need this, but it is harmless to set here.
+    setting("OLLAMA_BASE_URL", "http://localhost:11434")
 
     # see https://docs.gptr.dev/docs/gpt-researcher/llms/llms for examples
-    os.environ["FAST_LLM"] = gr_config.get("FAST_LLM", "ollama:llama3.3")
-    os.environ["SMART_LLM"] = gr_config.get("SMART_LLM", "ollama:llama3.3")
-    os.environ["STRATEGIC_LLM"] = gr_config.get("STRATEGIC_LLM", "ollama:llama3.3")
-    os.environ["EMBEDDING"] = gr_config.get("EMBEDDING", "ollama:nomic-embed-text")
+    setting("FAST_LLM", "ollama:llama3.3")
+    setting("SMART_LLM", "ollama:llama3.3")
+    setting("STRATEGIC_LLM", "ollama:llama3.3")
+    setting("EMBEDDING", "ollama:nomic-embed-text")
 
     # Where to get data
     retrievers = "arxiv"
@@ -80,8 +78,7 @@ def research_env():
         print("Adding Tavily")
         retrievers += ",tavily"
 
-    # I guess you should be able to override it all here.
-    os.environ["RETRIEVER"] = gr_config.get("RETRIEVER", retrievers)
+    setting("RETRIEVER", retrievers)
 
 
 def oa_query(query):
@@ -89,8 +86,9 @@ def oa_query(query):
     config = get_config()
     url = "https://api.openalex.org/works"
 
+    # The search parameter, unlike a filter, allows commas in the query.
     params = {
-        "filter": f"default.search:{query}",
+        "search": query,
         "mailto": config["openalex"].get("email"),
         "api_key": config["openalex"].get("api_key"),
     }
@@ -98,58 +96,6 @@ def oa_query(query):
     d = get_data(url, params)
 
     return d
-
-
-def extract_json(text: str) -> str:
-    """
-    Extract the first JSON object or array from `text`.
-    Finds the first '{' or '[', then scans forward matching braces/brackets,
-    ignoring ones inside string literals. Returns the JSON substring.
-    Raises ValueError if no valid JSON is found.
-    """
-    # 1) Locate first opening brace/bracket
-    start = None
-    for i, ch in enumerate(text):
-        if ch in "{[":
-            start = i
-            break
-    if start is None:
-        raise ValueError("No JSON object or array found in text")
-
-    # 2) Scan forward to find the matching closing brace/bracket
-    stack = []
-    mapping = {"]": "[", "}": "{"}
-    in_string = False
-    escape = False
-
-    for i, ch in enumerate(text[start:], start):
-        if in_string:
-            if escape:
-                escape = False
-            elif ch == "\\":
-                escape = True
-            elif ch == '"':
-                in_string = False
-        else:
-            if ch == '"':
-                in_string = True
-            elif ch in "{[":
-                stack.append(ch)
-            elif ch in "}]":
-                if not stack or stack[-1] != mapping[ch]:
-                    raise ValueError(f"Mismatched closing {ch!r} at position {i}")
-                stack.pop()
-                if not stack:
-                    # Found the matching closing bracket
-                    candidate = text[start : i + 1]
-                    # Optional: validate it's real JSON
-                    try:
-                        json.loads(candidate)
-                    except json.JSONDecodeError as e:
-                        raise ValueError(f"Extracted text is not valid JSON: {e}")
-                    return candidate
-
-    raise ValueError("No matching closing bracket found for JSON start")
 
 
 def litdb_documents(query):
@@ -161,13 +107,13 @@ def litdb_documents(query):
     """
     config = get_config()
     db = get_db()
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
     # number of queries to return or generate. This is used in several places. I
     # don't think it makes sense to configure each one independently. We default
     # to 5.
-    n_queries = config["gpt-researcher"].get("n_queries", 5)
+    n_queries = config.get("gpt-researcher", {}).get("n_queries", 5)
 
     # vector search
     results = db.execute(
@@ -210,37 +156,23 @@ relevant. The queries will be used with sqlite fts5.
         {"role": "user", "content": query},
     ]
 
-    model = config["llm"].get("model", "ollama/llama3.3")
+    model = config.get("llm", {}).get("model", "ollama/llama3.3")
     response = completion(model=model, messages=msgs)
 
+    content = response["choices"][0]["message"]["content"] or ""
     try:
-        content = response["choices"][0]["message"]["content"].strip()
-
-        js = extract_json(content)
-
-        queries = json.loads(js)["queries"]
-
-    except json.decoder.JSONDecodeError:
-        print("Generating full text queries failed on:")
+        queries = json.loads(extract_json(content))["queries"]
+        if not isinstance(queries, list):
+            raise TypeError("queries is not a list")
+        queries = [str(q) for q in queries]
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"Generating full text queries failed ({e}) on:")
         print(content)
-        print(f'The following json was extracted:\n\n"{js}"\n')
-        print("Proceeding without full text queries. Please report this message")
+        print("Proceeding without full text queries.")
         queries = []
 
-    for i, q in enumerate(queries):
-        try:
-            results = db.execute(
-                """select
-                sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
-                sources.extra, bm25(fulltext)
-                from fulltext
-                inner join sources on fulltext.source = sources.source
-                where fulltext.text match ? order by rank limit ?""",
-                (f'"{q}"', n_queries),
-            ).fetchall()
-        # the main exception that can occur here is a bad query.
-        except:  # noqa: E722
-            results = []
+    for q in queries:
+        results = _fulltext_search(db, q, n_queries)
 
         for j, (source, text, snippet, extra, score) in enumerate(results):
             documents += [
@@ -263,6 +195,31 @@ relevant. The queries will be used with sqlite fts5.
     return documents
 
 
+def _fts_literal(query):
+    """Quote each word of QUERY so FTS5 matches it literally."""
+    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
+
+
+def _fulltext_search(db, query, n):
+    """Return up to N full-text matches for QUERY.
+
+    QUERY is used as FTS5 syntax (the LLM is asked for FTS5 queries), and if it
+    is not valid FTS5, as a list of words.
+    """
+    sql = """select
+        sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
+        sources.extra, bm25(fulltext)
+        from fulltext
+        inner join sources on fulltext.source = sources.source
+        where fulltext.text match ? order by rank limit ?"""
+    for q in (query, _fts_literal(query)):
+        try:
+            return db.execute(sql, (q, n)).fetchall()
+        except ValueError:
+            continue
+    return []
+
+
 def refine_query(query):
     """Refine the query.
 
@@ -283,7 +240,7 @@ focus the response and ask them what they would like.""",
     ]
 
     # This might ideally be FAST_LLM, but it is not in litellm form
-    model = config["llm"].get("model", "ollama/llama3.3")
+    model = config.get("llm", {}).get("model", "ollama/llama3.3")
 
     response = completion(model=model, messages=msgs, stream=True)
     output = ""
@@ -292,11 +249,14 @@ focus the response and ask them what they would like.""",
         print(out, end="")
         output += out
 
+    print()
     reply = input("Enter for no change > ")
 
     if reply.strip():
-        # Now get the user response
+        # Now get the user response. The model needs its own questions to make
+        # sense of the reply.
         msgs += [
+            {"role": "assistant", "content": output},
             {
                 "role": "system",
                 "content": """Use the reply from the user to modify the original
@@ -315,23 +275,40 @@ focus the response and ask them what they would like.""",
         output = ""
         for chunk in response:
             out = chunk.choices[0].delta.content or ""
-            print(out)
+            print(out, end="")
             output += out
+        print()
 
-        query = output
+        query = output.strip() or query
 
     print(f"Doing research on:\n\n{query}\n\n")
 
     return query
 
 
+# Where the research material comes from. "litdb" uses documents from your
+# litdb (vector and full-text search) and from OpenAlex. The others are
+# gpt_researcher's own: web retrievers, local files in DOC_PATH, or both.
+REPORT_SOURCES = {
+    "litdb": "langchain_documents",
+    "web": "web",
+    "local": "local",
+    "hybrid": "hybrid",
+}
+
+
 async def get_report(
-    query: str, report_type: str, verbose: bool, skip_refinement: bool = False
+    query: str,
+    report_type: str,
+    verbose: bool,
+    skip_refinement: bool = False,
+    source: str = "litdb",
 ):
     """Generate the report.
 
     QUERY: string to query and generate a report for.
     skip_refinement: if True, skip the interactive query refinement step
+    source: a key of REPORT_SOURCES.
 
     Adapted from https://docs.gptr.dev/docs/gpt-researcher/gptr/pip-package.
     """
@@ -344,19 +321,14 @@ async def get_report(
     else:
         print(f"Doing research on:\n\n{query}\n\n")
 
-    docs = litdb_documents(query)
-
-    # for doc in docs:
-    #     print(doc)
-    #     print('\n-----------\n')
-
-    # if not 'y' in input('continue? ').lower():
-    #     import sys
-    #     sys.exit()
+    # gpt_researcher only reads documents when report_source is
+    # langchain_documents; with any other source they would be ignored.
+    docs = litdb_documents(query) if source == "litdb" else None
 
     researcher = GPTResearcher(
         query=query,
         report_type=report_type,
+        report_source=REPORT_SOURCES[source],
         verbose=verbose,
         documents=docs,
     )
@@ -395,7 +367,11 @@ async def get_report(
 
 
 def deep_research(
-    query, report_type="research_report", verbose=False, skip_refinement=False
+    query,
+    report_type="research_report",
+    verbose=False,
+    skip_refinement=False,
+    source="litdb",
 ):
     """Run deep_research on the QUERY.
 
@@ -410,13 +386,14 @@ def deep_research(
 
     when verbose is truthy, provides more output.
     skip_refinement: if True, skip the interactive query refinement step
+    source: where the material comes from, a key of REPORT_SOURCES.
 
     Note: there are two functions, get_report, and this one because of the async
     methods used.
 
     """
     report, result, context, costs, images, sources = asyncio.run(
-        get_report(query, report_type, verbose, skip_refinement)
+        get_report(query, report_type, verbose, skip_refinement, source)
     )
 
     return report, result, context, costs, images, sources
