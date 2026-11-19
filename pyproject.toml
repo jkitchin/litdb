@@ -80,6 +80,8 @@ test = [
   "pytest-mock>=3.12.0",
   "responses>=0.24.0",
   "freezegun>=1.4.0",
+  # tests/unit/test_app_fixes.py drives the web app with streamlit's AppTest
+  "streamlit",
 ]
 
 # Future House research client

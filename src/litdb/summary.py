@@ -9,89 +9,81 @@ from rich import print as richprint
 
 from .chat import get_completion
 from .db import get_db
-from .utils import get_config
+from .utils import extract_json, get_config
 
 
 def robust_json_parse(output_text):
     """Robustly parse JSON from LLM output with multiple fallback strategies.
 
+    The text is tried as is, without markdown code fences, and as the first
+    JSON object or array in it. Only if none of those parse are unquoted keys
+    ({1: ...} or {key: ...}) quoted, since that rewrite can change strings.
+
     Args:
         output_text: Raw text output from LLM
 
     Returns:
-        Parsed JSON object or None if parsing fails
+        The parsed JSON (an object if there is one), or None if parsing fails
     """
-    # Strategy 1: Clean up markdown code blocks
-    text = output_text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        text = "\n".join(
-            [
-                line
-                for line in lines
-                if not line.startswith("```") and not line.startswith("json")
-            ]
-        )
+    text = (output_text or "").strip()
+    unfenced = "\n".join(
+        line for line in text.splitlines() if not line.strip().startswith("```")
+    )
 
-    # Strategy 2: Fix unquoted numeric keys
-    text = re.sub(r"(\s+)(\d+)(\s*):", r'\1"\2"\3:', text)
+    def attempts(t):
+        yield t
+        # The first object or array, then the first object, so a preamble
+        # like "topics for [1] and [2]:" is skipped.
+        for start in {0, max(t.find("{"), 0)}:
+            try:
+                yield extract_json(t[start:])
+            except ValueError:
+                pass
 
-    # Strategy 3: Try parsing as-is
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    # Strategy 4: Try to extract just the JSON object/array
-    # Look for outermost { } or [ ]
-    start_brace = text.find("{")
-    start_bracket = text.find("[")
-
-    # Determine which comes first
-    if start_brace == -1 and start_bracket == -1:
-        return None
-    elif start_brace == -1:
-        start = start_bracket
-    elif start_bracket == -1:
-        start = start_brace
-    else:
-        start = min(start_brace, start_bracket)
-
-    # Find matching closing bracket/brace
-    depth = 0
-    for i in range(start, len(text)):
-        if text[i] in "{[":
-            depth += 1
-        elif text[i] in "}]":
-            depth -= 1
-            if depth == 0:
+    # Every caller here wants an object, so an object is preferred over an
+    # array that parses earlier; an array is returned only if there is no object.
+    first = None
+    for fix in (lambda t: t, _quote_keys):
+        for candidate in (text, unfenced):
+            for t in attempts(fix(candidate)):
                 try:
-                    return json.loads(text[start : i + 1])
+                    value = json.loads(t)
                 except json.JSONDecodeError:
-                    pass
-                break
-
-    # Strategy 5: Try using json5-like parsing by adding missing quotes around keys
-    # This is a last resort and very permissive
-    try:
-        # Replace unquoted keys (word chars before colon)
-        text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):", r'\1"\2"\3:', text)
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    return None
+                    continue
+                if isinstance(value, dict):
+                    return value
+                if first is None:
+                    first = value
+    return first
 
 
-# Article types that should be considered (from bibtex.py mapping)
+def _quote_keys(text):
+    """Quote unquoted object keys such as {1: [...]} or {key: ...}."""
+    return re.sub(r"([{,]\s*)([A-Za-z_]\w*|\d+)(\s*):", r'\1"\2"\3:', text)
+
+
+# Article types that should be considered. OpenAlex works have a type (article,
+# preprint, review, ...); older records also have a Crossref type
+# (journal-article, posted-content for preprints, ...).
 ARTICLE_TYPES = {
     "journal-article",
     "article",
     "review",
     "preprint",
+    "posted-content",
     "monograph",
     "report",
 }
+
+
+def is_article(extra):
+    """Return True if the OpenAlex record EXTRA is an article type."""
+    return bool({extra.get("type"), extra.get("type_crossref")} & ARTICLE_TYPES)
+
+
+def _citation(source, extra):
+    """Return the citation for an article, falling back to its source."""
+    return extra.get("citation") or source
 
 
 def get_articles_since(since_date):
@@ -122,11 +114,9 @@ def get_articles_since(since_date):
     # Filter for articles only
     articles = []
     for source, text, extra in results:
-        if extra:
-            extra_data = json.loads(extra)
-            type_crossref = extra_data.get("type_crossref", "")
-            if type_crossref in ARTICLE_TYPES:
-                articles.append((source, text, extra_data))
+        extra_data = json.loads(extra or "null") or {}
+        if is_article(extra_data):
+            articles.append((source, text or "", extra_data))
 
     return articles
 
@@ -155,8 +145,8 @@ def extract_topics_batch(articles, model, batch_size=20):
         # Prepare batch for the LLM
         article_texts = []
         for i, (source, text, extra) in enumerate(batch, 1):
-            citation = extra.get("citation", source)
-            text_sample = text[:2000] if len(text) > 2000 else text
+            citation = _citation(source, extra)
+            text_sample = text[:2000]
             article_texts.append(
                 f"[Article {i}]\nCitation: {citation}\nText: {text_sample}"
             )
@@ -261,24 +251,16 @@ Return only the JSON, no other text.
         output = get_completion(model, messages)
         richprint()  # newline
 
-        # Clean up the output
-        output = output.strip()
-        if output.startswith("```"):
-            lines = output.split("\n")
-            output = "\n".join(
-                [
-                    line
-                    for line in lines
-                    if not line.startswith("```") and not line.startswith("json")
-                ]
-            )
-
-        topic_structure = json.loads(output)
-        if isinstance(topic_structure, dict):
-            return topic_structure
-        else:
+        topic_structure = robust_json_parse(output)
+        if not isinstance(topic_structure, dict):
             richprint("[red]Error: LLM did not return valid topic structure[/red]")
             return {}
+        # Keep main topics whose subtopics are a list of strings.
+        return {
+            str(topic): [str(sub) for sub in subtopics]
+            for topic, subtopics in topic_structure.items()
+            if isinstance(subtopics, list)
+        }
     except Exception as e:  # noqa: BLE001 - LLM call boundary
         richprint(f"[red]Error aggregating topics: {e}[/red]")
         return {}
@@ -308,8 +290,8 @@ def classify_articles_batch(articles, topic_structure, model, batch_size=20):
         # Prepare batch for the LLM
         article_texts = []
         for i, (source, text, extra) in enumerate(batch, 1):
-            citation = extra.get("citation", source)
-            text_sample = text[:2000] if len(text) > 2000 else text
+            citation = _citation(source, extra)
+            text_sample = text[:2000]
             article_texts.append(
                 f"[Article {i}]\nCitation: {citation}\nText: {text_sample}"
             )
@@ -394,9 +376,9 @@ def generate_subtopic_summary(articles, subtopic_name, model):
     # Prepare article summaries for the LLM
     article_texts = []
     for i, (source, text, extra) in enumerate(articles, 1):
-        citation = extra.get("citation", source)
+        citation = _citation(source, extra)
         # Use first 1500 chars per article
-        text_sample = text[:1500] if len(text) > 1500 else text
+        text_sample = text[:1500]
         article_texts.append(f"[{i}] {citation}\n{text_sample}")
 
     combined_text = "\n\n".join(article_texts)
@@ -421,13 +403,19 @@ Write 2-3 paragraphs summarizing the key findings and trends. Reference the arti
         return f"Error generating summary for {subtopic_name}."
 
 
-def format_org_mode(topic_structure, classified_articles, summaries):
+def _org_text(text):
+    """Keep lines of TEXT that start with * from becoming org headings."""
+    return re.sub(r"^(\*+\s)", r" \1", text, flags=re.MULTILINE)
+
+
+def format_org_mode(topic_structure, classified_articles, summaries, other=()):
     """Format the newsletter in org-mode syntax.
 
     Args:
         topic_structure: Dict of main topics to subtopics
         classified_articles: Dict of {topic: {subtopic: [(source, text, extra)]}}
         summaries: Dict of {(topic, subtopic): summary_text}
+        other: (source, text, extra) articles that were not classified
 
     Returns:
         String in org-mode format
@@ -467,20 +455,30 @@ def format_org_mode(topic_structure, classified_articles, summaries):
 
             # Add the summary
             summary = summaries.get((main_topic, subtopic), "No summary available.")
-            output.append(summary)
+            output.append(_org_text(summary))
             output.append("")
 
             # Add bibliography
             output.append("*** References")
             output.append("")
-            for i, (source, text, extra) in enumerate(articles, 1):
-                citation = extra.get("citation", source)
-                if not citation:
-                    citation = f"{extra.get('display_name', 'Unknown')}, {source}"
-                output.append(f"{i}. {citation}")
+            output.extend(_references(articles))
             output.append("")
 
+    if other:
+        output.append("* Other articles")
+        output.append("")
+        output.extend(_references(other))
+        output.append("")
+
     return "\n".join(output)
+
+
+def _references(articles):
+    """Return numbered reference lines for ARTICLES."""
+    return [
+        f"{i}. {_org_text(_citation(source, extra))}"
+        for i, (source, _text, extra) in enumerate(articles, 1)
+    ]
 
 
 def generate_summary(since="1 week", output_file=None, model=None):
@@ -490,6 +488,8 @@ def generate_summary(since="1 week", output_file=None, model=None):
         since: Time period to look back (dateparser format)
         output_file: Optional filename to save output (defaults to auto-generated name)
         model: LiteLLM model string (uses config default if None)
+
+    Returns the newsletter text, or None if there was nothing to summarize.
     """
     config = get_config()
 
@@ -549,11 +549,17 @@ def generate_summary(since="1 week", output_file=None, model=None):
     richprint("[bold cyan]Step 4:[/bold cyan] Classifying all articles by topic...")
     classifications = classify_articles_batch(articles, topic_structure, model)
 
+    # Only classifications that use the topic structure are kept. An article
+    # the LLM put elsewhere (a misspelled topic, or none) goes under "Other
+    # articles" so it is not lost from the newsletter.
     classified_articles = defaultdict(lambda: defaultdict(list))
+    other = []
     for source, text, extra in articles:
         main_topic, subtopic = classifications.get(source, (None, None))
-        if main_topic and subtopic:
+        if subtopic in topic_structure.get(main_topic, ()):
             classified_articles[main_topic][subtopic].append((source, text, extra))
+        else:
+            other.append((source, text, extra))
 
     richprint("Articles classified\n")
 
@@ -574,7 +580,7 @@ def generate_summary(since="1 week", output_file=None, model=None):
 
     # Step 6: Format as org-mode newsletter
     richprint("[bold cyan]Step 6:[/bold cyan] Formatting newsletter...")
-    newsletter = format_org_mode(topic_structure, classified_articles, summaries)
+    newsletter = format_org_mode(topic_structure, classified_articles, summaries, other)
 
     # Always write to file (output_file is guaranteed to have a value now)
     with open(output_file, "w") as f:
@@ -582,3 +588,4 @@ def generate_summary(since="1 week", output_file=None, model=None):
 
     richprint(f"\n[green]Newsletter saved to {output_file}[/green]")
     richprint("[green]Summary generation complete![/green]")
+    return newsletter

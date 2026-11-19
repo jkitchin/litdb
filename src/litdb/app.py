@@ -3,18 +3,23 @@
 Enhanced multi-tab interface for literature database management.
 """
 
+import html
 import json
 import logging
 import os
 import warnings
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 from litellm import completion
 
+from litdb.bibtex import dump_bibtex
 from litdb.chat import get_rag_content
-from litdb.db import get_db
-from litdb.utils import get_config
+from litdb.db import add_work as _db_add_work
+from litdb.db import get_db, get_model
+from litdb.openalex import abstract_text
+from litdb.utils import fts_query, get_config
 
 # Suppress torch-related errors from Streamlit's file watcher
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="streamlit")
@@ -30,6 +35,132 @@ dbf = os.path.join(config["root"], "litdb.libsql")
 KB = 1024
 MB = 1024 * KB
 GB = 1024 * MB
+
+
+def add_work(source, **kwargs):
+    """Add the work SOURCE (a DOI or OpenAlex id) and return its key.
+
+    The app has no terminal, so add_work must never prompt (yes=True), and a
+    work OpenAlex does not know is an error instead of a silent success.
+    """
+    source = source.strip()
+    if source.startswith("10."):
+        source = f"https://doi.org/{source}"
+    key = _db_add_work(source, yes=True, **kwargs)
+    if key is None:
+        raise ValueError(f"{source} was not found in OpenAlex.")
+    return key
+
+
+def vector_search(query, n):
+    """Return (source, text, extra, distance) rows nearest to QUERY."""
+    model = get_model(config["embedding"]["model"])
+    emb = model.encode([query]).astype(np.float32).tobytes()
+    return db.execute(
+        """SELECT sources.source, sources.text, sources.extra,
+           vector_distance_cos(?, embedding) as d
+           FROM vector_top_k('embedding_idx', ?, ?)
+           JOIN sources ON sources.rowid = id
+           ORDER BY d""",
+        [emb, emb, n],
+    ).fetchall()
+
+
+# Snippet markers. The matched text is escaped before they become <b> tags,
+# since the snippet is rendered as HTML.
+SNIPPET_START, SNIPPET_END = "\x02", "\x03"
+
+
+def fulltext_search(sql, query, n):
+    """Run the full-text SQL for QUERY, showing an error if it is invalid."""
+    try:
+        return fts_query(db, sql, query, n)
+    except ValueError as e:
+        st.error(f"Invalid full-text query: {e}")
+        return []
+
+
+def snippet_html(snippet):
+    """Return SNIPPET as HTML with the matched words in bold."""
+    return (
+        html.escape(snippet or "")
+        .replace(SNIPPET_START, "<b>")
+        .replace(SNIPPET_END, "</b>")
+    )
+
+
+def preview(text, n):
+    """Return the first N characters of TEXT (which may be None)."""
+    text = text or ""
+    return text[:n] + "..." if len(text) > n else text
+
+
+def author_names(work, limit=3):
+    """Return up to LIMIT author names of the OpenAlex WORK."""
+    authorships = work.get("authorships") or []
+    names = [
+        (a.get("author") or {}).get("display_name") or "Unknown"
+        for a in authorships[:limit]
+    ]
+    if len(authorships) > limit:
+        names.append("et al.")
+    return names
+
+
+def work_buttons(source, key, add_paper=False):
+    """Show buttons that add SOURCE's references, citing and related works.
+
+    With ADD_PAPER, also a button that adds SOURCE itself.
+    """
+    actions = [
+        ("📚 Add References", "references", "References added"),
+        ("📝 Add Citing", "citing", "Citing papers added"),
+        ("🔗 Add Related", "related", "Related works added"),
+    ]
+    if add_paper:
+        actions.insert(0, ("➕ Add to Library", None, "Paper added to library"))
+    for col, (label, what, done) in zip(st.columns(len(actions)), actions):
+        with col:
+            if st.button(label, key=f"{what or 'add'}_{key}"):
+                with st.spinner("Adding..."):
+                    try:
+                        add_work(source, **({what: True} if what else {}))
+                        st.success(f"✓ {done}!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+
+def tag_editor(source, key):
+    """Show the tags of SOURCE with buttons to remove them or add one."""
+    st.markdown("**🏷️ Tags:**")
+    current_tags = get_tags_for_source(source)
+    if current_tags:
+        cols = st.columns(len(current_tags) + 1)
+        for idx, tag in enumerate(current_tags):
+            with cols[idx]:
+                if st.button(
+                    f"🗑️ {tag}", key=f"rm_tag_{key}_{tag}"
+                ) and remove_tag_from_source(source, tag):
+                    st.success(f"Removed tag: {tag}")
+                    st.rerun()
+    else:
+        st.caption("No tags yet")
+
+    new_tag_col1, new_tag_col2 = st.columns([3, 1])
+    with new_tag_col1:
+        new_tag = st.text_input(
+            "Add tag",
+            key=f"new_tag_{key}",
+            placeholder="Enter tag name...",
+            label_visibility="collapsed",
+        )
+    with new_tag_col2:
+        if st.button("➕ Add", key=f"add_tag_{key}") and new_tag and new_tag.strip():
+            if add_tag_to_source(source, new_tag.strip()):
+                st.success(f"Added tag: {new_tag}")
+                st.rerun()
+            else:
+                st.warning("Tag already exists")
 
 
 def get_db_stats():
@@ -190,18 +321,15 @@ def format_citation(extra):
         parts = []
 
         # Authors
-        if data.get("authorships"):
-            authors = [a["author"]["display_name"] for a in data["authorships"][:3]]
-            if len(data["authorships"]) > 3:
-                authors.append("et al.")
+        if authors := author_names(data):
             parts.append(", ".join(authors))
 
         # Year
-        if "publication_year" in data:
+        if data.get("publication_year"):
             parts.append(f"({data['publication_year']})")
 
         # Title
-        if "title" in data:
+        if data.get("title"):
             parts.append(data["title"])
 
         # Journal/venue
@@ -286,7 +414,6 @@ def tab_search():
         st.session_state.run_iteration = False  # Clear the flag
 
         # Process the iteration
-        from litdb.db import add_work
 
         last_results = st.session_state.get("last_search_results", [])
 
@@ -405,20 +532,7 @@ Adding: references, citations, and related works...
             # Execute query if needed
             if should_run_query:
                 # Vector search - we need to compute embedding first
-                import numpy as np
-                from sentence_transformers import SentenceTransformer
-
-                config = get_config()
-                model = SentenceTransformer(config["embedding"]["model"])
-                emb = model.encode([query]).astype(np.float32).tobytes()
-
-                results = db.execute(
-                    """SELECT sources.source, sources.text, sources.extra,
-                       vector_distance_cos(?, embedding) as d
-                       FROM vector_top_k('embedding_idx', ?, ?)
-                       JOIN sources ON sources.rowid = id""",
-                    [emb, emb, n_results],
-                ).fetchall()
+                results = vector_search(query, n_results)
 
                 # Store results in session state
                 st.session_state.last_search_results = results
@@ -438,7 +552,7 @@ Adding: references, citations, and related works...
                         st.markdown(citation)
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
-                    st.markdown(f"**Text preview:** {text[:300]}...")
+                    st.markdown(f"**Text preview:** {preview(text, 300)}")
 
                     # Add copy buttons for citation and BibTeX
                     if extra:
@@ -467,44 +581,7 @@ Adding: references, citations, and related works...
 
                     # Tags section
                     st.markdown("---")
-                    st.markdown("**🏷️ Tags:**")
-
-                    # Get current tags
-                    current_tags = get_tags_for_source(source)
-
-                    # Display existing tags with remove buttons
-                    if current_tags:
-                        cols = st.columns(len(current_tags) + 1)
-                        for idx, tag in enumerate(current_tags):
-                            with cols[idx]:
-                                if st.button(
-                                    f"🗑️ {tag}", key=f"rm_tag_v_{i}_{tag}"
-                                ) and remove_tag_from_source(source, tag):
-                                    st.success(f"Removed tag: {tag}")
-                                    st.rerun()
-                    else:
-                        st.caption("No tags yet")
-
-                    # Add new tag
-                    new_tag_col1, new_tag_col2 = st.columns([3, 1])
-                    with new_tag_col1:
-                        new_tag = st.text_input(
-                            "Add tag",
-                            key=f"new_tag_v_{i}",
-                            placeholder="Enter tag name...",
-                            label_visibility="collapsed",
-                        )
-                    with new_tag_col2:
-                        if (
-                            st.button("➕ Add", key=f"add_tag_v_{i}")
-                            and new_tag
-                            and new_tag.strip()
-                        ):
-                            if add_tag_to_source(source, new_tag.strip()):
-                                st.success(f"Added tag: {new_tag}")
-                                st.rerun()
-                            else:
-                                st.warning("Tag already exists")
+                    tag_editor(source, f"v_{i}")
 
                     # Check if this is a DOI/OpenAlex entry to show add buttons
                     doi = None
@@ -518,55 +595,7 @@ Adding: references, citations, and related works...
                     if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            if st.button("📚 Add References", key=f"refs_v_{i}"):
-                                with st.spinner("Adding references..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=True,
-                                            citing=False,
-                                            related=False,
-                                        )
-                                        st.success("✓ References added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col2:
-                            if st.button("📝 Add Citing", key=f"citing_v_{i}"):
-                                with st.spinner("Adding citing papers..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=True,
-                                            related=False,
-                                        )
-                                        st.success("✓ Citing papers added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col3:
-                            if st.button("🔗 Add Related", key=f"related_v_{i}"):
-                                with st.spinner("Adding related works..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=False,
-                                            related=True,
-                                        )
-                                        st.success("✓ Related works added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
+                        work_buttons(doi, f"v_{i}")
 
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_v_{i}"):
@@ -580,17 +609,19 @@ Adding: references, citations, and related works...
             # Execute query if needed
             if should_run_query:
                 # Full-text search
-                results = db.execute(
-                    """SELECT sources.source, sources.text,
-                       snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet,
+                results = fulltext_search(
+                    f"""SELECT sources.source, sources.text,
+                       snippet(fulltext, 1, '{SNIPPET_START}', '{SNIPPET_END}',
+                               '...', 16) as snippet,
                        sources.extra
                        FROM fulltext
                        INNER JOIN sources ON fulltext.source = sources.source
                        WHERE fulltext.text MATCH ?
                        ORDER BY rank
                        LIMIT ?""",
-                    [query, n_results],
-                ).fetchall()
+                    query,
+                    n_results,
+                )
 
                 # Store results in session state
                 st.session_state.last_search_results = results
@@ -610,7 +641,9 @@ Adding: references, citations, and related works...
                         st.markdown(citation)
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
-                    st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
+                    st.markdown(
+                        f"**Snippet:** {snippet_html(snippet)}", unsafe_allow_html=True
+                    )
 
                     # Add copy buttons for citation and BibTeX
                     if extra:
@@ -649,55 +682,7 @@ Adding: references, citations, and related works...
                     if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            if st.button("📚 Add References", key=f"refs_fts_{i}"):
-                                with st.spinner("Adding references..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=True,
-                                            citing=False,
-                                            related=False,
-                                        )
-                                        st.success("✓ References added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col2:
-                            if st.button("📝 Add Citing", key=f"citing_fts_{i}"):
-                                with st.spinner("Adding citing papers..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=True,
-                                            related=False,
-                                        )
-                                        st.success("✓ Citing papers added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col3:
-                            if st.button("🔗 Add Related", key=f"related_fts_{i}"):
-                                with st.spinner("Adding related works..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=False,
-                                            related=True,
-                                        )
-                                        st.success("✓ Related works added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
+                        work_buttons(doi, f"fts_{i}")
 
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_fts_{i}"):
@@ -713,32 +698,21 @@ Adding: references, citations, and related works...
             # Execute queries if needed
             if should_run_query:
                 # Vector search
-                import numpy as np
-                from sentence_transformers import SentenceTransformer
-
-                config = get_config()
-                model = SentenceTransformer(config["embedding"]["model"])
-                emb = model.encode([query]).astype(np.float32).tobytes()
-
-                vector_results = db.execute(
-                    """SELECT sources.source, sources.text, sources.extra,
-                       vector_distance_cos(?, embedding) as d
-                       FROM vector_top_k('embedding_idx', ?, ?)
-                       JOIN sources ON sources.rowid = id""",
-                    [emb, emb, n_results],
-                ).fetchall()
+                vector_results = vector_search(query, n_results)
 
                 # Full-text search
-                fts_results = db.execute(
-                    """SELECT sources.source, sources.text,
-                       snippet(fulltext, 1, '<b>', '</b>', '...', 16) as snippet
+                fts_results = fulltext_search(
+                    f"""SELECT sources.source, sources.text,
+                       snippet(fulltext, 1, '{SNIPPET_START}', '{SNIPPET_END}',
+                               '...', 16) as snippet
                        FROM fulltext
                        INNER JOIN sources ON fulltext.source = sources.source
                        WHERE fulltext.text MATCH ?
                        ORDER BY rank
                        LIMIT ?""",
-                    [query, n_results],
-                ).fetchall()
+                    query,
+                    n_results,
+                )
 
                 # Store both results in session state
                 st.session_state.last_search_results = (
@@ -762,7 +736,7 @@ Adding: references, citations, and related works...
                         st.markdown(citation)
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
-                    st.markdown(f"**Text preview:** {text[:200]}...")
+                    st.markdown(f"**Text preview:** {preview(text, 200)}")
 
                     # Add copy buttons for citation and BibTeX
                     if extra:
@@ -801,55 +775,7 @@ Adding: references, citations, and related works...
                     if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            if st.button("📚 Add References", key=f"refs_hv_{i}"):
-                                with st.spinner("Adding references..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=True,
-                                            citing=False,
-                                            related=False,
-                                        )
-                                        st.success("✓ References added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col2:
-                            if st.button("📝 Add Citing", key=f"citing_hv_{i}"):
-                                with st.spinner("Adding citing papers..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=True,
-                                            related=False,
-                                        )
-                                        st.success("✓ Citing papers added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col3:
-                            if st.button("🔗 Add Related", key=f"related_hv_{i}"):
-                                with st.spinner("Adding related works..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=False,
-                                            related=True,
-                                        )
-                                        st.success("✓ Related works added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
+                        work_buttons(doi, f"hv_{i}")
 
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_hv_{i}"):
@@ -874,7 +800,9 @@ Adding: references, citations, and related works...
                         st.markdown(citation)
                         st.markdown("---")
                     st.markdown(f"**Source:** {source}")
-                    st.markdown(f"**Snippet:** {snippet}", unsafe_allow_html=True)
+                    st.markdown(
+                        f"**Snippet:** {snippet_html(snippet)}", unsafe_allow_html=True
+                    )
 
                     # Add copy buttons for citation and BibTeX
                     if extra:
@@ -913,55 +841,7 @@ Adding: references, citations, and related works...
                     if doi and (doi.startswith(("http", "10."))):
                         st.markdown("---")
                         st.markdown("**Add Related Works:**")
-                        col1, col2, col3 = st.columns(3)
-
-                        with col1:
-                            if st.button("📚 Add References", key=f"refs_hf_{i}"):
-                                with st.spinner("Adding references..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=True,
-                                            citing=False,
-                                            related=False,
-                                        )
-                                        st.success("✓ References added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col2:
-                            if st.button("📝 Add Citing", key=f"citing_hf_{i}"):
-                                with st.spinner("Adding citing papers..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=True,
-                                            related=False,
-                                        )
-                                        st.success("✓ Citing papers added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
-
-                        with col3:
-                            if st.button("🔗 Add Related", key=f"related_hf_{i}"):
-                                with st.spinner("Adding related works..."):
-                                    from litdb.db import add_work
-
-                                    try:
-                                        add_work(
-                                            doi,
-                                            references=False,
-                                            citing=False,
-                                            related=True,
-                                        )
-                                        st.success("✓ Related works added!")
-                                    except Exception as e:
-                                        st.error(f"Error: {e}")
+                        work_buttons(doi, f"hf_{i}")
 
                     # Show full metadata with toggle
                     if extra and st.checkbox("Show full metadata", key=f"meta_hf_{i}"):
@@ -1007,158 +887,79 @@ def tab_openalex_search():
             st.warning("Please enter a search query")
             return
 
-        st.subheader("Results from OpenAlex")
-
-        # Search OpenAlex
         from litdb.openalex import get_data
 
-        config = get_config()
-        url = "https://api.openalex.org/works"
-
         params = {
-            "filter": f"default.search:{query}",
+            "search": query,
             "mailto": config["openalex"].get("email"),
             "per_page": n_results,
         }
-
         if config["openalex"].get("api_key"):
             params["api_key"] = config["openalex"].get("api_key")
 
         try:
             with st.spinner("Searching OpenAlex..."):
-                data = get_data(url, params)
-
-            results = data.get("results", [])
-
-            if not results:
-                st.info("No results found")
-                return
-
-            st.success(f"Found {len(results)} papers")
-
-            for i, work in enumerate(results, 1):
-                # Extract paper info
-                title = work.get("title", "No title")
-                doi = work.get("doi") or work.get("id")
-                publication_year = work.get("publication_year")
-                citation_count = work.get("cited_by_count", 0)
-
-                # Authors
-                authors = []
-                if work.get("authorships"):
-                    authors = [
-                        a["author"]["display_name"] for a in work["authorships"][:3]
-                    ]
-                    if len(work["authorships"]) > 3:
-                        authors.append("et al.")
-
-                author_str = ", ".join(authors) if authors else "No authors"
-
-                # Build header
-                header = f"{i}. {title}"
-                if publication_year:
-                    header += f" ({publication_year})"
-
-                with st.expander(header):
-                    st.markdown(f"**Authors:** {author_str}")
-                    if doi:
-                        st.markdown(f"**DOI/ID:** {doi}")
-                    st.markdown(f"**Citations:** {citation_count}")
-
-                    # Venue
-                    pl = work.get("primary_location") or {}
-                    src = pl.get("source") or {}
-                    venue_name = src.get("display_name")
-                    if venue_name:
-                        st.markdown(f"**Venue:** {venue_name}")
-
-                    # Abstract preview
-                    if work.get("abstract_inverted_index"):
-                        # Reconstruct abstract from inverted index (first 200 chars)
-                        inv_index = work["abstract_inverted_index"]
-                        words = []
-                        for word, positions in sorted(
-                            inv_index.items(), key=lambda x: min(x[1]) if x[1] else 0
-                        ):
-                            words.extend([word] * len(positions))
-                        abstract = " ".join(words[:50]) + "..."
-                        st.markdown(f"**Abstract:** {abstract}")
-
-                    st.markdown("---")
-
-                    # Add buttons
-                    col1, col2, col3, col4 = st.columns(4)
-
-                    with col1:
-                        if st.button("➕ Add to Library", key=f"add_oa_{i}"):
-                            with st.spinner("Adding paper..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        doi,
-                                        references=False,
-                                        citing=False,
-                                        related=False,
-                                    )
-                                    st.success("✓ Paper added to library!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col2:
-                        if st.button("📚 Add References", key=f"refs_oa_{i}"):
-                            with st.spinner("Adding references..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        doi,
-                                        references=True,
-                                        citing=False,
-                                        related=False,
-                                    )
-                                    st.success("✓ References added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col3:
-                        if st.button("📝 Add Citing", key=f"citing_oa_{i}"):
-                            with st.spinner("Adding citing papers..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        doi,
-                                        references=False,
-                                        citing=True,
-                                        related=False,
-                                    )
-                                    st.success("✓ Citing papers added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col4:
-                        if st.button("🔗 Add Related", key=f"related_oa_{i}"):
-                            with st.spinner("Adding related works..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        doi,
-                                        references=False,
-                                        citing=False,
-                                        related=True,
-                                    )
-                                    st.success("✓ Related works added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    # Show full metadata with toggle
-                    if st.checkbox("Show full metadata", key=f"meta_oa_{i}"):
-                        st.json(work)
-
+                data = get_data("https://api.openalex.org/works", params)
         except Exception as e:
             st.error(f"Error searching OpenAlex: {e}")
+            return
+        # The results are kept in the session, because clicking one of their
+        # buttons reruns the script, and then the form is not submitted.
+        st.session_state["oa_results"] = data.get("results", [])
+
+    results = st.session_state.get("oa_results")
+    if results is None:
+        return
+
+    st.subheader("Results from OpenAlex")
+    if not results:
+        st.info("No results found")
+        return
+
+    st.success(f"Found {len(results)} papers")
+
+    for i, work in enumerate(results, 1):
+        title = work.get("title") or "No title"
+        doi = work.get("doi") or work.get("id")
+        publication_year = work.get("publication_year")
+        citation_count = work.get("cited_by_count", 0)
+        author_str = ", ".join(author_names(work)) or "No authors"
+
+        header = f"{i}. {title}"
+        if publication_year:
+            header += f" ({publication_year})"
+
+        with st.expander(header):
+            st.markdown(f"**Authors:** {author_str}")
+            if doi:
+                st.markdown(f"**DOI/ID:** {doi}")
+            st.markdown(f"**Citations:** {citation_count}")
+
+            pl = work.get("primary_location") or {}
+            venue_name = (pl.get("source") or {}).get("display_name")
+            if venue_name:
+                st.markdown(f"**Venue:** {venue_name}")
+
+            if abstract := abstract_text(work):
+                st.markdown(f"**Abstract:** {preview(abstract, 500)}")
+
+            st.markdown("---")
+            if doi:
+                work_buttons(doi, f"oa_{i}", add_paper=True)
+
+            if st.checkbox("Show full metadata", key=f"meta_oa_{i}"):
+                st.json(work)
+
+
+def semantic_scholar_id(paper):
+    """Return an id of the Semantic Scholar PAPER that OpenAlex knows, or None."""
+    external_ids = paper.get("externalIds") or {}
+    if doi := external_ids.get("DOI"):
+        return doi if doi.startswith("http") else f"https://doi.org/{doi}"
+    if arxiv_id := external_ids.get("ArXiv"):
+        # OpenAlex knows arXiv papers by their DataCite DOI, not their arxiv url.
+        return f"https://doi.org/10.48550/arXiv.{arxiv_id}"
+    return None
 
 
 def tab_semantic_scholar_search():
@@ -1183,12 +984,7 @@ def tab_semantic_scholar_search():
             st.warning("Please enter a search query")
             return
 
-        st.subheader("Results from Semantic Scholar")
-
-        # Search Semantic Scholar
         import requests
-
-        url = "https://api.semanticscholar.org/graph/v1/paper/search"
 
         params = {
             "query": query,
@@ -1196,164 +992,138 @@ def tab_semantic_scholar_search():
             "fields": "title,authors,year,citationCount,externalIds,abstract,venue",
         }
 
-        # Add API key if available in config
         headers = {}
-        config = get_config()
-        if "semantic-scholar" in config and "api_key" in config["semantic-scholar"]:
-            api_key = config["semantic-scholar"]["api_key"]
-            if api_key:
-                headers["x-api-key"] = api_key
+        api_key = (config.get("semantic-scholar") or {}).get("api_key")
+        if api_key:
+            headers["x-api-key"] = api_key
 
         try:
             with st.spinner("Searching Semantic Scholar..."):
-                response = requests.get(url, params=params, headers=headers)
+                response = requests.get(
+                    "https://api.semanticscholar.org/graph/v1/paper/search",
+                    params=params,
+                    headers=headers,
+                    timeout=60,
+                )
                 response.raise_for_status()
                 data = response.json()
-
-            results = data.get("data", [])
-
-            if not results:
-                st.info("No results found")
-                return
-
-            st.success(f"Found {len(results)} papers")
-
-            for i, paper in enumerate(results, 1):
-                # Extract paper info
-                title = paper.get("title", "No title")
-                publication_year = paper.get("year")
-                citation_count = paper.get("citationCount", 0)
-                venue = paper.get("venue", "")
-
-                # Get DOI from external IDs
-                external_ids = paper.get("externalIds", {})
-                doi = external_ids.get("DOI")
-                arxiv_id = external_ids.get("ArXiv")
-
-                # Authors
-                authors = []
-                if paper.get("authors"):
-                    authors = [a["name"] for a in paper["authors"][:3]]
-                    if len(paper["authors"]) > 3:
-                        authors.append("et al.")
-
-                author_str = ", ".join(authors) if authors else "No authors"
-
-                # Build header
-                header = f"{i}. {title}"
-                if publication_year:
-                    header += f" ({publication_year})"
-
-                with st.expander(header):
-                    st.markdown(f"**Authors:** {author_str}")
-                    if doi:
-                        st.markdown(f"**DOI:** {doi}")
-                    elif arxiv_id:
-                        st.markdown(f"**arXiv:** {arxiv_id}")
-                    if venue:
-                        st.markdown(f"**Venue:** {venue}")
-                    st.markdown(f"**Citations:** {citation_count}")
-
-                    # Abstract
-                    abstract = paper.get("abstract")
-                    if abstract and st.checkbox(
-                        "📄 Show Abstract", key=f"abstract_ss_{i}"
-                    ):
-                        st.write(abstract)
-
-                    # Add paper button
-                    st.markdown("---")
-                    st.markdown("**Add to Library:**")
-
-                    col1, col2, col3, col4 = st.columns(4)
-
-                    with col1:
-                        # Determine what ID to use (prefer DOI)
-                        paper_id = None
-                        if doi:
-                            paper_id = (
-                                f"https://doi.org/{doi}"
-                                if not doi.startswith("http")
-                                else doi
-                            )
-                        elif arxiv_id:
-                            paper_id = f"https://arxiv.org/abs/{arxiv_id}"
-
-                        if paper_id and st.button("➕ Add Paper", key=f"add_ss_{i}"):
-                            with st.spinner("Adding paper..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        paper_id,
-                                        references=False,
-                                        citing=False,
-                                        related=False,
-                                    )
-                                    st.success("✓ Paper added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col2:
-                        if paper_id and st.button(
-                            "📚 Add References", key=f"refs_ss_{i}"
-                        ):
-                            with st.spinner("Adding references..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        paper_id,
-                                        references=True,
-                                        citing=False,
-                                        related=False,
-                                    )
-                                    st.success("✓ References added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col3:
-                        if paper_id and st.button(
-                            "📝 Add Citing", key=f"citing_ss_{i}"
-                        ):
-                            with st.spinner("Adding citing papers..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        paper_id,
-                                        references=False,
-                                        citing=True,
-                                        related=False,
-                                    )
-                                    st.success("✓ Citing papers added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    with col4:
-                        if paper_id and st.button(
-                            "🔗 Add Related", key=f"related_ss_{i}"
-                        ):
-                            with st.spinner("Adding related works..."):
-                                from litdb.db import add_work
-
-                                try:
-                                    add_work(
-                                        paper_id,
-                                        references=False,
-                                        citing=False,
-                                        related=True,
-                                    )
-                                    st.success("✓ Related works added!")
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-
-                    # Show full metadata with toggle
-                    if st.checkbox("Show full metadata", key=f"meta_ss_{i}"):
-                        st.json(paper)
-
         except Exception as e:
             st.error(f"Error searching Semantic Scholar: {e}")
+            return
+        st.session_state["ss_results"] = data.get("data") or []
+
+    results = st.session_state.get("ss_results")
+    if results is None:
+        return
+
+    st.subheader("Results from Semantic Scholar")
+    if not results:
+        st.info("No results found")
+        return
+
+    st.success(f"Found {len(results)} papers")
+
+    for i, paper in enumerate(results, 1):
+        title = paper.get("title") or "No title"
+        publication_year = paper.get("year")
+        citation_count = paper.get("citationCount", 0)
+        venue = paper.get("venue", "")
+        external_ids = paper.get("externalIds") or {}
+        doi = external_ids.get("DOI")
+        arxiv_id = external_ids.get("ArXiv")
+
+        paper_authors = paper.get("authors") or []
+        authors = [a.get("name") or "Unknown" for a in paper_authors[:3]]
+        if len(paper_authors) > 3:
+            authors.append("et al.")
+        author_str = ", ".join(authors) or "No authors"
+
+        header = f"{i}. {title}"
+        if publication_year:
+            header += f" ({publication_year})"
+
+        with st.expander(header):
+            st.markdown(f"**Authors:** {author_str}")
+            if doi:
+                st.markdown(f"**DOI:** {doi}")
+            elif arxiv_id:
+                st.markdown(f"**arXiv:** {arxiv_id}")
+            if venue:
+                st.markdown(f"**Venue:** {venue}")
+            st.markdown(f"**Citations:** {citation_count}")
+
+            abstract = paper.get("abstract")
+            if abstract and st.checkbox("📄 Show Abstract", key=f"abstract_ss_{i}"):
+                st.write(abstract)
+
+            st.markdown("---")
+            if paper_id := semantic_scholar_id(paper):
+                st.markdown("**Add to Library:**")
+                work_buttons(paper_id, f"ss_{i}", add_paper=True)
+            else:
+                st.caption("This paper has no DOI or arXiv id to add it with.")
+
+            if st.checkbox("Show full metadata", key=f"meta_ss_{i}"):
+                st.json(paper)
+
+
+def reviewer_rows(results):
+    """Return (author_counts, author_data) for the vector search RESULTS.
+
+    author_counts counts the papers of each OpenAlex author id, and author_data
+    has the OpenAlex details of each author.
+    """
+    from collections import Counter
+
+    from more_itertools import batched
+
+    from litdb.openalex import get_data
+
+    authors = []
+    for _source, _text, extra, _distance in results:
+        try:
+            d = json.loads(extra) if extra else {}
+        except json.JSONDecodeError:
+            continue
+        # Only OpenAlex works have authorships; files and web pages do not.
+        for authorship in (d or {}).get("authorships") or []:
+            if author_id := (authorship.get("author") or {}).get("id"):
+                authors.append(author_id)
+    author_counts = Counter(authors)
+
+    author_data = []
+    for batch in batched(author_counts, 50):
+        url = f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
+        params = {
+            "per-page": 50,
+            "mailto": (config.get("openalex") or {}).get("email", ""),
+        }
+        for d in get_data(url, params).get("results") or []:
+            lki = d.get("last_known_institutions") or []
+            affils = d.get("affiliations") or []
+            if lki:
+                institution = lki[0].get("display_name") or "Unknown"
+            elif affils:
+                institution = (affils[0].get("institution") or {}).get(
+                    "display_name"
+                ) or "Unknown"
+            else:
+                institution = "Unknown"
+
+            author_data.append(
+                {
+                    "name": d.get("display_name") or "Unknown",
+                    "papers": author_counts.get(d["id"], 0),
+                    "h_index": (d.get("summary_stats") or {}).get("h_index") or 0,
+                    "id": d["id"],
+                    "institution": institution,
+                    "works_count": d.get("works_count") or 0,
+                }
+            )
+
+    # Sort by h-index (primary) and number of papers (secondary)
+    author_data.sort(key=lambda x: (x["h_index"], x["papers"]), reverse=True)
+    return author_counts, author_data
 
 
 def tab_suggest_reviewers():
@@ -1385,27 +1155,8 @@ def tab_suggest_reviewers():
         st.subheader("Results")
 
         try:
-            # Perform vector search to find similar papers
-            from collections import Counter
-
-            import numpy as np
-            from more_itertools import batched
-            from sentence_transformers import SentenceTransformer
-
-            config = get_config()
-            db = get_db()
-
             with st.spinner("Searching for similar papers..."):
-                model = SentenceTransformer(config["embedding"]["model"])
-                emb = model.encode([query]).astype(np.float32).tobytes()
-
-                results = db.execute(
-                    """SELECT sources.source, sources.text, sources.extra,
-                       vector_distance_cos(?, embedding) as d
-                       FROM vector_top_k('embedding_idx', ?, ?)
-                       JOIN sources ON sources.rowid = id""",
-                    [emb, emb, n_papers],
-                ).fetchall()
+                results = vector_search(query, n_papers)
 
             if not results:
                 st.warning("No similar papers found in your database")
@@ -1413,92 +1164,25 @@ def tab_suggest_reviewers():
 
             st.markdown(f"**Found {len(results)} similar papers**")
 
-            # Show the papers that were used
             with st.expander("📄 View similar papers used for reviewer suggestions"):
-                for i, (source, text, extra, distance) in enumerate(results, 1):
+                for i, (source, _text, extra, distance) in enumerate(results, 1):
                     citation = format_citation(extra) if extra else None
                     st.markdown(
                         f"{i}. {citation or source} (similarity: {1 - distance:.3f})"
                     )
 
-            # Collect authors from matching papers
-            with st.spinner("Analyzing authors from similar papers..."):
-                authors = []
-                for source, text, extra, distance in results:
-                    if extra:
-                        try:
-                            d = json.loads(extra)
-                            for authorship in d.get("authorships", []):
-                                author_id = authorship.get("author", {}).get("id")
-                                if author_id:
-                                    authors.append(author_id)
-                        except Exception:
-                            pass
+            with st.spinner("Fetching author details from OpenAlex..."):
+                author_counts, author_data = reviewer_rows(results)
 
-                # Count occurrences
-                author_counts = Counter(authors)
+            if not author_counts:
+                st.warning("No author information found in the similar papers")
+                return
 
-                if not author_counts:
-                    st.warning("No author information found in the similar papers")
-                    return
-
-            # Get author information from OpenAlex
-            with st.spinner(
-                f"Fetching details for {len(author_counts)} unique authors..."
-            ):
-                from litdb.openalex import get_data
-
-                author_data = []
-
-                # Process authors in batches of 50
-                for batch in batched(author_counts.keys(), 50):
-                    url = (
-                        f"https://api.openalex.org/authors?filter=id:{'|'.join(batch)}"
-                    )
-                    params = {
-                        "per-page": 50,
-                        "mailto": config.get("openalex", {}).get("email", ""),
-                    }
-
-                    r = get_data(url, params)
-
-                    for d in r.get("results", []):
-                        # Get institution
-                        lki = d.get("last_known_institutions", [])
-                        if lki and len(lki) >= 1:
-                            institution = lki[0].get("display_name", "Unknown")
-                        else:
-                            affils = d.get("affiliations", [])
-                            if affils and len(affils) >= 1:
-                                institution = (
-                                    affils[0]
-                                    .get("institution", {})
-                                    .get("display_name", "Unknown")
-                                )
-                            else:
-                                institution = "Unknown"
-
-                        author_data.append(
-                            {
-                                "name": d.get("display_name", "Unknown"),
-                                "papers": author_counts[d["id"]],
-                                "h_index": d.get("summary_stats", {}).get("h_index", 0),
-                                "id": d["id"],
-                                "institution": institution,
-                                "works_count": d.get("works_count", 0),
-                            }
-                        )
-
-            # Sort by h-index (primary) and number of papers (secondary)
-            author_data.sort(key=lambda x: (x["h_index"], x["papers"]), reverse=True)
-
-            # Display results
             st.markdown("### 🎯 Suggested Reviewers")
             st.markdown(
                 f"*Ranked by h-index and number of relevant publications ({len(author_data)} total)*"
             )
 
-            # Create a nice table
             for i, author in enumerate(author_data[:20], 1):  # Show top 20
                 with st.container():
                     col1, col2, col3, col4 = st.columns([3, 1, 1, 2])
@@ -1515,7 +1199,6 @@ def tab_suggest_reviewers():
 
                     with col4:
                         st.caption(f"Total works: {author['works_count']}")
-                        # Make the OpenAlex ID clickable
                         oa_url = author["id"].replace(
                             "https://openalex.org/", "https://openalex.org/authors/"
                         )
@@ -1523,30 +1206,37 @@ def tab_suggest_reviewers():
 
                     st.markdown("---")
 
-            # Optionally show full table for download
-            with st.expander("📊 View full data table"):
-                import pandas as pd
-
-                df = pd.DataFrame(author_data)
-                st.dataframe(
-                    df[["name", "papers", "h_index", "works_count", "institution"]],
-                    use_container_width=True,
-                )
-
-                # Add download button
-                csv = df.to_csv(index=False)
-                st.download_button(
-                    label="Download as CSV",
-                    data=csv,
-                    file_name="suggested_reviewers.csv",
-                    mime="text/csv",
-                )
+            if author_data:
+                with st.expander("📊 View full data table"):
+                    df = pd.DataFrame(author_data)
+                    st.dataframe(
+                        df[["name", "papers", "h_index", "works_count", "institution"]],
+                        use_container_width=True,
+                    )
+                    st.download_button(
+                        label="Download as CSV",
+                        data=df.to_csv(index=False),
+                        file_name="suggested_reviewers.csv",
+                        mime="text/csv",
+                    )
 
         except Exception as e:
             st.error(f"Error suggesting reviewers: {e}")
             import traceback
 
             st.code(traceback.format_exc())
+
+
+def rag_prompt(prompt, rag_content):
+    """Return PROMPT with the retrieved RAG_CONTENT to answer it with."""
+    return f"""Use the following retrieved information to respond to
+the user prompt. Reference the citations if you use that information.
+
+<retrieved information>
+{rag_content}
+
+<user prompt>
+{prompt}"""
 
 
 def tab_chat():
@@ -1567,30 +1257,24 @@ def tab_chat():
 
     # Chat input
     if prompt := st.chat_input("What would you like to know?"):
-        # Display user message
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Get RAG content
         rag_content, references = get_rag_content(prompt, 3)
 
-        # Expand prompt with RAG content
-        expanded_prompt = f"""Use the following retrieved information to respond to
-the user prompt. Reference the citations if you use that information.
+        # The history keeps what the user typed. The retrieved text is only sent
+        # with the current prompt, so it is not redisplayed, and old retrievals
+        # do not pile up in every later request.
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        messages = [
+            *st.session_state.messages[:-1],
+            {"role": "user", "content": rag_prompt(prompt, rag_content)},
+        ]
 
-<retrieved information>
-{rag_content}
-
-<user prompt>
-{prompt}"""
-
-        st.session_state.messages.append({"role": "user", "content": expanded_prompt})
-
-        # Generate and display assistant response
         with st.chat_message("assistant"):
             stream = completion(
                 model=st.session_state["model"],
-                messages=st.session_state.messages,
+                messages=messages,
                 stream=True,
             )
 
@@ -1605,6 +1289,85 @@ the user prompt. Reference the citations if you use that information.
 
             msg = {"role": "assistant", "content": full_response}
             st.session_state.messages.append(msg)
+
+
+def add_source_item(source):
+    """Add SOURCE (a DOI, ORCID, url or file) and return the key it is stored under.
+
+    This is what `litdb add` does for one source, so the app and the command
+    line agree. Authors and bibtex files add many works and return None.
+    """
+    from litdb.commands.manage import _add_one
+
+    return _add_one(source, False, False, False, True, None, None, None, False)
+
+
+def save_upload(uploaded_file):
+    """Save the UPLOADED_FILE in the litdb root and return its path.
+
+    The file is the source of its entry, so it has to stay where it is (a
+    temporary file would leave the entry pointing at a deleted file).
+    """
+    import pathlib
+
+    upload_dir = pathlib.Path(config["root"]) / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    path = upload_dir / pathlib.Path(uploaded_file.name).name
+    stem, suffix, n = path.stem, path.suffix, 1
+    while path.exists() and path.read_bytes() != uploaded_file.getvalue():
+        path = upload_dir / f"{stem}-{n}{suffix}"
+        n += 1
+    path.write_bytes(uploaded_file.getvalue())
+    return str(path)
+
+
+def add_bibtex_text(bibtex):
+    """Add the works with a DOI in the BIBTEX string."""
+    import tempfile
+
+    from litdb.db import add_bibtex
+
+    with tempfile.TemporaryDirectory() as d:
+        bibfile = os.path.join(d, "entries.bib")
+        with open(bibfile, "w", encoding="utf-8") as f:
+            f.write(bibtex)
+        add_bibtex(bibfile)
+
+
+def show_added_work(source, key):
+    """Show the work SOURCE that was just added, with its tags and actions."""
+    row = db.execute("SELECT extra FROM sources WHERE source = ?", (source,)).fetchone()
+    extra = row[0] if row else None
+    try:
+        extra_data = json.loads(extra) if extra else {}
+    except json.JSONDecodeError:
+        extra_data = {}
+    citation = format_citation(extra) if extra else None
+    title = extra_data.get("display_name") or source
+
+    with st.expander(f"📄 {preview(title, 80)}", expanded=False):
+        st.markdown(f"**Citation:** {citation or source}")
+        st.markdown(f"**Source:** {source}")
+        if authors := author_names(extra_data, limit=5):
+            st.markdown(f"**Authors:** {', '.join(authors)}")
+
+        st.markdown("---")
+        st.markdown("**📋 Copy Citation:**")
+        st.code(citation or source, language="text")
+        try:
+            bibtex = dump_bibtex(extra_data) if extra_data else None
+        except Exception:
+            bibtex = None
+        if bibtex:
+            st.markdown("**📋 Copy BibTeX:**")
+            st.code(bibtex, language="bibtex")
+
+        st.markdown("---")
+        tag_editor(source, key)
+
+        st.markdown("---")
+        st.markdown("**Add Related Works:**")
+        work_buttons(source, key)
 
 
 def tab_add_content():
@@ -1624,254 +1387,85 @@ def tab_add_content():
             doi_submitted = st.form_submit_button("Add DOI(s)")
 
         if doi_submitted:
-            if doi_input:
-                from litdb.db import add_work, get_db
-
-                # Get database connection
-                db_conn = get_db()
-
-                dois = [d.strip() for d in doi_input.split("\n") if d.strip()]
-                st.info(f"Adding {len(dois)} DOI(s)...")
-
-                added_works = []
-                failed_works = []
-
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-
-                for idx, doi in enumerate(dois, 1):
-                    status_text.text(f"Processing {idx}/{len(dois)}: {doi}")
-                    try:
-                        # Add the work
-                        source = add_work(
-                            doi, references=False, related=False, citing=False
-                        )
-
-                        # Query the database to get the work info, by the key
-                        # add_work stored it under (not necessarily doi as typed)
-                        work_info = (
-                            source
-                            and db_conn.execute(
-                                "SELECT source, text, extra FROM sources WHERE source = ?",
-                                (source,),
-                            ).fetchone()
-                        )
-
-                        if work_info:
-                            _source, _text, extra = work_info
-                            extra_data = json.loads(extra) if extra else {}
-                            citation = format_citation(extra)
-
-                            added_works.append(
-                                {
-                                    "doi": doi,
-                                    "citation": citation or doi,
-                                    "title": extra_data.get("display_name", "Unknown"),
-                                    "authors": extra_data.get("authorships", []),
-                                }
-                            )
-                            status_text.success(f"✓ Added {idx}/{len(dois)}")
-                        else:
-                            failed_works.append(
-                                {
-                                    "doi": doi,
-                                    "error": "Not found in database after adding",
-                                }
-                            )
-
-                    except Exception as e:
-                        failed_works.append({"doi": doi, "error": str(e)})
-                        status_text.error(f"✗ Failed {idx}/{len(dois)}: {e!s}")
-
-                    progress_bar.progress(idx / len(dois))
-
-                # Clear progress indicators
-                progress_bar.empty()
-                status_text.empty()
-
-                # Show summary
-                if added_works:
-                    st.success(f"Successfully added {len(added_works)} work(s)!")
-
-                    st.markdown("---")
-                    st.subheader("Added Works Summary")
-
-                    for idx, work in enumerate(added_works):
-                        with st.expander(f"📄 {work['title'][:80]}...", expanded=False):
-                            st.markdown(f"**Citation:** {work['citation']}")
-                            st.markdown(f"**DOI:** {work['doi']}")
-
-                            # Show authors
-                            if work["authors"]:
-                                author_names = [
-                                    auth.get("author", {}).get(
-                                        "display_name", "Unknown"
-                                    )
-                                    for auth in work["authors"][:5]
-                                ]
-                                if len(work["authors"]) > 5:
-                                    author_names.append(
-                                        f"... and {len(work['authors']) - 5} more"
-                                    )
-                                st.markdown(f"**Authors:** {', '.join(author_names)}")
-
-                            # Copy buttons for citation and BibTeX
-                            st.markdown("---")
-                            st.markdown("**📋 Copy Citation:**")
-                            st.code(work["citation"], language="text")
-
-                            # BibTeX copy button
-                            from litdb.bibtex import dump_bibtex
-
-                            # We need to get the full extra data for bibtex
-                            work_result = db_conn.execute(
-                                "SELECT extra FROM sources WHERE source = ?",
-                                (work["doi"],),
-                            ).fetchone()
-
-                            if work_result:
-                                extra_json = work_result[0]
-                                if extra_json:
-                                    try:
-                                        extra_data = json.loads(extra_json)
-                                        bibtex = dump_bibtex(extra_data)
-                                        if bibtex:
-                                            st.markdown("**📋 Copy BibTeX:**")
-                                            st.code(bibtex, language="bibtex")
-                                    except Exception:
-                                        pass
-
-                            # Tags section
-                            st.markdown("---")
-                            st.markdown("**🏷️ Tags:**")
-
-                            # Get current tags
-                            current_tags = get_tags_for_source(work["doi"])
-
-                            # Display existing tags with remove buttons
-                            if current_tags:
-                                cols = st.columns(len(current_tags) + 1)
-                                for tag_idx, tag in enumerate(current_tags):
-                                    with cols[tag_idx]:
-                                        if st.button(
-                                            f"🗑️ {tag}", key=f"rm_tag_add_{idx}_{tag}"
-                                        ) and remove_tag_from_source(work["doi"], tag):
-                                            st.success(f"Removed tag: {tag}")
-                                            st.rerun()
-                            else:
-                                st.caption("No tags yet")
-
-                            # Add new tag
-                            new_tag_col1, new_tag_col2 = st.columns([3, 1])
-                            with new_tag_col1:
-                                new_tag = st.text_input(
-                                    "Add tag",
-                                    key=f"new_tag_add_{idx}",
-                                    placeholder="Enter tag name...",
-                                    label_visibility="collapsed",
-                                )
-                            with new_tag_col2:
-                                if (
-                                    st.button("➕ Add", key=f"add_tag_btn_{idx}")
-                                    and new_tag
-                                    and new_tag.strip()
-                                ):
-                                    if add_tag_to_source(work["doi"], new_tag.strip()):
-                                        st.success(f"Added tag: {new_tag}")
-                                        st.rerun()
-                                    else:
-                                        st.warning("Tag already exists")
-
-                            # Add Related Works buttons
-                            st.markdown("---")
-                            st.markdown("**Add Related Works:**")
-                            col1, col2, col3 = st.columns(3)
-
-                            with col1:
-                                if st.button(
-                                    "📚 Add References", key=f"refs_add_{idx}"
-                                ):
-                                    with st.spinner("Adding references..."):
-                                        try:
-                                            add_work(
-                                                work["doi"],
-                                                references=True,
-                                                related=False,
-                                                citing=False,
-                                            )
-                                            st.success("References added!")
-                                        except Exception as e:
-                                            st.error(f"Error: {e}")
-
-                            with col2:
-                                if st.button(
-                                    "🔗 Add Related", key=f"related_add_{idx}"
-                                ):
-                                    with st.spinner("Adding related works..."):
-                                        try:
-                                            add_work(
-                                                work["doi"],
-                                                references=False,
-                                                related=True,
-                                                citing=False,
-                                            )
-                                            st.success("Related works added!")
-                                        except Exception as e:
-                                            st.error(f"Error: {e}")
-
-                            with col3:
-                                if st.button("📖 Add Citing", key=f"citing_add_{idx}"):
-                                    with st.spinner("Adding citing works..."):
-                                        try:
-                                            add_work(
-                                                work["doi"],
-                                                references=False,
-                                                related=False,
-                                                citing=True,
-                                            )
-                                            st.success("Citing works added!")
-                                        except Exception as e:
-                                            st.error(f"Error: {e}")
-
-                if failed_works:
-                    st.error(f"Failed to add {len(failed_works)} work(s)")
-                    with st.expander("Show failed works"):
-                        for failed in failed_works:
-                            st.text(f"❌ {failed['doi']}: {failed['error']}")
-
-            else:
+            dois = [d.strip() for d in (doi_input or "").split("\n") if d.strip()]
+            if not dois:
                 st.warning("Please enter at least one DOI")
+                return
+
+            st.info(f"Adding {len(dois)} DOI(s)...")
+            added, failed = [], []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            for idx, doi in enumerate(dois, 1):
+                status_text.text(f"Processing {idx}/{len(dois)}: {doi}")
+                try:
+                    added.append(add_work(doi))
+                except Exception as e:
+                    failed.append((doi, str(e)))
+                progress_bar.progress(idx / len(dois))
+
+            progress_bar.empty()
+            status_text.empty()
+            # Kept in the session, so the tag and related-work buttons of the
+            # added works still work after their click reruns the script.
+            st.session_state["doi_added"] = added
+            st.session_state["doi_failed"] = failed
+
+        added = st.session_state.get("doi_added") or []
+        failed = st.session_state.get("doi_failed") or []
+        if added:
+            st.success(f"Successfully added {len(added)} work(s)!")
+            st.markdown("---")
+            st.subheader("Added Works Summary")
+            for idx, source in enumerate(added):
+                show_added_work(source, f"add_{idx}")
+
+        if failed:
+            st.error(f"Failed to add {len(failed)} work(s)")
+            with st.expander("Show failed works"):
+                for doi, error in failed:
+                    st.text(f"❌ {doi}: {error}")
 
     elif add_method == "ORCID":
         st.subheader("Add by ORCID")
+        st.markdown("Adds all the works of an author, by ORCID or OpenAlex author id.")
 
         with st.form("orcid_form"):
-            orcid = st.text_input("Enter ORCID ID")
-            n_works = st.slider("Number of works to fetch", 1, 50, 10)
-            orcid_submitted = st.form_submit_button("Fetch Works")
+            orcid = st.text_input(
+                "Enter ORCID ID", placeholder="0000-0003-2625-9232"
+            ).strip()
+            orcid_submitted = st.form_submit_button("Add Works")
 
         if orcid_submitted:
-            if orcid:
-                st.info(f"Fetching {n_works} works from ORCID {orcid}...")
-                # Here you would call the actual ORCID fetch function
-                st.success("Works fetched successfully")
-            else:
+            if not orcid:
                 st.warning("Please enter an ORCID ID")
+                return
+            try:
+                with st.spinner(f"Adding the works of {orcid}..."):
+                    add_source_item(orcid)
+                st.success(f"✓ Added the works of {orcid}")
+            except Exception as e:
+                st.error(f"Failed to add the works of {orcid}: {e}")
 
     elif add_method == "BibTeX":
         st.subheader("Add from BibTeX")
+        st.markdown("Entries with a DOI are added from OpenAlex.")
 
         with st.form("bibtex_form"):
             bibtex_input = st.text_area("Paste BibTeX entries", height=200)
             bibtex_submitted = st.form_submit_button("Add from BibTeX")
 
         if bibtex_submitted:
-            if bibtex_input:
-                st.info("Processing BibTeX entries...")
-                # Here you would call the actual BibTeX parser
-                st.success("BibTeX entries added successfully")
-            else:
+            if not bibtex_input.strip():
                 st.warning("Please paste BibTeX entries")
+                return
+            try:
+                with st.spinner("Adding BibTeX entries..."):
+                    add_bibtex_text(bibtex_input)
+                st.success("✓ Added the BibTeX entries with a DOI")
+            except Exception as e:
+                st.error(f"Failed to add BibTeX entries: {e}")
 
     elif add_method == "From Text":
         st.subheader("Extract References from Text")
@@ -1996,6 +1590,7 @@ Text:
                                         resp = requests.get(
                                             "https://api.crossref.org/works",
                                             params={"query": query, "rows": 1},
+                                            timeout=30,
                                         )
 
                                         if resp.status_code == 200:
@@ -2050,14 +1645,14 @@ Text:
                             dois_to_add = [r["doi"] for r in results if r["doi"]]
                             failed_refs = [r for r in results if not r["doi"]]
 
+                            successfully_added = []
+                            failed_to_add = []
+
                             # Add to database
                             if dois_to_add:
                                 st.subheader("Adding to Database")
                                 progress_bar = st.progress(0)
                                 status_text = st.empty()
-
-                                successfully_added = []
-                                failed_to_add = []
 
                                 for i, doi in enumerate(dois_to_add):
                                     status_text.text(
@@ -2065,7 +1660,6 @@ Text:
                                     )
                                     try:
                                         # Import and call the add functionality
-                                        from litdb.db import add_work
 
                                         add_work(
                                             doi,
@@ -2167,6 +1761,7 @@ Text:
         st.markdown("""
         Upload a file or provide a URL to add to your library.
         Supported formats: PDF, DOCX, PPTX, HTML, Jupyter notebooks, BibTeX, and more.
+        Uploaded files are kept in the `uploads` directory of your litdb root.
         """)
 
         input_type = st.radio("Input Type", ["File Upload", "URL"])
@@ -2190,63 +1785,26 @@ Text:
                 file_submitted = st.form_submit_button("Add File")
 
             if file_submitted and uploaded_file:
-                import pathlib
-                import tempfile
-
-                # Save uploaded file to temporary location
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=pathlib.Path(uploaded_file.name).suffix
-                ) as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_path = tmp_file.name
-
                 try:
                     with st.spinner(f"Processing {uploaded_file.name}..."):
-                        # Import the add logic
-                        from click import Context
-
-                        from litdb.commands.manage import add as cli_add
-
-                        # Call the add function
-                        with Context(cli_add) as ctx:
-                            ctx.invoke(cli_add, sources=[tmp_path])
-
+                        add_source_item(save_upload(uploaded_file))
                     st.success(f"✓ Successfully added: {uploaded_file.name}")
-
                 except Exception as e:
                     st.error(f"Failed to add file: {e}")
-
-                finally:
-                    # Clean up temp file
-                    import os
-
-                    try:
-                        os.unlink(tmp_path)
-                    except Exception:
-                        pass
 
         else:  # URL
             with st.form("url_form"):
                 url_input = st.text_input(
                     "Enter URL", placeholder="https://example.com/article"
-                )
+                ).strip()
                 url_submitted = st.form_submit_button("Add URL")
 
             if url_submitted:
                 if url_input:
                     try:
                         with st.spinner(f"Processing {url_input}..."):
-                            # Import the add logic
-                            from click import Context
-
-                            from litdb.commands.manage import add as cli_add
-
-                            # Call the add function
-                            with Context(cli_add) as ctx:
-                                ctx.invoke(cli_add, sources=[url_input])
-
+                            add_source_item(url_input)
                         st.success(f"✓ Successfully added: {url_input}")
-
                     except Exception as e:
                         st.error(f"Failed to add URL: {e}")
                 else:
@@ -2262,128 +1820,75 @@ Text:
         with st.form("directory_form"):
             directory_path = st.text_input(
                 "Directory Path", placeholder="/path/to/your/documents"
-            )
+            ).strip()
             directory_submitted = st.form_submit_button("Index Directory")
 
         if directory_submitted:
-            if directory_path:
-                import pathlib
-
-                dir_path = pathlib.Path(directory_path)
-
-                if not dir_path.exists():
-                    st.error(f"Directory does not exist: {directory_path}")
-                elif not dir_path.is_dir():
-                    st.error(f"Path is not a directory: {directory_path}")
-                else:
-                    try:
-                        # Find all supported files
-                        supported_extensions = [
-                            ".pdf",
-                            ".docx",
-                            ".pptx",
-                            ".org",
-                            ".md",
-                            ".html",
-                            ".bib",
-                            ".ipynb",
-                        ]
-
-                        files_to_add = []
-                        for ext in supported_extensions:
-                            files_to_add.extend(dir_path.rglob(f"*{ext}"))
-
-                        # Filter out files already in database
-                        db = get_db()
-                        new_files = []
-                        for fname in files_to_add:
-                            if not db.execute(
-                                "SELECT source FROM sources WHERE source = ?",
-                                (str(fname),),
-                            ).fetchone():
-                                new_files.append(fname)
-
-                        if not new_files:
-                            st.info(
-                                f"No new files found in {directory_path} (all files already indexed)"
-                            )
-                        else:
-                            st.info(f"Found {len(new_files)} new file(s) to index")
-
-                            # Add files with progress bar
-                            progress_bar = st.progress(0)
-                            status_text = st.empty()
-
-                            successfully_added = []
-                            failed_to_add = []
-
-                            from click import Context
-
-                            from litdb.commands.manage import add as cli_add
-
-                            for i, fname in enumerate(new_files):
-                                status_text.text(
-                                    f"Adding {i + 1}/{len(new_files)}: {fname.name}"
-                                )
-
-                                try:
-                                    with Context(cli_add) as ctx:
-                                        ctx.invoke(cli_add, sources=[str(fname)])
-                                    successfully_added.append(fname)
-                                except Exception as e:
-                                    failed_to_add.append((fname, str(e)))
-
-                                progress_bar.progress((i + 1) / len(new_files))
-
-                            status_text.empty()
-                            progress_bar.empty()
-
-                            # Update directories table
-                            import datetime
-
-                            last_updated = datetime.date.today().strftime("%Y-%m-%d")
-                            directory_str = str(dir_path.resolve())
-
-                            if db.execute(
-                                "SELECT path FROM directories WHERE path = ?",
-                                (directory_str,),
-                            ).fetchone():
-                                db.execute(
-                                    "UPDATE directories SET last_updated = ? WHERE path = ?",
-                                    (last_updated, directory_str),
-                                )
-                            else:
-                                db.execute(
-                                    "INSERT INTO directories(path, last_updated) VALUES (?, ?)",
-                                    (directory_str, last_updated),
-                                )
-                            db.commit()
-
-                            # Show results summary
-                            st.success(
-                                f"✓ Successfully indexed {len(successfully_added)} file(s)!"
-                            )
-
-                            if failed_to_add:
-                                with st.expander(
-                                    f"⚠ Failed to add {len(failed_to_add)} file(s)"
-                                ):
-                                    for fname, error in failed_to_add:
-                                        st.error(f"{fname.name}: {error}")
-
-                            # Show added files
-                            if successfully_added:
-                                with st.expander(
-                                    f"✓ Indexed {len(successfully_added)} files",
-                                    expanded=False,
-                                ):
-                                    for fname in successfully_added:
-                                        st.markdown(f"- {fname}")
-
-                    except Exception as e:
-                        st.error(f"Error indexing directory: {e}")
-            else:
+            if not directory_path:
                 st.warning("Please enter a directory path")
+                return
+
+            import pathlib
+
+            from litdb.commands.manage import _files_to_index, _record_indexed
+
+            dir_path = pathlib.Path(directory_path).expanduser()
+            if not dir_path.exists():
+                st.error(f"Directory does not exist: {directory_path}")
+                return
+            if not dir_path.is_dir():
+                st.error(f"Path is not a directory: {directory_path}")
+                return
+
+            try:
+                new_files = _files_to_index(db, dir_path)
+                successfully_added, failed_to_add = [], []
+
+                if not new_files:
+                    st.info(
+                        f"No new files found in {directory_path} (all files already indexed)"
+                    )
+                else:
+                    st.info(f"Found {len(new_files)} new file(s) to index")
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    for i, fname in enumerate(new_files):
+                        status_text.text(
+                            f"Adding {i + 1}/{len(new_files)}: {fname.name}"
+                        )
+                        try:
+                            add_source_item(str(fname))
+                            successfully_added.append(fname)
+                        except Exception as e:
+                            failed_to_add.append((fname, str(e)))
+                        progress_bar.progress((i + 1) / len(new_files))
+
+                    status_text.empty()
+                    progress_bar.empty()
+
+                # Recorded so `litdb reindex` keeps it up to date.
+                _record_indexed(db, dir_path)
+
+                if new_files:
+                    st.success(
+                        f"✓ Successfully indexed {len(successfully_added)} file(s)!"
+                    )
+
+                if failed_to_add:
+                    with st.expander(f"⚠ Failed to add {len(failed_to_add)} file(s)"):
+                        for fname, error in failed_to_add:
+                            st.error(f"{fname.name}: {error}")
+
+                if successfully_added:
+                    with st.expander(
+                        f"✓ Indexed {len(successfully_added)} files", expanded=False
+                    ):
+                        for fname in successfully_added:
+                            st.markdown(f"- {fname}")
+
+            except Exception as e:
+                st.error(f"Error indexing directory: {e}")
 
 
 def tab_library_browser():
@@ -2407,18 +1912,10 @@ def tab_library_browser():
 
         if results:
             for source, text, date_added, extra in results:
-                # Try to get title from extra JSON
-                title = source
-                if extra:
-                    try:
-                        extra_data = json.loads(extra)
-                        title = extra_data.get("title", source)
-                    except Exception:
-                        pass
-
-                with st.expander(f"{title[:80]}... (Added: {date_added})"):
+                title = source_title(source, extra)
+                with st.expander(f"{preview(title, 80)} (Added: {date_added})"):
                     st.markdown(f"**Source:** {source}")
-                    st.markdown(f"**Preview:** {text[:200]}...")
+                    st.markdown(f"**Preview:** {preview(text, 200)}")
         else:
             st.info(f"No additions in the last {days} days")
 
@@ -2446,18 +1943,9 @@ def tab_library_browser():
                 st.markdown(f"**{len(results)} sources with tag '{selected_tag}'**")
 
                 for source, text, extra in results:
-                    # Try to get title from extra JSON
-                    title = source
-                    if extra:
-                        try:
-                            extra_data = json.loads(extra)
-                            title = extra_data.get("title", source)
-                        except Exception:
-                            pass
-
-                    with st.expander(title[:80] + "..."):
+                    with st.expander(preview(source_title(source, extra), 80)):
                         st.markdown(f"**Source:** {source}")
-                        st.markdown(f"**Preview:** {text[:200]}...")
+                        st.markdown(f"**Preview:** {preview(text, 200)}")
         else:
             st.info("No tags found in database")
 
@@ -2481,6 +1969,27 @@ def tab_library_browser():
             st.bar_chart(df.set_index("Month"))
         else:
             st.info("No timeline data available")
+
+
+def save_query(filter_expr, description):
+    """Save the OpenAlex FILTER_EXPR, as `litdb add-filter` does.
+
+    Returns False if there is already a query with that filter.
+    """
+    if db.execute("SELECT 1 FROM queries WHERE filter = ?", (filter_expr,)).fetchone():
+        return False
+    db.execute(
+        "INSERT INTO queries(filter, description) VALUES (?, ?)",
+        (filter_expr, description or None),
+    )
+    db.commit()
+    return True
+
+
+def delete_query(filter_expr):
+    """Delete the query with FILTER_EXPR, as `litdb rm-filter` does."""
+    db.execute("DELETE FROM queries WHERE filter = ?", (filter_expr,))
+    db.commit()
 
 
 def tab_manage_filters():
@@ -2638,16 +2147,16 @@ def tab_manage_filters():
             placeholder="e.g., author.id:A1234567890",
             help="OpenAlex filter expression",
         )
-        new_description = st.text_area(  # noqa: F841
+        new_description = st.text_area(
             "Description (optional)", placeholder="What this query tracks..."
         )
 
         if st.form_submit_button("Save Query"):
-            if new_filter:
-                st.success(f"Query saved: {new_filter}")
-                st.info(
-                    "Note: To actually save, this would need to call the add_filter CLI command"
-                )
+            if new_filter.strip():
+                if save_query(new_filter.strip(), new_description.strip()):
+                    st.success(f"Query saved: {new_filter}")
+                else:
+                    st.warning(f"There is already a query for {new_filter}")
             else:
                 st.warning("Please enter a filter expression")
 
@@ -2677,7 +2186,8 @@ def tab_manage_filters():
                 st.caption(f"Last updated: {last_updated}")
             with col3:
                 if st.button("Delete", key=f"delete_query_{i}"):
-                    st.info("Query deletion coming soon...")
+                    delete_query(filter_text)
+                    st.rerun()
 
             # Add expander to show articles belonging to this filter
             # We'll match based on the OpenAlex ID pattern in the filter
@@ -2773,9 +2283,24 @@ def tab_manage_filters():
                 st.caption(f"Last updated: {last_updated}")
             with col2:
                 if st.button("Remove", key=f"remove_dir_{path}"):
-                    st.info("Directory removal coming soon...")
+                    db.execute("DELETE FROM directories WHERE path = ?", (path,))
+                    db.commit()
+                    st.rerun()
     else:
         st.info("No directories being watched")
+
+
+def tag_counts(limit=10):
+    """Return (tag, number of sources) for the LIMIT most used tags."""
+    return db.execute(
+        """SELECT t.tag, COUNT(*) as count
+           FROM source_tag st
+           JOIN tags t ON st.tag_id = t.rowid
+           GROUP BY t.tag
+           ORDER BY count DESC, t.tag
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
 
 
 def tab_stats_analytics():
@@ -2818,19 +2343,88 @@ def tab_stats_analytics():
 
     # Top tags
     st.subheader("Most Used Tags")
-    top_tags = db.execute(
-        """SELECT tag, COUNT(*) as count
-           FROM tags
-           GROUP BY tag
-           ORDER BY count DESC
-           LIMIT 10"""
-    ).fetchall()
+    top_tags = tag_counts()
 
     if top_tags:
         df = pd.DataFrame(top_tags, columns=["Tag", "Count"])
         st.bar_chart(df.set_index("Tag"))
     else:
         st.info("No tag data available")
+
+
+def source_title(source, extra):
+    """Return a title for SOURCE from its EXTRA json (which may be None)."""
+    try:
+        data = json.loads(extra) if extra else {}
+    except json.JSONDecodeError:
+        data = {}
+    return (data or {}).get("title") or (data or {}).get("display_name") or source
+
+
+def export_rows(filter_option, tag=None, days=None):
+    """Return the (source, extra) rows to export for FILTER_OPTION."""
+    if filter_option == "By tag":
+        return db.execute(
+            """SELECT s.source, s.extra FROM sources s
+               JOIN source_tag st ON s.rowid = st.source_id
+               JOIN tags t ON st.tag_id = t.rowid
+               WHERE t.tag = ? ORDER BY s.source""",
+            (tag,),
+        ).fetchall()
+    if filter_option == "Recent":
+        return db.execute(
+            """SELECT source, extra FROM sources
+               WHERE date_added > datetime('now', ?) ORDER BY date_added DESC""",
+            (f"-{days} days",),
+        ).fetchall()
+    return db.execute("SELECT source, extra FROM sources ORDER BY source").fetchall()
+
+
+def bibtex_entries(rows):
+    """Return (bibtex, skipped) for the (source, extra) ROWS.
+
+    Only works from OpenAlex have bibtex entries; the other sources are
+    returned in skipped.
+    """
+    entries, skipped = [], []
+    for source, extra in rows:
+        try:
+            bibtex = dump_bibtex(json.loads(extra)) if extra else None
+        except Exception:
+            bibtex = None
+        if bibtex:
+            entries.append(bibtex.strip())
+        else:
+            skipped.append(source)
+    return "\n\n".join(entries), skipped
+
+
+def citations(rows):
+    """Return the citations of the (source, extra) ROWS, one per line."""
+    lines = []
+    for source, extra in rows:
+        try:
+            data = json.loads(extra) if extra else {}
+        except json.JSONDecodeError:
+            data = {}
+        lines.append(
+            (data or {}).get("citation")
+            or (format_citation(extra) if data else None)
+            or source
+        )
+    return "\n".join(lines)
+
+
+def run_sql(sql):
+    """Run SQL once, commit it, and return (columns, rows).
+
+    columns is None for a statement that returns no rows.
+    """
+    cursor = db.execute(sql)
+    rows = cursor.fetchall() or []
+    db.commit()
+    columns = [d[0] for d in cursor.description] if cursor.description else None
+    return columns, rows
 
 
 def tab_export():
@@ -2841,37 +2435,50 @@ def tab_export():
         "Export Format", ["BibTeX", "Citations", "Summary Newsletter", "Raw SQL"]
     )
 
-    if export_format == "BibTeX":
-        st.subheader("Export BibTeX")
+    if export_format in ("BibTeX", "Citations"):
+        st.subheader(f"Export {export_format}")
 
         filter_option = st.selectbox("Filter by", ["All sources", "By tag", "Recent"])
-
+        tag = days = None
         if filter_option == "By tag":
-            tags = db.execute("SELECT DISTINCT tag FROM tags ORDER BY tag").fetchall()
-            if tags:
-                tag_list = [t[0] for t in tags]
-                selected_tag = st.selectbox("Select Tag", tag_list)
-
-                if st.button("Generate BibTeX"):
-                    st.info(f"Generating BibTeX for tag '{selected_tag}'...")
-                    st.code(
-                        "@article{example2024,\n  title={Example},\n  author={Author},\n}",
-                        language="bibtex",
-                    )
-
+            tags = [
+                t[0]
+                for t in db.execute(
+                    "SELECT DISTINCT tag FROM tags ORDER BY tag"
+                ).fetchall()
+            ]
+            if not tags:
+                st.info("No tags found in database")
+                return
+            tag = st.selectbox("Select Tag", tags)
         elif filter_option == "Recent":
             days = st.slider("From last N days", 1, 90, 7)
-            if st.button("Generate BibTeX"):
-                st.info(f"Generating BibTeX for last {days} days...")
 
-        else:  # All sources
-            if st.button("Generate BibTeX"):
-                st.info("Generating BibTeX for all sources...")
+        if st.button(f"Generate {export_format}"):
+            rows = export_rows(filter_option, tag, days)
+            if not rows:
+                st.info("No sources to export")
+                return
 
-    elif export_format == "Citations":
-        st.subheader("Export Citations")
-        citation_style = st.selectbox("Citation Style", ["APA", "MLA", "Chicago"])
-        st.info(f"Citation export in {citation_style} format coming soon")
+            if export_format == "BibTeX":
+                text, skipped = bibtex_entries(rows)
+                st.success(f"{len(rows) - len(skipped)} BibTeX entries")
+                if skipped:
+                    st.caption(
+                        f"{len(skipped)} sources without a bibtex entry "
+                        "(files, web pages and other non-OpenAlex sources) were skipped."
+                    )
+                filename, language = "litdb.bib", "bibtex"
+            else:
+                text = citations(rows)
+                st.success(f"{len(rows)} citations")
+                filename, language = "litdb-citations.txt", "text"
+
+            if text:
+                st.download_button(
+                    f"📥 Download {filename}", data=text, file_name=filename
+                )
+                st.code(text, language=language)
 
     elif export_format == "Summary Newsletter":
         st.subheader("Generate Summary Newsletter")
@@ -2880,19 +2487,41 @@ def tab_export():
             time_period = st.selectbox(
                 "Time Period", ["1 week", "2 weeks", "1 month", "3 months"]
             )
-            model = st.text_input("Model", value=gpt["model"])  # noqa: F841
+            model = st.text_input("Model", value=gpt["model"])
             newsletter_submitted = st.form_submit_button("Generate Newsletter")
 
         if newsletter_submitted:
-            st.info(f"Generating newsletter for {time_period}...")
-            st.markdown("""
-            ## Newsletter Summary
+            import tempfile
 
-            This would contain a summary of recent papers organized by topic...
-            """)
+            from litdb.summary import generate_summary
+
+            try:
+                with (
+                    st.spinner(f"Generating newsletter for {time_period}..."),
+                    tempfile.TemporaryDirectory() as d,
+                ):
+                    newsletter = generate_summary(
+                        since=time_period,
+                        output_file=os.path.join(d, "newsletter.org"),
+                        model=model or None,
+                    )
+            except Exception as e:
+                st.error(f"Failed to generate the newsletter: {e}")
+                return
+
+            if not newsletter:
+                st.info(f"No articles to summarize in the last {time_period}.")
+                return
+            st.download_button(
+                "📥 Download newsletter.org",
+                data=newsletter,
+                file_name="newsletter.org",
+            )
+            st.code(newsletter, language="org")
 
     elif export_format == "Raw SQL":
         st.subheader("Raw SQL Query")
+        st.caption("Statements that change the database are committed.")
 
         with st.form("sql_form"):
             sql_query = st.text_area(
@@ -2902,16 +2531,24 @@ def tab_export():
 
         if sql_submitted:
             try:
-                results = db.execute(sql_query).fetchall()
-                if results:
-                    # Get column names
-                    cols = [desc[0] for desc in db.execute(sql_query).description]
-                    df = pd.DataFrame(results, columns=cols)
-                    st.dataframe(df)
-                else:
-                    st.info("Query returned no results")
+                columns, results = run_sql(sql_query)
             except Exception as e:
                 st.error(f"Query error: {e}")
+                return
+            if results:
+                st.dataframe(pd.DataFrame(results, columns=columns))
+            elif columns:
+                st.info("Query returned no results")
+            else:
+                st.success("Statement executed")
+
+
+def research_failed(error, hint=None):
+    """Show the error step of the research tab with ERROR and HINT."""
+    st.session_state.research_error = error
+    st.session_state.research_hint = hint
+    st.session_state.research_step = "error"
+    st.rerun()
 
 
 def tab_research():
@@ -3135,16 +2772,12 @@ focus the response and ask them what they would like.""",
                     raise
 
             except ImportError:
-                st.error("Deep research requires gpt_researcher to be installed")
-                st.info("Install with: `pip install litdb[research]`")
-                if st.button("Back to Input"):
-                    st.session_state.research_step = "input"
-                    st.rerun()
+                research_failed(
+                    "Deep research requires gpt_researcher to be installed",
+                    "Install with: `pip install litdb[research]`",
+                )
             except Exception as e:
-                st.error(f"Research failed: {e}")
-                if st.button("Back to Input"):
-                    st.session_state.research_step = "input"
-                    st.rerun()
+                research_failed(f"Research failed: {e}")
 
         else:
             # FutureHouse research
@@ -3152,11 +2785,10 @@ focus the response and ask them what they would like.""",
                 from futurehouse_client import FutureHouseClient, JobNames
 
                 if "FUTURE_HOUSE_API_KEY" not in os.environ:
-                    st.error("FUTURE_HOUSE_API_KEY environment variable not set")
-                    st.info("Get an API key from https://platform.futurehouse.org/")
-                    if st.button("Back to Input"):
-                        st.session_state.research_step = "input"
-                        st.rerun()
+                    research_failed(
+                        "FUTURE_HOUSE_API_KEY environment variable not set",
+                        "Get an API key from https://platform.futurehouse.org/",
+                    )
                 else:
                     client = FutureHouseClient(
                         api_key=os.environ["FUTURE_HOUSE_API_KEY"]
@@ -3196,22 +2828,26 @@ focus the response and ask them what they would like.""",
                         st.session_state.research_step = "results"
                         st.rerun()
                     else:
-                        st.error(f"Task failed with status: {result.status}")
-                        if st.button("Back to Input"):
-                            st.session_state.research_step = "input"
-                            st.rerun()
+                        research_failed(f"Task failed with status: {result.status}")
 
             except ImportError:
-                st.error("FutureHouse research requires futurehouse_client")
-                st.info("Install with: `pip install litdb[futurehouse]`")
-                if st.button("Back to Input"):
-                    st.session_state.research_step = "input"
-                    st.rerun()
+                research_failed(
+                    "FutureHouse research requires futurehouse_client",
+                    "Install with: `pip install litdb[futurehouse]`",
+                )
             except Exception as e:
-                st.error(f"Research failed: {e}")
-                if st.button("Back to Input"):
-                    st.session_state.research_step = "input"
-                    st.rerun()
+                research_failed(f"Research failed: {e}")
+
+    # A failed run. This is its own step, so that clicking "Back to Input"
+    # does not rerun the research, as it did when the button was shown in the
+    # running step.
+    elif st.session_state.research_step == "error":
+        st.error(st.session_state.get("research_error", "Research failed"))
+        if hint := st.session_state.get("research_hint"):
+            st.info(hint)
+        if st.button("Back to Input"):
+            st.session_state.research_step = "input"
+            st.rerun()
 
     # Step 4: Display results
     elif st.session_state.research_step == "results":
@@ -3278,69 +2914,37 @@ def tab_nsf_coa():
             "Generating COA... This may take a few minutes depending on publication count."
         ):
             try:
-                import os
-                import tempfile
-
                 from litdb.coa import get_coa
 
-                # Create a temporary directory to store the file
-                temp_dir = tempfile.mkdtemp()
-                original_dir = os.getcwd()
+                # get_coa saves the file in ~/Downloads and returns its path.
+                file_path = get_coa(orcid_input, email=email_input or None)
 
-                try:
-                    # Change to temp directory so the file is created there
-                    os.chdir(temp_dir)
+                if file_path and os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        file_data = f.read()
 
-                    # Call get_coa which creates the Excel file
-                    get_coa(orcid_input, email=email_input if email_input else None)
+                    st.success(f"✓ COA generated successfully! Saved to {file_path}")
 
-                    # Find the generated file
-                    files = [f for f in os.listdir(temp_dir) if f.endswith(".xlsx")]
+                    st.download_button(
+                        label="📥 Download COA Excel File",
+                        data=file_data,
+                        file_name=os.path.basename(file_path),
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
 
-                    if files:
-                        coa_file = files[0]
-                        file_path = os.path.join(temp_dir, coa_file)
+                    df = pd.read_excel(file_path, sheet_name="Table 4")
 
-                        # Read the file
-                        with open(file_path, "rb") as f:
-                            file_data = f.read()
+                    st.markdown("---")
+                    st.subheader("Summary")
+                    st.info(
+                        f"Found **{len(df)}** unique co-authors from your publications in the last 4 years."
+                    )
 
-                        st.success("✓ COA generated successfully!")
+                    with st.expander("Preview Table 4 (first 10 rows)"):
+                        st.dataframe(df.head(10))
 
-                        # Provide download button
-                        st.download_button(
-                            label="📥 Download COA Excel File",
-                            data=file_data,
-                            file_name=coa_file,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        )
-
-                        # Show some statistics
-                        import pandas as pd
-
-                        df = pd.read_excel(file_path, sheet_name="Table 4")
-
-                        st.markdown("---")
-                        st.subheader("Summary")
-                        st.info(
-                            f"Found **{len(df)}** unique co-authors from your publications in the last 4 years."
-                        )
-
-                        # Show preview
-                        with st.expander("Preview Table 4 (first 10 rows)"):
-                            st.dataframe(df.head(10))
-
-                    else:
-                        st.error("Failed to generate COA file")
-
-                finally:
-                    # Change back to original directory
-                    os.chdir(original_dir)
-
-                    # Clean up temp files
-                    import shutil
-
-                    shutil.rmtree(temp_dir, ignore_errors=True)
+                else:
+                    st.error("Failed to generate COA file")
 
             except Exception as e:
                 error_msg = str(e)

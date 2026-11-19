@@ -1,5 +1,6 @@
 """Utility functions used in litdb."""
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -79,3 +80,75 @@ def get_config():
     config["root"] = str(root)
 
     return config
+
+
+def extract_json(text: str) -> str:
+    """
+    Extract the first JSON object or array from `text`.
+    Finds the first '{' or '[', then scans forward matching braces/brackets,
+    ignoring ones inside string literals. Returns the JSON substring.
+    Raises ValueError if no valid JSON is found.
+    """
+    # 1) Locate first opening brace/bracket
+    start = None
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            start = i
+            break
+    if start is None:
+        raise ValueError("No JSON object or array found in text")
+
+    # 2) Scan forward to find the matching closing brace/bracket
+    stack = []
+    mapping = {"]": "[", "}": "{"}
+    in_string = False
+    escape = False
+
+    for i, ch in enumerate(text[start:], start):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if not stack or stack[-1] != mapping[ch]:
+                    raise ValueError(f"Mismatched closing {ch!r} at position {i}")
+                stack.pop()
+                if not stack:
+                    # Found the matching closing bracket
+                    candidate = text[start : i + 1]
+                    # Optional: validate it's real JSON
+                    try:
+                        json.loads(candidate)
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"Extracted text is not valid JSON: {e}"
+                        ) from e
+                    return candidate
+
+    raise ValueError("No matching closing bracket found for JSON start")
+
+
+def fts_literal(query):
+    """Quote each word of QUERY so FTS5 matches it literally."""
+    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
+
+
+def fts_query(db, sql, query, *params):
+    """Run SQL, whose first parameter is an FTS5 MATCH, for QUERY.
+
+    QUERY is tried as FTS5 syntax, and if that is invalid (e.g.
+    "density-functional" or "Pt(111)"), as literal words. Raises ValueError if
+    neither works.
+    """
+    try:
+        return db.execute(sql, (query, *params)).fetchall()
+    except ValueError:
+        return db.execute(sql, (fts_literal(query), *params)).fetchall()

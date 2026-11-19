@@ -20,7 +20,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from ..openalex import get_data
-from ..research import deep_research
+from ..research import REPORT_SOURCES, deep_research
 from ..utils import get_config
 from . import search
 
@@ -98,10 +98,18 @@ def fhresearch(query, task):
 @click.option(
     "--report-type", default="research_report", help="The type of report to generate."
 )
+@click.option(
+    "--source",
+    type=click.Choice(list(REPORT_SOURCES)),
+    default="litdb",
+    show_default=True,
+    help="litdb: your litdb and OpenAlex; web: web search; "
+    "local: files in --doc-path; hybrid: web and --doc-path.",
+)
 @click.option("--doc-path", default=None, help="Path to local documents")
 @click.option("-o", "--output", default=None, help="output file")
 @click.option("-v", "--verbose", is_flag=True, default=False)
-def research(query, report_type, doc_path, output, verbose):
+def research(query, report_type, source, doc_path, output, verbose):
     """Run a deep research query.
 
     QUERY: the topic to do research on
@@ -116,11 +124,15 @@ def research(query, report_type, doc_path, output, verbose):
     """
     query = " ".join(query)  # if you don't quote the query it is a list of words.
 
-    if doc_path:
+    if source in ("local", "hybrid"):
+        if not doc_path:
+            raise click.UsageError(f"--source {source} needs --doc-path.")
         os.environ["DOC_PATH"] = doc_path
+    elif doc_path:
+        raise click.UsageError("--doc-path is only used with --source local or hybrid.")
 
     report, result, context, costs, _images, _sources = deep_research(
-        query, report_type, verbose
+        query, report_type, verbose, source=source
     )
 
     s = f"""{report}

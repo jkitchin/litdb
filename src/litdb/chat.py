@@ -9,12 +9,11 @@ import readline
 import subprocess
 import warnings
 
+import litellm
 import numpy as np
 from docling.document_converter import DocumentConverter
-from docling.exceptions import ConversionError
 from litellm import completion
 from rich import print as richprint
-from sentence_transformers import SentenceTransformer
 
 # Try to import backoff (optional dependency in crawl extra)
 try:
@@ -34,7 +33,7 @@ except ImportError:
 
 
 from .audio import get_audio_text, record
-from .db import get_db
+from .db import get_db, get_model
 from .utils import get_config
 
 warnings.filterwarnings("ignore")
@@ -43,28 +42,22 @@ warnings.filterwarnings("ignore")
 readline.parse_and_bind("tab: complete")
 readline.parse_and_bind("set editing-mode emacs")
 
-# Load history - done lazily to avoid import-time database access
-db = None
+# Errors worth retrying; others (bad key, bad model name, ...) fail right away.
+TRANSIENT_ERRORS = (
+    litellm.RateLimitError,
+    litellm.APIConnectionError,
+    litellm.Timeout,
+    litellm.ServiceUnavailableError,
+    litellm.InternalServerError,
+)
 
 
-def _ensure_db():
-    """Lazy initialization of database connection."""
-    global db
-    if db is None:
-        db = get_db()
-        # This is needed to update existing litdb dbs.
-        try:
-            db.execute("""select prompt from prompt_history order by rowid limit 1""")
-        except ValueError:
-            db.execute(
-                """create table if not exists
-            prompt_history(rowid integer primary key,
-            prompt text)"""
-            )
-
-        cursor = db.execute("""select prompt from prompt_history order by rowid""")
-        for (row,) in cursor.fetchall():
-            readline.add_history(row)
+def load_prompt_history(db):
+    """Load previous prompts from DB into the readline history."""
+    for (prompt,) in db.execute(
+        "select prompt from prompt_history order by rowid"
+    ).fetchall():
+        readline.add_history(prompt)
 
 
 # Disable parallelism in tokenizers
@@ -75,7 +68,7 @@ logging.getLogger("docling").setLevel(logging.CRITICAL)
 
 
 def get_docstring_from_name(name):
-    """Try to get a docstring from name."""
+    """Return the docstring for the dotted Python NAME, or None if not found."""
     # Try to be a little helpful with these shortcuts.
     if name.startswith("np."):
         name = name.replace("np.", "numpy.")
@@ -93,9 +86,7 @@ def get_docstring_from_name(name):
         docstring = pydoc.render_doc(obj, renderer=pydoc.plaintext)
         return docstring
     except (ImportError, AttributeError, ValueError):
-        # This does some weird stuff
-        # docstring = pydoc.apropos(name)
-        return f"Nothing found for {name}. Try using the full python name."
+        return None
 
 
 def process_file_url(path):
@@ -121,8 +112,8 @@ def process_file_url(path):
         result = converter.convert(path)
 
         return result.document.export_to_markdown()
-    except ConversionError:
-        with open(path) as f:
+    except Exception:  # noqa: BLE001 - docling raises many types; fall back to text
+        with open(os.path.expanduser(path)) as f:
             return f.read()
 
 
@@ -137,45 +128,55 @@ def expand_prompt(prompt):
 
     <text to the end of the line
     """
-    # Expand files/urls
-    pattern = r"\[\[([^\[\]]*)\]\]"
-    matches = re.findall(pattern, prompt)
-    for hit in matches:
-        replace = process_file_url(hit)
-        prompt = prompt.replace(hit, replace)
+    # All three are expanded in one pass over what the user typed, so text that
+    # comes from a file, url, docstring or command is never expanded itself. A
+    # web page with a line starting with < must not run a shell command.
+    return EXPANSION.sub(_expand_match, prompt)
 
-    # Expand pydoc
-    pattern = r"(`([^`]*)`)"
-    matches = re.findall(pattern, prompt)
-    for _match, hit in matches:
-        replace = get_docstring_from_name(hit)
-        prompt = prompt.replace(_match, replace)
 
-    # expand the < commands
-    pattern = r"(^<(.+)$)"
-    matches = re.findall(pattern, prompt, re.MULTILINE)
-    for _match, cmd in matches:
-        result = subprocess.run(
-            cmd.strip(), shell=True, text=True, capture_output=True, check=False
-        )
-        prompt = prompt.replace(_match, result.stdout)
+EXPANSION = re.compile(
+    r"\[\[(?P<path>[^\[\]]*)\]\]|`(?P<name>[^`]*)`|^<(?P<cmd>.+)$", re.MULTILINE
+)
+PYTHON_NAME = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$")
 
-    return prompt
+
+def _expand_match(m):
+    """Return the expansion of one EXPANSION match M."""
+    if (path := m["path"]) is not None:
+        try:
+            return process_file_url(path.strip())
+        except OSError as e:
+            richprint(f"[red]Could not read {path}: {e}[/red]")
+            return m[0]
+
+    if (name := m["name"]) is not None:
+        # Only dotted names like numpy.linspace; other `code` is left alone.
+        if PYTHON_NAME.match(name.strip()):
+            doc = get_docstring_from_name(name.strip())
+            if doc is not None:
+                return doc
+            richprint(f"[yellow]No docstring found for {name}.[/yellow]")
+        return m[0]
+
+    result = subprocess.run(
+        m["cmd"].strip(), shell=True, text=True, capture_output=True, check=False
+    )
+    return result.stdout
 
 
 def get_rag_content(prompt, n):
     """Return data from litdb using prompt."""
     config = get_config()
     db = get_db()
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
 
     emb = model.encode([prompt]).astype(np.float32).tobytes()
     data = db.execute(
-        f"""\
+        """\
     select sources.source, sources.text, json_extract(sources.extra, '$.citation')
-    from vector_top_k('embedding_idx', ?, {n})
+    from vector_top_k('embedding_idx', ?, ?)
     join sources on sources.rowid = id""",
-        (emb,),
+        (emb, int(n)),
     ).fetchall()
 
     rag_content = ""
@@ -190,7 +191,7 @@ def get_rag_content(prompt, n):
 
 @backoff.on_exception(
     backoff.expo,  # Exponential backoff strategy
-    Exception,  # Exception(s) to catch
+    TRANSIENT_ERRORS,  # Exception(s) to catch
     max_tries=5,  # Maximum number of retries
     jitter=backoff.full_jitter,  # Helps distribute retry attempts
 )
@@ -283,6 +284,7 @@ def chat(model=None, debug=False):
     """
     config = get_config()
     db = get_db()
+    load_prompt_history(db)
 
     if model is None:
         gpt = config.get("llm", {"model": "ollama/llama2"})
@@ -301,20 +303,17 @@ def chat(model=None, debug=False):
     while True:
         rag = True  # default to using this
 
-        prompt = input("\033[1;34mLitGPT (Ctrl-d to quit, enter for mic)> \033[0m")
-
-        # line continuation
-        if prompt.endswith("\\"):
-            while next := input():
-                prompt += "\n" + next
+        try:
+            prompt = _read_prompt()
+        except EOFError:
+            print()
+            return
 
         if debug:
             print(f"Starting with prompt: {prompt}")
 
         db.execute("""insert into prompt_history(prompt) values (?)""", (prompt,))
         db.commit()
-
-        prompt = expand_prompt(prompt)
 
         if prompt == "!help":
             print("""\
@@ -369,6 +368,9 @@ The following subcommands can be used:
             prompt = get_audio_text(record())
             print(prompt + "\n\n")
 
+        else:
+            prompt = expand_prompt(prompt)
+
         if "--norag" in prompt:
             rag = False
             prompt = prompt.replace("--norag", "")
@@ -391,6 +393,10 @@ The following subcommands can be used:
         else:
             rag_content, _ = (None, None)
 
+        # Only the current turn carries the retrieved documents. Keeping them in
+        # the history would add several full papers per turn and soon overflow
+        # the context window.
+        question = prompt
         if rag and rag_content:
             prompt = f"""You are a professional scientist. Use the following
         retrieved information to respond to the user prompt. Reference the
@@ -407,15 +413,27 @@ The following subcommands can be used:
             richprint(f"Use RAG: {rag}")
             richprint(f"PROMPT: {prompt}")
 
-        messages += [{"role": "user", "content": prompt}]
-
-        output = get_completion(gpt_model, messages)
+        output = get_completion(
+            gpt_model, [*messages, {"role": "user", "content": prompt}]
+        )
 
         richprint()
 
-        messages += [{"role": "assistant", "content": output}]
+        messages += [
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": output},
+        ]
 
         # We don't always have data here, if you use your own rag data
 
         # if references:
         #    richprint("References:\n\n" + references)
+
+
+def _read_prompt():
+    """Read a prompt; lines ending in a backslash continue on the next line."""
+    lines = [input("\033[1;34mLitGPT (Ctrl-d to quit, enter for mic)> \033[0m")]
+    while lines[-1].endswith("\\"):
+        lines[-1] = lines[-1][:-1]
+        lines.append(input())
+    return "\n".join(lines)
