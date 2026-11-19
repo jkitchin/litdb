@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-19
+
+### Changed
+
+- **`litdb research`**: litdb documents were silently ignored by gpt_researcher. The new `--source litdb|web|local|hybrid` option defaults to `litdb` (your litdb and OpenAlex); use `--source web` for the previous web search
+- **`litdb add`** and the app store a work under OpenAlex's DOI (else its OpenAlex id), as references and citing works already were, so the same work added as `10.1/ABC`, `https://doi.org/10.1/abc` or its OpenAlex id is no longer duplicated. Existing duplicate rows are not merged
+- `--max-citing 0` (and the other `--max-*` options) now adds none; a negative limit means no limit
+- The citing-works prompt is asked once, and only `y` proceeds (Enter used to download everything)
+- `get_config` exits with status 1 when no `litdb.toml` is found
+- `summary.generate_summary` returns the newsletter text
+- The CLIP image model and the database are loaded on first use, so `litdb --help` no longer loads models
+
+### Fixed
+
+- **Database setup**: a first run that failed partway left an empty database that was never initialized; foreign keys were off in a new database's first session; older databases without the metadata table crashed `update-embeddings`; the "embedding config has changed" warning never fired
+- **CLI commands**: `watch` always crashed; `reindex` stopped after the first directory; `index` re-read every `.bib` file; `add --tag` was ignored; OpenAlex work ids were treated as web pages or files; `remove` left full-text, tag and image rows behind (and the vector index is now rebuilt so neighbors are not lost); empty documents crashed `add`, `update-filters` and `update-embeddings`; `vsearch --max-steps` never stopped; `--cross-encode` sorted worst first; `fulltext` crashed on punctuation; bracketed text like `[Pt]` disappeared from output; `sql` never committed; `unpaywall`, `citation`, `add-tag`, `rm-tag`, `crossref`, `follow -r` and `init` fixes
+- **`update-filters`** crashed for users without an OpenAlex API key
+- **`image-search`** with no query or clipboard crashed; `similar` crashed on an unknown source
+- **`litdb chat`**: fetched content was re-expanded; RAG context piled up in the history; the configured embedding model was not used
+- **`litdb review`** found no articles (OpenAlex no longer returns `type_crossref`)
+- **MCP server**: `vsearch` used the wrong embedding model and unordered results; abstracts were never shown; `fulltext_search` crashed on punctuation; `find_similar` could return the source itself; `litdb_mcp install` stored a relative db path
+- **Streamlit app**:
+  - adding citing works hung the server on a terminal prompt
+  - the add buttons on OpenAlex, Semantic Scholar and DOI results did nothing
+  - the ORCID and BibTeX imports, save/delete query, remove directory, and the BibTeX, citation and newsletter export only showed a message
+  - uploaded files were deleted after being added
+  - raw SQL ran twice and never committed
+  - the NSF COA tab always failed
+  - after a research failure, "Back to Input" reran the research
+  - tag statistics were wrong
+
+### Internal
+
+- The release workflow smoke-tests the built wheel before publishing; the redundant install workflow was removed
+- `streamlit` is in the `test` extra so the app is tested with `AppTest`
+
 ## [2.2.4] - 2026-11-18
 
 ### Fixed
