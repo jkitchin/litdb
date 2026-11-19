@@ -18,7 +18,7 @@ class TestVsearchCommand:
 
     @pytest.mark.unit
     @patch("litdb.commands.search.get_config")
-    @patch("litdb.commands.search.SentenceTransformer")
+    @patch("litdb.commands.search.get_model")
     @patch("litdb.commands.search.get_db")
     def test_vsearch_basic(self, mock_get_db, mock_model_cls, mock_config):
         """Test basic vector search."""
@@ -45,7 +45,7 @@ class TestVsearchCommand:
 
     @pytest.mark.unit
     @patch("litdb.commands.search.get_config")
-    @patch("litdb.commands.search.SentenceTransformer")
+    @patch("litdb.commands.search.get_model")
     @patch("litdb.commands.search.get_db")
     def test_vsearch_with_emacs_format(self, mock_get_db, mock_model_cls, mock_config):
         """Test vsearch with emacs output format."""
@@ -70,7 +70,7 @@ class TestVsearchCommand:
 
     @pytest.mark.unit
     @patch("litdb.commands.search.get_config")
-    @patch("litdb.commands.search.SentenceTransformer")
+    @patch("litdb.commands.search.get_model")
     @patch("litdb.commands.search.get_db")
     @patch("sentence_transformers.cross_encoder.CrossEncoder")
     def test_vsearch_with_cross_encode(
@@ -168,7 +168,7 @@ class TestHybridSearchCommand:
 
     @pytest.mark.unit
     @patch("litdb.commands.search.get_config")
-    @patch("litdb.commands.search.SentenceTransformer")
+    @patch("litdb.commands.search.get_model")
     @patch("litdb.commands.search.get_db")
     def test_hybrid_search_basic(self, mock_get_db, mock_model_cls, mock_config):
         """Test basic hybrid search."""

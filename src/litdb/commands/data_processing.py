@@ -15,9 +15,26 @@ from difflib import SequenceMatcher
 import click
 import requests
 from rich import print as richprint
+from rich.markup import escape
 
 from ..extract import extract_schema, extract_tables
 from . import manage
+
+
+def _crossref_author(au):
+    """Return a display name for a CrossRef author (people or organizations)."""
+    name = f"{au.get('given', '')} {au.get('family', '')}".strip()
+    return name or au.get("name", "")
+
+
+def _parse_selection(answer, n):
+    """Parse ANSWER, space separated numbers below N, into a list of ints."""
+    toadd = []
+    for x in answer.replace(",", " ").split():
+        if not x.isdigit() or int(x) >= n:
+            raise ValueError(f"{x} is not one of the numbers 0-{n - 1}.")
+        toadd.append(int(x))
+    return toadd
 
 
 @click.command()
@@ -31,20 +48,23 @@ from . import manage
 def crossref(query, references, related, citing, yes):
     """Add entries to litdb from a crossref query."""
     query = " ".join(query)
-    resp = requests.get("https://api.crossref.org/works", params={"query": query})
+    resp = requests.get(
+        "https://api.crossref.org/works", params={"query": query}, timeout=60
+    )
 
     if resp.status_code == 200:
         data = resp.json()
         for i, item in enumerate(data["message"]["items"]):
-            authors = ", ".join(
-                [f"{au['given']} {au['family']}" for au in item.get("author", [])]
-            )
+            authors = ", ".join(_crossref_author(au) for au in item.get("author", []))
             source = " ".join(item.get("container-title", ["no source"]))
             published = item.get("published", {}) or {}
             year = published.get("date-parts", [["no year"]])[0][0]
             title = item.get("title", ["no title"])
             richprint(
-                f"{i}. {' '.join(title)}, {authors}, {source} ({year}), https://doi.org/{item['DOI']}."
+                escape(
+                    f"{i}. {' '.join(title)}, {authors}, {source} ({year}), "
+                    f"https://doi.org/{item['DOI']}."
+                )
             )
 
         # Handle selection based on yes flag or interactive mode
@@ -58,10 +78,12 @@ def crossref(query, references, related, citing, yes):
             return
         else:
             # Interactive prompt
-            toadd = input("Enter space separated numbers to add, or return to quit. ")
-            if toadd:
-                toadd = [int(x) for x in toadd.split(" ")]
-            else:
+            answer = input("Enter space separated numbers to add, or return to quit. ")
+            try:
+                toadd = _parse_selection(answer, len(data["message"]["items"]))
+            except ValueError as e:
+                raise click.UsageError(str(e)) from e
+            if not toadd:
                 return
 
         if toadd:
@@ -170,10 +192,12 @@ Text:
     dois_to_add = []
 
     for i, ref in enumerate(parsed_refs, 1):
-        title = ref.get("title", "")
-        authors = ref.get("authors", [])
+        if not isinstance(ref, dict):
+            continue
+        title = str(ref.get("title") or "")
+        authors = [str(a) for a in ref.get("authors") or []]
         year = ref.get("year")
-        journal = ref.get("journal", "")
+        journal = ref.get("journal") or ""
         doi = ref.get("doi")
 
         author_str = ", ".join(authors[:3]) if authors else "Unknown authors"
@@ -185,7 +209,7 @@ Text:
         richprint(f"   Year: {year or 'Unknown'}, Journal: {journal or 'Unknown'}")
 
         # If DOI exists, use it directly
-        if doi and doi.strip():
+        if isinstance(doi, str) and doi.strip():
             doi_clean = doi.strip()
             if not doi_clean.startswith("http"):
                 doi_clean = f"https://doi.org/{doi_clean}"
@@ -208,7 +232,9 @@ Text:
 
             try:
                 resp = requests.get(
-                    "https://api.crossref.org/works", params={"query": query, "rows": 3}
+                    "https://api.crossref.org/works",
+                    params={"query": query, "rows": 3},
+                    timeout=60,
                 )
 
                 if resp.status_code == 200:
@@ -236,13 +262,10 @@ Text:
                         pub_year = best.get("published", {}).get(
                             "date-parts", [[None]]
                         )[0][0]
-                        year_match = pub_year == year
+                        year_match = str(pub_year) == str(year)
 
                     best_authors = ", ".join(
-                        [
-                            f"{au.get('given', '')} {au.get('family', '')}".strip()
-                            for au in best.get("author", [])[:3]
-                        ]
+                        _crossref_author(au) for au in best.get("author", [])[:3]
                     )
                     best_year = best.get("published", {}).get("date-parts", [[None]])[
                         0

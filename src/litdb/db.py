@@ -165,6 +165,17 @@ def _create_schema(db, config):
     db.commit()
 
 
+def embed_text(model, splitter, text):
+    """Return the document embedding of TEXT as bytes for the db.
+
+    The embedding is the mean of the chunk embeddings. Text with no chunks
+    (empty or whitespace only) is embedded as a single chunk, since averaging
+    zero chunks gives a vector of the wrong size that libsql rejects.
+    """
+    chunks = splitter.split_text(text or "") or [text or ""]
+    return model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+
+
 def add_source(source, text, extra=None):
     """Add a row to the sources table.
 
@@ -183,8 +194,7 @@ def add_source(source, text, extra=None):
         chunk_overlap=config["embedding"]["chunk_overlap"],
     )
 
-    chunks = splitter.split_text(text)
-    embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+    embedding = embed_text(model, splitter, text)
 
     c = db.execute(
         """insert or ignore into sources(source, text, extra, embedding, date_added) values (?, ?, ?, ?, ?)""",
@@ -563,8 +573,7 @@ def update_filter(f, last_updated=None, silent=False):
 
             text = get_text(work)
 
-            chunks = splitter.split_text(text)
-            embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
+            embedding = embed_text(model, splitter, text)
 
             results += [[source, text, work]]
 
@@ -620,3 +629,57 @@ def add_bibtex(bibfile):
                     print(f'I do not know what to do with "{entry["doi"]}"')
                 else:
                     add_work(doi)
+
+
+def _source_id(db, source):
+    """Return the rowid of SOURCE in DB, or None if it is not there."""
+    row = db.execute("select rowid from sources where source = ?", (source,)).fetchone()
+    return row[0] if row else None
+
+
+def tag_source(db, source, tag):
+    """Tag SOURCE with TAG, creating the tag if needed.
+
+    Returns True if the tag was added, False if SOURCE is not in the db.
+    Tagging a source twice with the same tag is a no-op.
+    """
+    source_id = _source_id(db, source)
+    if source_id is None:
+        return False
+
+    db.execute("insert or ignore into tags(tag) values (?)", (tag,))
+    (tag_id,) = db.execute("select rowid from tags where tag = ?", (tag,)).fetchone()
+
+    if not db.execute(
+        "select 1 from source_tag where source_id = ? and tag_id = ?",
+        (source_id, tag_id),
+    ).fetchone():
+        db.execute(
+            "insert into source_tag(source_id, tag_id) values (?, ?)",
+            (source_id, tag_id),
+        )
+    db.commit()
+    return True
+
+
+def remove_source(db, source):
+    """Remove SOURCE from the sources, full-text, tag and image tables.
+
+    Returns the number of rows removed from sources and images.
+    """
+    source_id = _source_id(db, source)
+    if source_id is not None:
+        db.execute("delete from source_tag where source_id = ?", (source_id,))
+    nsources = db.execute("delete from sources where source = ?", (source,)).rowcount
+    db.execute("delete from fulltext where source = ?", (source,))
+    nimages = db.execute("delete from images where source = ?", (source,)).rowcount
+
+    # libsql's vector index can lose track of neighbors of a deleted row, so
+    # works added later near it are never found by vector search. Rebuilding
+    # the index after a delete avoids that.
+    if nsources:
+        db.execute("reindex embedding_idx")
+    if nimages:
+        db.execute("reindex image_idx")
+    db.commit()
+    return nsources + nimages

@@ -11,10 +11,12 @@ Commands:
 """
 
 import datetime
+import re
 
 import click
 import requests
 from rich import print as richprint
+from rich.markup import escape
 
 from ..db import add_author, get_db
 from ..openalex import get_data
@@ -75,7 +77,7 @@ def openalex(query, _filter, endpoint, sample, per_page):
     if sample > 0:
         params.update(sample=sample, per_page=sample)
 
-    resp = requests.get(url, params)
+    resp = requests.get(url, params, timeout=30)
     if resp.status_code != 200:
         print(resp.url)
         print(resp.text)
@@ -83,9 +85,14 @@ def openalex(query, _filter, endpoint, sample, per_page):
 
     data = resp.json()
     for result in data["results"]:
-        s = f"{result['title']}, ({result['publication_year']}) {result['id']}\n"
-        # Note sometimes there is an exception from bad markup in strings
-        richprint(s)
+        title = result.get("title") or result.get("display_name")
+        year = result.get("publication_year")
+        s = (
+            f"{title}, ({year}) {result['id']}\n"
+            if year
+            else f"{title} {result['id']}\n"
+        )
+        richprint(escape(s))
 
 
 @click.command()
@@ -103,8 +110,10 @@ def author_search(name):
 
     for result in data["results"]:
         richprint(
-            f"- {result['display_name']}\n  {result['hint']} "
-            f"{result['external_id']}\n\n"
+            escape(
+                f"- {result['display_name']}\n  {result.get('hint')} "
+                f"{result.get('external_id')}\n\n"
+            )
         )
 
 
@@ -113,37 +122,40 @@ def author_search(name):
 @click.option("-r", "--remove", is_flag=True, help="remove")
 def follow(orcids, remove=False):
     """Add a filter to follow orcid."""
+    db = get_openalex_db()
     for orcid in orcids:
         if not orcid.startswith("http"):
             orcid = f"https://orcid.org/{orcid}"
 
-        # Seems like we should get their articles first.
-        add_author(orcid)
-
         f = f"author.orcid:{orcid}"
 
         if remove:
-            c = get_openalex_db().execute(
-                """delete from queries where  filter = ?""", (f,)
-            )
-            get_openalex_db().commit()
+            c = db.execute("""delete from queries where filter = ?""", (f,))
+            db.commit()
             richprint(f"{c.rowcount} rows removed")
-            return
+            continue
 
-        url = f"https://api.openalex.org/authors/{orcid}"
-        data = get_data(url)
+        try:
+            data = get_data(f"https://api.openalex.org/authors/{orcid}")
+        except requests.HTTPError:
+            data = None
+        if not data or "display_name" not in data:
+            richprint(f"No OpenAlex author found for {orcid}.")
+            continue
         name = data["display_name"]
 
+        # Get their existing articles first; the filter finds new ones later.
+        add_author(orcid)
+
         today = datetime.date.today().strftime("%Y-%m-%d")
-        get_openalex_db().execute(
+        db.execute(
             """insert or ignore into
         queries(filter, description, last_updated)
         values (?, ?, ?)""",
             (f, name, today),
         )
-
-        richprint(f"Following {name}: {orcid}")
-        get_openalex_db().commit()
+        db.commit()
+        richprint(f"Following {escape(name)}: {orcid}")
 
 
 @click.command()
@@ -168,25 +180,34 @@ def watch(query, remove=False):
 
     url = "https://api.openalex.org/works"
 
-    data = get_data(url, params={"filter": query})
-    if len(data["results"]) == 0:
-        richprint(f"Sorry, {query} does not seem valid.")
+    try:
+        data = get_data(url, params={"filter": query})
+    except requests.HTTPError:
+        data = {"results": []}
+    if not data.get("results"):
+        richprint(f"Sorry, {escape(query)} does not seem valid.")
+        return
 
-    if remove:
-        c = get_openalex_db().execute(
-            """delete from queries where filter = ?""", (query,)
+    c = get_openalex_db().execute(
+        """insert or ignore into queries(filter, description)
+    values (?, ?)""",
+        (query, None),
+    )
+    get_openalex_db().commit()
+    richprint(f"Added {c.rowcount} rows")
+    richprint(f"Watching {escape(query)}")
+
+
+def _work_id(doi):
+    """Return the OpenAlex id of the work with DOI, or None if there is none."""
+    try:
+        data = get_data(
+            "https://api.openalex.org/works", params={"filter": f"doi:{doi}"}
         )
-        richprint(f"Deleted {c.rowcount} rows")
-        get_openalex_db().commit()
-    else:
-        c = get_openalex_db().execute(
-            """insert or ignore into queries(filter, description)
-        values (?, ?)""",
-            (query,),
-        )
-        richprint(f"Added {c.rowcount} rows")
-        get_openalex_db().commit()
-        richprint(f"Watching {query}")
+    except requests.HTTPError:
+        return None
+    results = data.get("results") or []
+    return results[0]["id"] if results else None
 
 
 @click.command()
@@ -197,16 +218,10 @@ def citing(doi, remove=False):
 
     REMOVE is a flag to remove the doi.
     """
-    url = "https://api.openalex.org/works"
-
-    # We need an OpenAlex id
-    f = f"doi:{doi}"
-
-    data = get_data(url, params={"filter": f})
-    if len(data["results"]) == 0:
+    wid = _work_id(doi)
+    if wid is None:
         richprint(f"Sorry, {doi} does not seem valid.")
-
-    wid = data["results"][0]["id"]
+        return
 
     if remove:
         c = get_openalex_db().execute(
@@ -233,16 +248,10 @@ def related(doi, remove=False):
 
     REMOVE is a flag to remove the doi from queries.
     """
-    url = "https://api.openalex.org/works"
-
-    # We need an OpenAlex id
-    f = f"doi:{doi}"
-
-    data = get_data(url, params={"filter": f})
-    if len(data["results"]) == 0:
+    wid = _work_id(doi)
+    if wid is None:
         richprint(f"Sorry, {doi} does not seem valid.")
-
-    wid = data["results"][0]["id"]
+        return
 
     if remove:
         c = get_openalex_db().execute(
@@ -266,16 +275,19 @@ def related(doi, remove=False):
 def unpaywall(doi):
     """Use unpaywall to find PDFs for doi."""
     config = get_config()
+    doi = re.sub(
+        r"^(https?://(dx\.)?doi\.org/|doi:)", "", doi.strip(), flags=re.IGNORECASE
+    )
     url = f"https://api.unpaywall.org/v2/{doi}"
-    params = {"mailto": config["openalex"]["email"]}
+    params = {"email": config["openalex"]["email"]}
 
-    resp = requests.get(url, params)
+    resp = requests.get(url, params, timeout=30)
     if resp.status_code == 200:
         data = resp.json()
-        richprint(f"{data['title']}, {data.get('journal_name') or ''}")
+        richprint(escape(f"{data.get('title')}, {data.get('journal_name') or ''}"))
         richprint(f"Is open access: {data.get('is_oa', False)}")
 
-        for loc in data.get("oa_locations", []):
+        for loc in data.get("oa_locations") or []:
             richprint(loc.get("url_for_pdf") or loc.get("url_for_landing_page"))
     else:
         richprint(f"{doi} not found in unpaywall")

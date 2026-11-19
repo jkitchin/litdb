@@ -15,14 +15,33 @@ import os
 
 import click
 import numpy as np
-from jinja2 import Template
+from jinja2 import Environment
 from rich import print as richprint
-from sentence_transformers import SentenceTransformer
 
-from ..db import add_work, get_db
+from ..db import add_work, get_db, get_model
 from ..images import image_query
 from ..lsearch import llm_oa_search
 from ..utils import get_config
+from ._render import elisp_string, rich_template
+from .manage import OPENALEX_WORK, _is_doi
+
+
+def _elisp_template(tmpl):
+    """Return a jinja Template with an elisp filter for Emacs output."""
+    env = Environment()
+    env.filters["elisp"] = elisp_string
+    return env.from_string(tmpl)
+
+
+def _is_work(source):
+    """Return True if SOURCE is a DOI or OpenAlex work, i.e. add_work can add it."""
+    return _is_doi(source) or bool(OPENALEX_WORK.match(source))
+
+
+def _fts_literal(query):
+    """Quote each word of QUERY so FTS5 matches it literally."""
+    words = query.split()
+    return " ".join('"' + w.replace('"', '""') + '"' for w in words)
 
 
 # Lazy database initialization - get db when needed
@@ -49,7 +68,7 @@ def screenshot():
     if img:
         text = pytesseract.image_to_string(img)
         print(f'Searching for "{text}"')
-        vsearch.callback([text])
+        click.get_current_context().invoke(vsearch, query=(text,))
     else:
         print("No image found in clipboard.")
 
@@ -59,7 +78,7 @@ def screenshot():
 @click.option("-n", default=3)
 @click.option("-e", "--emacs", is_flag=True, default=False)
 @click.option("-i", "--iterative", is_flag=True, default=False)
-@click.option("-m", "--max-steps", default=None)
+@click.option("-m", "--max-steps", type=int, default=None)
 @click.option(
     "-f",
     "--fmt",
@@ -89,7 +108,7 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
     db = get_search_db()
     config = get_config()
     query = " ".join(query)
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
     emb = model.encode([query]).astype(np.float32).tobytes()
 
     if iterative:
@@ -112,7 +131,7 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
                 richprint(f"{d:1.3f}: {source}")
 
             steps += 1
-            if steps == max_steps:
+            if max_steps is not None and steps >= max_steps:
                 break
 
             current = [x[0] for x in results]  # sources
@@ -130,14 +149,17 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
             # something changed. add references and loop
             best = current
             for source in current:
-                add_work(source, True, True, True)
+                # Only works have references, citations and related works.
+                if _is_work(source):
+                    add_work(source, True, True, True)
 
     else:
         c = db.execute(
             """select sources.source, sources.text,
         sources.extra, vector_distance_cos(?, embedding)
         from vector_top_k('embedding_idx', ?, ?)
-        join sources on sources.rowid = id""",
+        join sources on sources.rowid = id
+        order by 4""",
             (emb, emb, n),
         )
 
@@ -151,24 +173,26 @@ def vsearch(query, n, emacs, fmt, cross_encode, iterative, max_steps):
         # score is not 0..1 otherwise
         ce = CrossEncoder(
             config["embedding"]["cross-encoder"],
-            default_activation_function=torch.nn.Sigmoid(),
+            activation_fn=torch.nn.Sigmoid(),
         )
         scores = ce.predict([[query, text] for _, text, _, _ in results])
-        # resort based on the scores
-        results = [results[i] for i in np.argsort(scores)]
+        # Resort with the best (highest) cross-encoder score first, and report
+        # that score instead of the vector distance.
+        results = [
+            (*results[i][:3], float(scores[i])) for i in np.argsort(scores)[::-1]
+        ]
 
     if emacs:
         tmpl = (
             "( {% for source, text, extra, score in results %}"
-            '("({{ score|round(3) }}) {{ text }}" . "{{ source }}") '
+            '("({{ score|round(3) }}) {{ text|elisp }}" . "{{ source|elisp }}") '
             "{% endfor %})"
         )
-        template = Template(tmpl)
-        print(template.render(**locals()))
-    else:
+        print(_elisp_template(tmpl).render(**locals()))
+    elif fmt:
+        template = rich_template(fmt)
         for i, row in enumerate(results, 1):
             source, text, extra, score = row
-            template = Template(fmt)
             richprint(template.render(**locals()))
 
     return results
@@ -185,17 +209,26 @@ def fulltext(query, n, fmt):
     db = get_search_db()
     query = " ".join(query)
 
-    results = db.execute(
-        """select
+    sql = """select
     sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16), sources.extra, bm25(fulltext)
     from fulltext
     inner join sources on fulltext.source = sources.source
-    where fulltext.text match ? order by rank limit ?""",
-        (query, n),
-    ).fetchall()
+    where fulltext.text match ? order by rank limit ?"""
 
-    for source, text, snippet, extra, score in results:
-        richprint(Template(fmt).render(**locals()))
+    try:
+        results = db.execute(sql, (query, n)).fetchall()
+    except ValueError as e:
+        # Punctuation such as "-", "." or an unbalanced quote is FTS5 query
+        # syntax. Search for the words literally instead of failing.
+        try:
+            results = db.execute(sql, (_fts_literal(query), n)).fetchall()
+        except ValueError:
+            raise click.ClickException(f"Invalid full-text query: {e}") from e
+
+    if fmt:
+        template = rich_template(fmt)
+        for source, text, snippet, extra, score in results:
+            richprint(template.render(**locals()))
 
     return results
 
@@ -267,17 +300,19 @@ def similar(source, n, emacs, fmt):
         (emb, n + 1),
     ).fetchall()
 
-    rows = [(source, text, json.loads(extra)) for source, text, extra in allrows[1:]]
+    rows = [
+        (source, text, json.loads(extra) or {}) for source, text, extra in allrows[1:]
+    ]
 
     if emacs:
-        template = Template(
+        template = _elisp_template(
             "({% for source, text, extra in rows %}"
-            ' ("{{ extra.get("citation") or text }}" . "{{ source }}")'
+            ' ("{{ (extra.get("citation") or text)|elisp }}" . "{{ source|elisp }}")'
             " {% endfor %})"
         )
         print(template.render(**locals()))
     else:
-        template = Template(fmt or "{{ i }}. {{ source }}\n {{text}}\n\n")
+        template = rich_template(fmt or "{{ i }}. {{ source }}\n {{text}}\n\n")
         # print starting at index 1, the first item is always the source.
         for i, row in enumerate(rows, 1):
             source, text, extra = row
@@ -355,10 +390,12 @@ def hybrid_search(vector_query, text_query, n, fmt):
             "select source, text, extra from sources where source = ?", (oaid,)
         )
         row = c.fetchone()
-        results += [[*row, score]]
+        if row:
+            results += [[*row, score]]
 
+    template = rich_template(fmt)
     for row in results:
         source, text, extra, score = row
-        richprint(Template(fmt).render(**locals()))
+        richprint(template.render(**locals()))
 
     return results

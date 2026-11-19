@@ -36,12 +36,15 @@ def review(since, fmt):
     FMT is a jinja template for the output. Defaults to an org-mode template.
     """
 
-    since = dateparser.parse(since).strftime("%Y-%m-%d")
+    parsed = dateparser.parse(since)
+    if parsed is None:
+        raise click.BadParameter(f"Could not understand the date {since!r}.")
+    since = parsed.strftime("%Y-%m-%d")
     c = (
         get_review_db()
         .execute(
             """select source, text, extra from sources
-    where date(date_added) > ?""",
+    where date(date_added) >= ?""",
             (since,),
         )
         .fetchall()

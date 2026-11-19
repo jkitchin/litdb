@@ -11,10 +11,10 @@ Commands:
 import json
 
 import click
-from jinja2 import Template
 from rich import print as richprint
 
-from ..db import get_db
+from ..db import get_db, tag_source
+from ._render import rich_template
 
 # Lazy database initialization
 _db = None
@@ -37,38 +37,14 @@ def add_tag(sources, tags):
     It is a little annoying to add multiple tags. It looks like this.
     litdb add-tag source -t tag1 -t tag2
     """
+    db = get_tags_db()
     for source in sources:
-        # Get source id
-        (source_id,) = (
-            get_tags_db()
-            .execute("select rowid from sources where source = ?", (source,))
-            .fetchone()
-        )
-
         for tag in tags:
-            # get tag id
-            tag_id = (
-                get_tags_db()
-                .execute("select rowid from tags where tag = ?", (tag,))
-                .fetchone()
-            )
-
-            if not tag_id:
-                c = get_tags_db().execute("insert into tags(tag) values (?)", (tag,))
-                tag_id = c.lastrowid
-                get_tags_db().commit()
+            if tag_source(db, source, tag):
+                print(f"Tagged {source} with {tag}")
             else:
-                # we get a tuple in the first query
-                (tag_id,) = tag_id
-
-            # Now add a tag
-            get_tags_db().execute(
-                "insert into source_tag(source_id, tag_id) values (?, ?)",
-                (source_id, tag_id),
-            )
-            get_tags_db().commit()
-
-            print(f"Tagged {source} with {tag}")
+                print(f"{source} is not in the database.")
+                break
 
 
 @click.command()
@@ -80,29 +56,16 @@ def rm_tag(sources, tags):
     It is a little annoying to remove multiple tags. It looks like this.
     litdb rm-tag source -t tag1 -t tag2
     """
+    db = get_tags_db()
     for source in sources:
-        # Get source id
-        (source_id,) = (
-            get_tags_db()
-            .execute("select rowid from sources where source = ?", (source,))
-            .fetchone()
-        )
-
         for tag in tags:
-            # get tag id. Assume it exists?
-            (tag_id,) = (
-                get_tags_db()
-                .execute("select rowid from tags where tag = ?", (tag,))
-                .fetchone()
-            )
-
-            c = get_tags_db().execute(
+            c = db.execute(
                 """delete from source_tag
-            where source_id = ? and tag_id = ?""",
-                (source_id, tag_id),
+            where source_id = (select rowid from sources where source = ?)
+            and tag_id = (select rowid from tags where tag = ?)""",
+                (source, tag),
             )
-
-            get_tags_db().commit()
+            db.commit()
             print(f"Deleted {c.rowcount} rows ({tag} from {source})")
 
 
@@ -114,6 +77,11 @@ def delete_tag(tags):
     This should also delete tags from sources by cascade.
     """
     for tag in tags:
+        get_tags_db().execute(
+            """delete from source_tag
+            where tag_id = (select rowid from tags where tag = ?)""",
+            (tag,),
+        )
         c = get_tags_db().execute("delete from tags where tag = ?", (tag,))
         print(f"Deleted {c.rowcount} rows ({tag})")
     get_tags_db().commit()
@@ -133,7 +101,7 @@ def show_tag(tags, fmt):
     one tag, so this works. TODO: add something like boolean logic?
 
     """
-    template = Template(fmt)
+    template = rich_template(fmt)
     for tag in tags:
         for row in (
             get_tags_db()

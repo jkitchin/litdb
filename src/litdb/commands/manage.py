@@ -12,6 +12,7 @@ Commands:
 import datetime
 import os
 import pathlib
+import re
 
 import bs4
 import click
@@ -21,11 +22,20 @@ from docx import Document
 from nbconvert import MarkdownExporter
 from pptx import Presentation
 from rich import print as richprint
-from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from ..audio import get_audio_text, is_audio_url
-from ..db import add_author, add_bibtex, add_source, add_work, get_db
+from ..db import (
+    add_author,
+    add_bibtex,
+    add_source,
+    add_work,
+    embed_text,
+    get_db,
+    get_model,
+    remove_source,
+    tag_source,
+)
 from ..images import add_image, image_extensions
 from ..pdf import add_pdf
 from ..utils import get_config, init_litdb
@@ -35,6 +45,10 @@ from ..youtube import get_youtube_doc
 @click.command()
 def init():
     """Initialize a litdb directory in the current working directory."""
+    if os.path.exists("litdb.toml"):
+        raise click.ClickException(
+            "litdb.toml already exists here; remove it first to re-initialize."
+        )
     init_litdb()
     db = get_db()
 
@@ -105,111 +119,165 @@ def add(
 
     """
 
+    if all:
+        references, citing, related = True, True, True
+
+    db = get_db() if tags else None
+
     for source in tqdm(sources):
-        # a work
-        if source.startswith("10.") or "doi.org" in source:
-            if source.startswith("10."):
-                source = f"https://doi.org/{source}"
+        added = _add_one(
+            source,
+            references,
+            citing,
+            related,
+            yes,
+            max_citing,
+            max_references,
+            max_related,
+            verbose,
+        )
 
-            if all:
-                references, citing, related = True, True, True
+        for tag in tags or ():
+            if added and tag_source(db, added, tag):
+                print(f"Tagged {added} with {tag}")
+            else:
+                print(f"Could not tag {source} with {tag}: it was not added.")
 
-            add_work(
-                source,
-                references,
-                citing,
-                related,
-                yes,
-                max_citing,
-                max_references,
-                max_related,
-                verbose,
-            )
 
-        # works from an author
-        elif "orcid" in source or source.lower().startswith("https://openalex.org/a"):
-            add_author(source)
+OPENALEX_WORK = re.compile(
+    r"^(https?://(api\.)?openalex\.org/(works/)?)?W\d+$", re.IGNORECASE
+)
+OPENALEX_AUTHOR = re.compile(
+    r"^(https?://(api\.)?openalex\.org/(authors/)?)?A\d+$", re.IGNORECASE
+)
+ORCID = re.compile(r"^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$", re.IGNORECASE)
 
-        # a bibtex file
-        elif source.endswith(".bib"):
-            add_bibtex(source)
 
-        # pdf
-        elif source.endswith(".pdf"):
-            source = os.path.abspath(source)
-            add_pdf(source)
+DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".html", ".htm", ".ipynb"}
 
-        # docx
-        elif source.endswith(".docx"):
-            source = os.path.abspath(source)
-            doc = Document(source)
-            add_source(source, "\n".join([para.text for para in doc.paragraphs]))
 
-        # pptx
-        elif source.endswith(".pptx"):
-            source = os.path.abspath(source)
-            prs = Presentation(source)
-            text = []
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text.append(shape.text)
-            add_source(source, "\n".join(text))
+def _is_doi(source):
+    s = source.strip().lower()
+    return s.startswith(("10.", "doi:")) or "doi.org/10." in s
 
-        # YouTube
-        elif source.startswith("https") and "youtube" in source:
-            text, citation = get_youtube_doc(source)
-            add_source(source, text, {"citation": citation})
 
-        # audio sources
-        elif (source.startswith("http") and is_audio_url(source)) or source.endswith(
-            ".mp3"
-        ):
-            add_source(source, get_audio_text(source))
+def _add_one(
+    source,
+    references,
+    citing,
+    related,
+    yes,
+    max_citing,
+    max_references,
+    max_related,
+    verbose,
+):
+    """Add one SOURCE to the db.
 
-        # local html
-        elif not source.startswith("http") and source.endswith(".html"):
-            source = os.path.abspath(source)
-            with open(source) as f:
-                text = f.read()
-            soup = bs4.BeautifulSoup(text, features="lxml")
-            add_source(source, soup.get_text())
+    Returns the key the source is stored under, or None if nothing was added.
+    Authors and bibtex files add many works, so they return None too.
+    """
+    is_url = source.startswith(("http://", "https://"))
+    ext = os.path.splitext(source.split("?")[0])[1].lower()
 
-        # a url
-        elif source.startswith("http"):
-            soup = bs4.BeautifulSoup(requests.get(source).text)
-            add_source(source, soup.get_text())
+    # a work, by DOI or OpenAlex id
+    if _is_doi(source) or OPENALEX_WORK.match(source):
+        if source.startswith("10."):
+            source = f"https://doi.org/{source}"
+        return add_work(
+            source,
+            references,
+            citing,
+            related,
+            yes,
+            max_citing,
+            max_references,
+            max_related,
+            verbose,
+        )
 
-        # ipynb
-        elif source.endswith(".ipynb"):
-            source = os.path.abspath(source)
-            with open(source) as f:
-                notebook = nbformat.read(f, as_version=4)
+    # works from an author
+    if "orcid.org/" in source.lower() or ORCID.match(source):
+        if not is_url:
+            source = f"https://orcid.org/{source}"
+        add_author(source)
+        return None
 
-            # Create a Markdown exporter
-            markdown_exporter = MarkdownExporter()
+    if OPENALEX_AUTHOR.match(source):
+        add_author(source)
+        return None
 
-            # Convert the notebook to Markdown
-            (body, _resources) = markdown_exporter.from_notebook_node(notebook)
+    # YouTube
+    if is_url and "youtube" in source:
+        text, citation = get_youtube_doc(source)
+        add_source(source, text, {"citation": citation})
+        return source
 
-            add_source(source, body)
+    # audio sources
+    if (is_url and is_audio_url(source)) or ext == ".mp3":
+        add_source(source, get_audio_text(source))
+        return source
 
-        # There are a lot of image extensions. I put this near the end so the
-        # specific extensions are matched first.
-        elif os.path.splitext(source)[1].lower() in image_extensions:
-            add_image(source)
+    # any other url
+    if is_url:
+        resp = requests.get(source, timeout=30)
+        resp.raise_for_status()
+        if "pdf" in resp.headers.get("content-type", "") or ext == ".pdf":
+            import pymupdf
+            import pymupdf4llm
 
-        # assume it is text
-        else:
-            source = os.path.abspath(source)
-            with open(source) as f:
-                text = f.read()
-            add_source(source, text)
+            with pymupdf.open(stream=resp.content, filetype="pdf") as doc:
+                add_source(source, pymupdf4llm.to_markdown(doc))
+            return source
+        soup = bs4.BeautifulSoup(resp.text, features="html.parser")
+        add_source(source, soup.get_text())
+        return source
 
-        # Handle tags if provided
-        if tags:
-            # TODO: Implement tagging during add
-            pass
+    # From here on, source is a local file.
+    if ext == ".bib":
+        add_bibtex(source)
+        return None
+
+    if ext not in DOCUMENT_EXTENSIONS and ext in image_extensions:
+        # Checked after the document types: PIL registers .pdf as an image.
+        add_image(source)
+        return None
+
+    source = os.path.abspath(source)
+
+    if ext == ".pdf":
+        add_pdf(source)
+
+    elif ext == ".docx":
+        doc = Document(source)
+        add_source(source, "\n".join([para.text for para in doc.paragraphs]))
+
+    elif ext == ".pptx":
+        prs = Presentation(source)
+        text = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text.append(shape.text)
+        add_source(source, "\n".join(text))
+
+    elif ext in (".html", ".htm"):
+        with open(source) as f:
+            soup = bs4.BeautifulSoup(f.read(), features="html.parser")
+        add_source(source, soup.get_text())
+
+    elif ext == ".ipynb":
+        with open(source) as f:
+            notebook = nbformat.read(f, as_version=4)
+        (body, _resources) = MarkdownExporter().from_notebook_node(notebook)
+        add_source(source, body)
+
+    # assume it is text
+    else:
+        with open(source) as f:
+            add_source(source, f.read())
+
+    return source
 
 
 @click.command()
@@ -218,8 +286,10 @@ def remove(sources):
     """Remove sources from litdb."""
     db = get_db()
     for source in sources:
-        db.execute("delete from sources where source = ?", (source,))
-        db.commit()
+        if remove_source(db, source):
+            print(f"Removed {source}")
+        else:
+            print(f"{source} is not in the database.")
 
 
 @click.command()
@@ -227,59 +297,55 @@ def remove(sources):
 def index(sources):
     """Index the directories in SOURCES.
 
-    SOURCES is a list of directories.
+    SOURCES is a list of directories. Files already in litdb are skipped. A
+    bibtex file is read again only if it changed since the directory was last
+    indexed, since its entries are stored under their DOIs, not its path.
     """
     db = get_db()
     for directory in sources:
-        directory = pathlib.Path(directory).resolve()
-        for fname in directory.rglob("*"):
-            # for f in files:
-            if fname.suffix in [
-                ".pdf",
-                ".docx",
-                ".pptx",
-                ".org",
-                ".md",
-                ".html",
-                ".bib",
-                ".ipynb",
-            ]:
-                fname = str(fname)
+        _index_directory(db, directory)
 
-                # skip files we already have
-                if db.execute(
-                    """select source from sources where source = ?""", (fname,)
-                ).fetchone():
-                    continue
 
-                with click.Context(add) as ctx:
-                    print(fname)
-                    ctx.invoke(add, sources=[fname])
-                    print(f"Adding {fname}")
+def _index_directory(db, directory):
+    """Add the new files under DIRECTORY to DB and record when it was indexed."""
+    directory = pathlib.Path(directory).resolve()
+    row = db.execute(
+        "select last_updated from directories where path = ?", (str(directory),)
+    ).fetchone()
+    last_indexed = (
+        datetime.datetime.strptime(row[0], "%Y-%m-%d").timestamp()
+        if row and row[0]
+        else None
+    )
 
-                    richprint(f"Added {fname}")
+    for fname in directory.rglob("*"):
+        if not fname.is_file() or fname.suffix.lower() not in INDEX_EXTENSIONS:
+            continue
 
-        last_updated = datetime.date.today().strftime("%Y-%m-%d")
-
-        directory = str(directory)  # we need strings for the db
-        if db.execute(
-            """select path from directories where path = ?""", (directory,)
+        if fname.suffix.lower() == ".bib":
+            if last_indexed is not None and fname.stat().st_mtime < last_indexed:
+                continue
+        elif db.execute(
+            "select source from sources where source = ?", (str(fname),)
         ).fetchone():
-            print(f"Updating {directory}")
-            db.execute(
-                """update directories set last_updated = ?
-            where path = ?""",
-                (last_updated, directory),
-            )
-        else:
-            print(f"Inserting {directory}: {last_updated}")
-            db.execute(
-                """insert into directories(path, last_updated)
-            values (?, ?)""",
-                (directory, last_updated),
-            )
+            continue
 
-        db.commit()
+        try:
+            _add_one(str(fname), False, False, False, False, None, None, None, False)
+        except Exception as e:  # noqa: BLE001 - one bad file must not stop the rest
+            richprint(f"[yellow]Skipping {fname}: {e}[/yellow]")
+            continue
+        print(f"Added {fname}")
+
+    db.execute(
+        """insert into directories(path, last_updated) values (?, ?)
+        on conflict(path) do update set last_updated = excluded.last_updated""",
+        (str(directory), datetime.date.today().strftime("%Y-%m-%d")),
+    )
+    db.commit()
+
+
+INDEX_EXTENSIONS = {".pdf", ".docx", ".pptx", ".org", ".md", ".html", ".bib", ".ipynb"}
 
 
 @click.command()
@@ -288,7 +354,7 @@ def reindex():
     db = get_db()
     for (directory,) in db.execute("""select path from directories""").fetchall():
         print(f"Reindexing {directory}")
-        index([directory])
+        _index_directory(db, directory)
 
 
 @click.command(name="update-embeddings")
@@ -299,13 +365,12 @@ def update_embeddings():
     the way the chunks are sized in your config.
 
     """
-    import numpy as np
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     config = get_config()
     db = get_db()
 
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
         chunk_overlap=config["embedding"]["chunk_overlap"],
@@ -319,14 +384,12 @@ def update_embeddings():
     db.execute(f"alter table sources add column embedding F32_BLOB({dim})")
     db.commit()
 
-    for rowid, text in db.execute("select rowid, text from sources").fetchall():
-        chunks = splitter.split_text(text)
-        embedding = model.encode(chunks).mean(axis=0).astype(np.float32).tobytes()
-
-        c = db.execute(
-            "update sources set embedding = ? where rowid = ?", (embedding, rowid)
+    rows = db.execute("select rowid, text from sources").fetchall()
+    for rowid, text in tqdm(rows):
+        db.execute(
+            "update sources set embedding = ? where rowid = ?",
+            (embed_text(model, splitter, text), rowid),
         )
-        print(rowid, c.rowcount)
 
     # I don't know why this has to be here. I had it above, and no updates were
     # happening.
