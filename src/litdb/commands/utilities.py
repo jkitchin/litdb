@@ -10,7 +10,10 @@ Commands:
 """
 
 import os
+import subprocess
+import sys
 import webbrowser
+from urllib.parse import quote, quote_plus, unquote_plus
 
 import click
 
@@ -41,7 +44,7 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
     CHEMRXIV
     BIORXIV
     """
-    query = " ".join(query)
+    query = quote_plus(" ".join(query))
 
     if all:
         google, google_scholar = (
@@ -78,7 +81,7 @@ def web(query, google, google_scholar, pubmed, arxiv, chemrxiv, biorxiv, all):
         webbrowser.open(url)
 
     if biorxiv:
-        url = f"https://www.biorxiv.org/search/{query}"
+        url = f"https://www.biorxiv.org/search/{quote(unquote_plus(query))}"
         webbrowser.open(url)
 
 
@@ -98,7 +101,6 @@ def audio(playback=False):
 
         if playback:
             import platform
-            import subprocess
 
             try:
                 system = platform.system()
@@ -125,7 +127,7 @@ def audio(playback=False):
             # move on to searching
             break
 
-    search.vsearch.callback([text])
+    click.get_current_context().invoke(search.vsearch, query=(text,))
 
 
 @click.command(help=chat.__doc__)
@@ -141,7 +143,7 @@ def app():
     """Launch the Streamlit app in the default web browser."""
     dirname = os.path.dirname(os.path.dirname(__file__))
     app_path = os.path.join(dirname, "app.py")
-    os.system(f"streamlit run {app_path}")
+    subprocess.run([sys.executable, "-m", "streamlit", "run", app_path], check=False)
 
 
 @click.command()

@@ -31,7 +31,8 @@ from . import search
     "-t",
     "--task",
     default="crow",
-    help="The type of task to run. One of crow, owl, falcon.",
+    type=click.Choice(["crow", "owl", "falcon"], case_sensitive=False),
+    help="The type of task to run.",
 )
 def fhresearch(query, task):
     """Run a FutureHouse research TASK on QUERY.
@@ -60,7 +61,12 @@ def fhresearch(query, task):
         )
         raise click.Abort()
 
-    client = FutureHouseClient(api_key=os.environ["FUTURE_HOUSE_API_KEY"])
+    api_key = os.environ.get("FUTURE_HOUSE_API_KEY")
+    if not api_key:
+        raise click.ClickException(
+            "Set FUTURE_HOUSE_API_KEY; get a key at https://platform.futurehouse.org/"
+        )
+    client = FutureHouseClient(api_key=api_key)
 
     jobs = {"crow": JobNames.CROW, "owl": JobNames.OWL, "falcon": JobNames.FALCON}
 
@@ -207,10 +213,12 @@ def suggest_reviewers(query, n):
     for i, row in enumerate(results):
         _source, _citation, extra, _distance = row
 
-        d = json.loads(extra)
+        d = json.loads(extra) or {}
 
-        for authorship in d["authorships"]:
-            authors += [authorship["author"]["id"]]
+        # Only OpenAlex works have authorships; files and web pages do not.
+        for authorship in d.get("authorships") or []:
+            if author_id := (authorship.get("author") or {}).get("id"):
+                authors += [author_id]
 
     # get the unique ones
     from collections import Counter
@@ -231,24 +239,21 @@ def suggest_reviewers(query, n):
         r = get_data(url, params)
 
         for d in r["results"]:
-            lki = d.get("last_known_institutions", [])
-            if lki == []:
-                affils = d.get("affiliations", [])
-                if len(affils) >= 1:
-                    lki = affils[0]["institution"]["display_name"]
-                else:
-                    lki = "unknown"
-
+            lki = d.get("last_known_institutions") or []
+            affils = d.get("affiliations") or []
+            if lki:
+                lki = lki[0].get("display_name") or "unknown"
+            elif affils:
+                lki = (affils[0].get("institution") or {}).get(
+                    "display_name"
+                ) or "unknown"
             else:
-                if len(lki) >= 1:
-                    lki = lki[0].get("display_name")
-                else:
-                    lki = "unknown"
+                lki = "unknown"
 
             row = [
                 d["display_name"],
                 authors[d["id"]],
-                d["summary_stats"]["h_index"],
+                (d.get("summary_stats") or {}).get("h_index") or 0,
                 d["id"],
                 lki,
             ]

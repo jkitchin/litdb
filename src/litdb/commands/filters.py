@@ -10,12 +10,12 @@ Commands:
 import os
 
 import click
-from jinja2 import Template
 from rich import print as richprint
 from rich.markup import escape
 from tqdm import tqdm
 
 from ..db import get_db, update_filter
+from ._render import rich_template
 
 # Lazy database initialization
 _db = None
@@ -83,7 +83,7 @@ def update_filters(fmt, silent):
                 richprint(f"* {description or f}")
             for result in results:
                 source, text, extra = result
-                richprint(Template(fmt).render(**locals()))
+                richprint(rich_template(fmt).render(**locals()))
         except Exception as e:  # noqa: BLE001 - one bad filter must not stop the rest
             richprint(
                 f"[yellow]Skipping filter {escape(repr(f))}: {escape(str(e))}[/yellow]"
@@ -119,4 +119,4 @@ def list_filters(fmt):
     from queries"""
     )
     for rowid, f, description, last_updated in filters.fetchall():
-        richprint(Template(fmt).render(**locals()))
+        richprint(rich_template(fmt).render(**locals()))

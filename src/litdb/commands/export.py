@@ -11,16 +11,18 @@ Commands:
 
 import json
 import os
+import pathlib
 import sys
 import webbrowser
 
 import click
-from jinja2 import Template
 from rich import print as richprint
+from rich.markup import escape
 
 from ..bibtex import dump_bibtex
 from ..db import get_db
 from ..utils import get_config
+from ._render import rich_template
 
 # Lazy database initialization
 _db = None
@@ -48,8 +50,7 @@ def bibtex(sources):
             .fetchone()
         )
         if work:
-            print(f"WORK: {work}")
-            richprint(dump_bibtex(json.loads(work[0])))
+            print(dump_bibtex(json.loads(work[0]) or {}))
         else:
             print(f"No entry found for {source}")
 
@@ -62,7 +63,7 @@ def citation(sources):
         sources = sys.stdin.read().strip().split()
 
     for i, source in enumerate(sources):
-        (_citation,) = (
+        row = (
             get_export_db()
             .execute(
                 """select json_extract(extra, '$.citation')
@@ -71,7 +72,10 @@ def citation(sources):
             )
             .fetchone()
         )
-        richprint(f"{i + 1:2d}. {_citation}")
+        if row is None:
+            print(f"No entry found for {source}")
+            continue
+        richprint(f"{i + 1:2d}. {escape(str(row[0] or source))}")
 
 
 @click.command()
@@ -96,9 +100,14 @@ def about():
 @click.command()
 @click.argument("sql")
 def sql(sql):
-    """Run the SQL command on the db."""
-    for row in get_export_db().execute(sql).fetchall():
-        richprint(row)
+    """Run the SQL command on the db.
+
+    Changes (insert, update, delete, reindex, ...) are committed.
+    """
+    db = get_export_db()
+    for row in db.execute(sql).fetchall() or []:
+        richprint(escape(repr(row)))
+    db.commit()
 
 
 @click.command()
@@ -122,8 +131,8 @@ def show(sources, fmt):
 
         if result:
             source, text, extra = result
-            extra = json.loads(extra)
-            richprint(Template(fmt).render(**locals()))
+            extra = json.loads(extra) or {}
+            richprint(rich_template(fmt).render(**locals()))
         else:
             print(f"Nothing found for {src}")
 
@@ -132,9 +141,7 @@ def show(sources, fmt):
 @click.argument("source")
 def visit(source):
     """Open source."""
-    if source.startswith("http"):
+    if source.startswith(("http://", "https://")):
         webbrowser.open(source, new=2)
-    elif source.endswith(".pdf"):
-        webbrowser.open(f"file://{source}")
     else:
-        webbrowser.open(f"file://{source}")
+        webbrowser.open(pathlib.Path(source).expanduser().resolve().as_uri())

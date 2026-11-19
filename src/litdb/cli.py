@@ -23,7 +23,6 @@ from .commands import (
     tags,
     utilities,
 )
-from .db import get_db
 
 # Disable all Transformers logging
 tulogging.set_verbosity_error()
@@ -32,16 +31,6 @@ logging.getLogger("pydantic").setLevel(logging.CRITICAL)
 
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=UserWarning)
-
-# Lazy database initialization - only load if not in test/import-only mode
-# During testing, fixtures will set up the database before commands run
-db = None
-try:
-    db = get_db()
-except SystemExit:
-    # get_db() calls sys.exit() if no config found
-    # This is expected during test imports
-    pass
 
 
 @click.group()
