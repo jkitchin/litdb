@@ -69,8 +69,9 @@ def get_config():
     # if you don't find a litdb.toml you might not be in a litdb root. We check
     # for an env var next so that litdb works everywhere.
     if root is None or not (root / CONFIG).exists():
-        print('No config found. You need to run "litdb init"')
-        sys.exit()
+        # Exit with a failure status (and the message on stderr) so scripts and
+        # the MCP server can tell that nothing ran.
+        sys.exit('No config found. You need to run "litdb init"')
 
     with open(root / CONFIG) as f:
         config = tomlkit.parse(f.read())
