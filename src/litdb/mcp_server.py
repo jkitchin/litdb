@@ -77,10 +77,10 @@ import libsql
 import numpy as np
 import requests
 from mcp.server.fastmcp import FastMCP
-from sentence_transformers import SentenceTransformer
 
 from .bibtex import dump_bibtex
 from .coa import get_coa
+from .db import get_model
 
 # Initialize FastMCP server
 mcp = FastMCP("litdb")
@@ -109,6 +109,69 @@ def get_db_path():
     return os.path.join(config["root"], "litdb.libsql")
 
 
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+
+
+def embedding_model_name(db):
+    """Return the name of the model that made the embeddings in DB.
+
+    The db records it in its metadata table, which works even without a
+    litdb.toml (the Claude Desktop install only sets the db path).
+    """
+    try:
+        row = db.execute(
+            "select value from metadata where key = 'embedding_config'"
+        ).fetchone()
+    except ValueError:  # an old db without a metadata table
+        row = None
+    if row:
+        return json.loads(row[0])["model"]
+    return DEFAULT_EMBEDDING_MODEL
+
+
+def _fts_literal(query):
+    """Quote each word of QUERY so FTS5 matches it literally."""
+    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
+
+
+def _abstract(work):
+    """Return the abstract of the OpenAlex WORK, or "" if it has none."""
+    index = work.get("abstract_inverted_index") or {}
+    words = sorted(
+        (pos, word) for word, positions in index.items() for pos in positions
+    )
+    return " ".join(word for _pos, word in words)
+
+
+def _authors(work, limit=3):
+    """Return up to LIMIT author names of the OpenAlex WORK."""
+    authorships = work.get("authorships") or []
+    names = [
+        (a.get("author") or {}).get("display_name") or "Unknown"
+        for a in authorships[:limit]
+    ]
+    if len(authorships) > len(names):
+        names.append("et al.")
+    return names
+
+
+def _venue(work):
+    """Return the venue name of the OpenAlex WORK, or ""."""
+    source = (work.get("primary_location") or {}).get("source") or {}
+    return source.get("display_name") or ""
+
+
+def _title(work):
+    """Return the title of the OpenAlex WORK."""
+    return work.get("title") or work.get("display_name") or "No title"
+
+
+def _preview(text, n):
+    """Return the first N characters of TEXT."""
+    text = text or ""
+    return text[:n] + "..." if len(text) > n else text
+
+
 # Note I added _litdb here because Claude Desktop had trouble with other
 # functions named about...
 @mcp.tool()
@@ -116,8 +179,9 @@ def about_litdb():
     """Describe litdb."""
     return f"""Litdb is a database of scientific literature.
 
-    The MCP server has three tools, this one, a vector search tool, and an
-    OpenAlex search integration.
+    The MCP server has tools to search it (vsearch, fulltext_search,
+    find_similar), to get details, citations and bibtex for a source, to list
+    tags and tagged articles, to search OpenAlex, and to make an NSF COA table.
 
     Using the db at {get_db_path()}.
     """
@@ -132,14 +196,17 @@ def vsearch(query: str, n: int = 3) -> str:
     """
     db = libsql.connect(get_db_path())
 
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    # The query must be embedded with the model that made the stored
+    # embeddings, or the distances are meaningless.
+    model = get_model(embedding_model_name(db))
     emb = model.encode([query]).astype(np.float32).tobytes()
 
     c = db.execute(
         """select sources.source, sources.text,
-        sources.extra, vector_distance_cos(?, embedding)
+        sources.extra, vector_distance_cos(?, embedding) as d
         from vector_top_k('embedding_idx', ?, ?)
-        join sources on sources.rowid = id""",
+        join sources on sources.rowid = id
+        order by d""",
         (emb, emb, n),
     )
 
@@ -150,28 +217,12 @@ def vsearch(query: str, n: int = 3) -> str:
     for i, (source, text, extra, distance) in enumerate(results, 1):
         try:
             extra_data = json.loads(extra) if extra else {}
-            title = extra_data.get("title") or extra_data.get(
-                "display_name", "No title"
-            )
-
-            # Get authors (limit to first 3)
-            authors = []
-            if extra_data.get("authorships"):
-                authors = [
-                    a.get("author", {}).get("display_name", "Unknown")
-                    for a in extra_data["authorships"][:3]
-                ]
-                if len(extra_data["authorships"]) > 3:
-                    authors.append("et al.")
-
-            # Get publication year
+            title = _title(extra_data)
+            authors = _authors(extra_data)
             year = extra_data.get("publication_year", "")
 
-            # Get abstract (full text)
-            abstract = extra_data.get("abstract", "")
-            if not abstract and text:
-                # Use first 500 chars of full text if no abstract
-                abstract = text[:500] + "..." if len(text) > 500 else text
+            # Use first 500 chars of full text if there is no abstract
+            abstract = _abstract(extra_data) or _preview(text, 500)
 
             result_text = f"{i}. {title}"
             if authors:
@@ -202,56 +253,33 @@ def openalex(
       email: optional email for OpenAlex polite pool.
       api_key: optional OpenAlex API key.
     """
-    params = {"filter": f"default.search:{query}", "per_page": n}
+    # The search parameter, unlike a filter, allows commas in the query.
+    params = {"search": query, "per_page": n}
     if email:
         params["mailto"] = email
     if api_key:
         params["api_key"] = api_key
 
-    resp = requests.get("https://api.openalex.org/works", params)
-    data = resp.json()
+    try:
+        resp = requests.get("https://api.openalex.org/works", params, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as e:
+        return f"OpenAlex request failed: {e}"
 
     # Format results concisely to avoid hitting token limits
     results = data.get("results", [])
     formatted_results = []
 
     for i, work in enumerate(results, 1):
-        title = work.get("title") or work.get("display_name", "No title")
-
-        # Get authors (limit to first 3)
-        authors = []
-        if work.get("authorships"):
-            authors = [
-                a.get("author", {}).get("display_name", "Unknown")
-                for a in work["authorships"][:3]
-            ]
-            if len(work["authorships"]) > 3:
-                authors.append("et al.")
-
-        # Get publication year
+        title = _title(work)
+        authors = _authors(work)
         year = work.get("publication_year", "")
-
-        # Get abstract (full text)
-        abstract_inv = work.get("abstract_inverted_index", {})
-        if abstract_inv:
-            # Reconstruct abstract from inverted index
-            word_positions = []
-            for word, positions in abstract_inv.items():
-                for pos in positions:
-                    word_positions.append((pos, word))
-            # Sort by position and join
-            word_positions.sort()
-            abstract = " ".join(word for pos, word in word_positions)
-        else:
-            abstract = ""
+        abstract = _abstract(work)
 
         # Get DOI or OpenAlex ID
         doi = work.get("doi") or work.get("id", "")
-
-        # Get journal/venue
-        venue = ""
-        if work.get("primary_location", {}).get("source"):
-            venue = work["primary_location"]["source"].get("display_name", "")
+        venue = _venue(work)
 
         result_text = f"{i}. {title}"
         if authors:
@@ -288,15 +316,21 @@ def fulltext_search(query: str, n: int = 3) -> str:
     """
     db = libsql.connect(get_db_path())
 
-    results = db.execute(
-        """select
+    sql = """select
     sources.source, sources.text, snippet(fulltext, 1, '', '', '', 16),
     sources.extra, bm25(fulltext)
     from fulltext
     inner join sources on fulltext.source = sources.source
-    where fulltext.text match ? order by rank limit ?""",
-        (query, n),
-    ).fetchall()
+    where fulltext.text match ? order by rank limit ?"""
+    try:
+        results = db.execute(sql, (query, n)).fetchall()
+    except ValueError:
+        # Not valid FTS5 syntax (e.g. "density-functional" or "Pt(111)"), so
+        # search for the words literally.
+        try:
+            results = db.execute(sql, (_fts_literal(query), n)).fetchall()
+        except ValueError as e:
+            return f"Invalid full-text query {query!r}: {e}"
 
     if not results:
         return f"No results found for query: {query}"
@@ -305,19 +339,8 @@ def fulltext_search(query: str, n: int = 3) -> str:
     for i, (source, text, snippet, extra, score) in enumerate(results, 1):
         try:
             extra_data = json.loads(extra) if extra else {}
-            title = extra_data.get("title") or extra_data.get(
-                "display_name", "No title"
-            )
-
-            # Get authors (limit to first 3)
-            authors = []
-            if extra_data.get("authorships"):
-                authors = [
-                    a.get("author", {}).get("display_name", "Unknown")
-                    for a in extra_data["authorships"][:3]
-                ]
-                if len(extra_data["authorships"]) > 3:
-                    authors.append("et al.")
+            title = _title(extra_data)
+            authors = _authors(extra_data)
 
             year = extra_data.get("publication_year", "")
 
@@ -365,16 +388,21 @@ def find_similar(source: str, n: int = 3) -> str:
     except Exception as e:
         return f"Error retrieving source embedding: {e!s}"
 
-    # Find similar sources (we get n+1 because the first is always the source itself)
+    if emb is None:
+        return f"{source} has no embedding, so similar articles cannot be found."
+
+    # Get n+1 because the source itself is one of the results, though not
+    # always the first when other sources have the same embedding.
     allrows = db.execute(
-        """select sources.source, sources.text, sources.extra
+        """select sources.source, sources.text, sources.extra,
+    vector_distance_cos(?, embedding) as d
     from vector_top_k('embedding_idx', ?, ?)
-    join sources on sources.rowid = id""",
-        (emb, n + 1),
+    join sources on sources.rowid = id
+    order by d""",
+        (emb, emb, n + 1),
     ).fetchall()
 
-    # Skip the first result (the source itself)
-    rows = allrows[1:]
+    rows = [row[:3] for row in allrows if row[0] != source][:n]
 
     if not rows:
         return f"No similar articles found for: {source}"
@@ -383,19 +411,8 @@ def find_similar(source: str, n: int = 3) -> str:
     for i, (sim_source, text, extra) in enumerate(rows, 1):
         try:
             extra_data = json.loads(extra) if extra else {}
-            title = extra_data.get("title") or extra_data.get(
-                "display_name", "No title"
-            )
-
-            # Get authors (limit to first 3)
-            authors = []
-            if extra_data.get("authorships"):
-                authors = [
-                    a.get("author", {}).get("display_name", "Unknown")
-                    for a in extra_data["authorships"][:3]
-                ]
-                if len(extra_data["authorships"]) > 3:
-                    authors.append("et al.")
+            title = _title(extra_data)
+            authors = _authors(extra_data)
 
             year = extra_data.get("publication_year", "")
             citation = extra_data.get("citation", "")
@@ -441,23 +458,13 @@ def get_source_details(source: str) -> str:
     try:
         extra_data = json.loads(extra) if extra else {}
 
-        title = extra_data.get("title") or extra_data.get("display_name", "No title")
-
-        # Get full author list
-        authors = []
-        if extra_data.get("authorships"):
-            authors = [
-                a.get("author", {}).get("display_name", "Unknown")
-                for a in extra_data["authorships"]
-            ]
-
+        title = _title(extra_data)
+        authors = _authors(extra_data, limit=None)
         year = extra_data.get("publication_year", "")
         doi = extra_data.get("doi", "")
         citation = extra_data.get("citation", "")
-        abstract = extra_data.get("abstract", "")
-        venue = ""
-        if extra_data.get("primary_location", {}).get("source"):
-            venue = extra_data["primary_location"]["source"].get("display_name", "")
+        abstract = _abstract(extra_data)
+        venue = _venue(extra_data)
 
         cited_by_count = extra_data.get("cited_by_count", 0)
         referenced_works_count = extra_data.get("referenced_works_count", 0)
@@ -480,8 +487,7 @@ def get_source_details(source: str) -> str:
             output += f"\nAbstract:\n{abstract}\n"
         else:
             # Use first 1000 chars of text if no abstract
-            text_preview = text[:1000] + "..." if len(text) > 1000 else text
-            output += f"\nText Preview:\n{text_preview}\n"
+            output += f"\nText Preview:\n{_preview(text, 1000)}\n"
 
         return output
     except Exception as e:
@@ -595,19 +601,8 @@ def get_tagged_articles(tag: str) -> str:
     for i, (source, text, extra) in enumerate(results, 1):
         try:
             extra_data = json.loads(extra) if extra else {}
-            title = extra_data.get("title") or extra_data.get(
-                "display_name", "No title"
-            )
-
-            # Get authors (limit to first 3)
-            authors = []
-            if extra_data.get("authorships"):
-                authors = [
-                    a.get("author", {}).get("display_name", "Unknown")
-                    for a in extra_data["authorships"][:3]
-                ]
-                if len(extra_data["authorships"]) > 3:
-                    authors.append("et al.")
+            title = _title(extra_data)
+            authors = _authors(extra_data)
 
             year = extra_data.get("publication_year", "")
             citation = extra_data.get("citation", "")
@@ -696,11 +691,19 @@ def main():
         cfg = {}
 
     if sys.argv[1] == "install":
-        db = sys.argv[2]
+        if len(sys.argv) < 3:
+            sys.exit("Usage: litdb_mcp install path/to/litdb.libsql")
+        # Claude Desktop does not start the server in this directory.
+        db = os.path.abspath(os.path.expanduser(sys.argv[2]))
+        if not os.path.exists(db):
+            sys.exit(f"{db} does not exist.")
+        command = shutil.which("litdb_mcp")
+        if command is None:
+            sys.exit("litdb_mcp is not on your PATH.")
 
         setup = {
-            "command": shutil.which("litdb_mcp"),
-            "env": {"litdb": db, "LITDB_ROOT": os.path.dirname(os.path.abspath(db))},
+            "command": command,
+            "env": {"litdb": db, "LITDB_ROOT": os.path.dirname(db)},
         }
 
         if "mcpServers" not in cfg:
