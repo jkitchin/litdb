@@ -109,6 +109,12 @@ def litdb_env(real_db, monkeypatch):
     )
     real_db.commit()
     monkeypatch.setattr(research, "get_db", lambda: real_db)
+    # The default litdb.toml: no [gpt-researcher] or [llm] section.
+    monkeypatch.setattr(
+        research,
+        "get_config",
+        lambda: {"embedding": {"model": "fake"}, "openalex": {}},
+    )
     monkeypatch.setattr(
         research,
         "get_model",
