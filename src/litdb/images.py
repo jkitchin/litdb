@@ -6,11 +6,11 @@ search the images either by textual descriptions, or by using similar images.
 """
 
 import datetime
+import functools
 import os
 
 import numpy as np
 from PIL import Image
-from sentence_transformers import SentenceTransformer
 
 from .db import get_db
 
@@ -24,12 +24,23 @@ except ImportError:
 
 image_extensions = Image.registered_extensions().keys()
 
-model = SentenceTransformer("clip-ViT-B-32")
+
+@functools.cache
+def get_model():
+    """Return the CLIP model, loading it on first use.
+
+    Loading is deferred so that importing this module (which every litdb CLI
+    command does) does not load or download the model.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer("clip-ViT-B-32")
 
 
 def add_image(path):
     """Embed and add the image in path to db."""
     db = get_db()
+    model = get_model()
     emb = model.encode(Image.open(path))
 
     q = """insert or ignore into
@@ -53,6 +64,7 @@ def image_query(query=None, clipboard=False, n=1):
     If clipboard is True, use an image or text from the clipboard
     """
     db = get_db()
+    model = get_model()
     if query and os.path.exists(query):
         emb = model.encode(Image.open(query))
     elif query and not os.path.exists(query):
