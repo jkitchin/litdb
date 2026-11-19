@@ -1643,13 +1643,19 @@ def tab_add_content():
                     status_text.text(f"Processing {idx}/{len(dois)}: {doi}")
                     try:
                         # Add the work
-                        add_work(doi, references=False, related=False, citing=False)
+                        source = add_work(
+                            doi, references=False, related=False, citing=False
+                        )
 
-                        # Query the database to get the work info
-                        work_info = db_conn.execute(
-                            "SELECT source, text, extra FROM sources WHERE source = ?",
-                            (doi,),
-                        ).fetchone()
+                        # Query the database to get the work info, by the key
+                        # add_work stored it under (not necessarily doi as typed)
+                        work_info = (
+                            source
+                            and db_conn.execute(
+                                "SELECT source, text, extra FROM sources WHERE source = ?",
+                                (source,),
+                            ).fetchone()
+                        )
 
                         if work_info:
                             _source, _text, extra = work_info

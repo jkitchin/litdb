@@ -381,6 +381,9 @@ def add_work(
     max_related limits the number of related works (None or negative = all).
     verbose prints details about each work being added.
 
+    Returns the source key the work is stored under (its DOI URL as given by
+    OpenAlex, or its OpenAlex id if it has no DOI), or None if it was not found.
+
     """
     config = get_config()
     params = {"mailto": config["openalex"]["email"], "per_page": 200}
@@ -390,11 +393,16 @@ def add_work(
     data = get_data("https://api.openalex.org/works/" + workid, params)
 
     # I check to make sure we got something
-    source = data.get("id", None)
-    if source is None:
+    if data.get("id") is None:
         # I guess this could happen for a bad DOI.
         print(f"No id found for {workid}.\n{data}")
-        return
+        return None
+
+    # Store the work under the same key that references, citing works and
+    # update_filter use (OpenAlex's normalized DOI URL, else its id), not the
+    # id as given. Otherwise "10.1/ABC", "https://doi.org/10.1/abc" and an
+    # OpenAlex id for the same work become separate rows.
+    key = data.get("doi") or data["id"]
 
     data["citation"] = get_citation(data)
     data["bibtex"] = dump_bibtex(data)
@@ -407,7 +415,7 @@ def add_work(
         print(f"Adding: {title[:80]}{'...' if len(title) > 80 else ''}")
         print(f"  DOI: {doi} | Year: {year}")
 
-    add_source(workid, get_text(data), data)
+    add_source(key, get_text(data), data)
 
     if references:
         ref_works = _apply_limit(data.get("referenced_works", []), max_references)
@@ -459,6 +467,8 @@ def add_work(
 
     if citing:
         _add_citing_works(data, params, config, yes, max_citing, verbose)
+
+    return key
 
 
 def add_author(oaid):

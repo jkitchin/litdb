@@ -303,3 +303,48 @@ def test_get_model_is_cached():
         assert litdb_db.get_model("m") is litdb_db.get_model("m")
     st.assert_called_once_with("m")
     litdb_db.get_model.cache_clear()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "workid",
+    [
+        "10.1/ABC",
+        "https://doi.org/10.1/ABC",
+        "doi:10.1/abc",
+        "https://openalex.org/W1",
+    ],
+)
+def test_add_work_stores_under_openalex_doi(citing_env, workid):
+    """Every way of naming a work stores it under one key, so no duplicates."""
+    data = {"id": "https://openalex.org/W1", "doi": "https://doi.org/10.1/abc"}
+    with (
+        patch("litdb.db.get_config", return_value=CFG),
+        patch("litdb.db.get_data", return_value=data),
+    ):
+        key = litdb_db.add_work(workid)
+    assert key == "https://doi.org/10.1/abc"
+    assert citing_env.call_args.args[0] == "https://doi.org/10.1/abc"
+
+
+@pytest.mark.unit
+def test_add_work_without_doi_uses_openalex_id(citing_env):
+    data = {"id": "https://openalex.org/W1", "doi": None}
+    with (
+        patch("litdb.db.get_config", return_value=CFG),
+        patch("litdb.db.get_data", return_value=data),
+    ):
+        assert litdb_db.add_work("W1") == "https://openalex.org/W1"
+
+
+@pytest.mark.unit
+def test_add_work_not_found_returns_none(citing_env):
+    with (
+        patch("litdb.db.get_config", return_value=CFG),
+        patch(
+            "litdb.db.get_data",
+            return_value={"meta": {"next_cursor": None}, "results": []},
+        ),
+    ):
+        assert litdb_db.add_work("10.1/missing") is None
+    citing_env.assert_not_called()
