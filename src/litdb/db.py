@@ -1,5 +1,6 @@
 """Setup and add things to the database."""
 
+import functools
 import json
 import logging
 import os
@@ -66,6 +67,24 @@ def _check_embedding_config(db, config):
         )
 
 
+@functools.cache
+def get_model(name):
+    """Return the SentenceTransformer model NAME, loading it once per process.
+
+    Loading a model takes seconds, and add_source runs once per work (hundreds
+    of times for add_work with references or citing works).
+    """
+    return SentenceTransformer(name)
+
+
+def _table_exists(db, name):
+    """Return True if table NAME exists in DB."""
+    row = db.execute(
+        "select 1 from sqlite_master where type = 'table' and name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
 def get_db():
     """Get or create the database."""
     config = get_config()
@@ -74,99 +93,76 @@ def get_db():
 
     DB = str(root / "litdb.libsql")
 
-    if os.path.exists(DB):
-        db = libsql.connect(DB)
-        db.execute("PRAGMA foreign_keys = ON")
-        db.execute("PRAGMA journal_mode=WAL")
-        return db
-    else:
-        db = libsql.connect(DB)
-        model = SentenceTransformer(config["embedding"]["model"])
+    db = libsql.connect(DB)
+    db.execute("PRAGMA foreign_keys = ON")
+    db.execute("PRAGMA journal_mode=WAL")
 
-        _, dim = model.encode(["test"]).shape
+    # Check for the schema rather than for the file: libsql.connect creates the
+    # file, so a first run that failed partway (e.g. a model download error)
+    # would otherwise leave an empty database that is never initialized.
+    # images is checked too: older versions created it last, after loading the
+    # CLIP model, so an interrupted first run could have sources but no images.
+    if not (_table_exists(db, "sources") and _table_exists(db, "images")):
+        _create_schema(db, config)
 
-        db.execute(
-            f"""create table if not exists
-    sources(rowid integer primary key,
-    source text unique,
-    text text,
-    extra text,
-    embedding F32_BLOB({dim}),
-    date_added text)"""
-        )
+    # Databases created before the metadata table was added do not have it.
+    db.execute("create table if not exists metadata(key text primary key, value text)")
+    _check_embedding_config(db, config)
 
-        db.execute(
-            """create virtual table if not exists
-            fulltext using fts5(source, text)"""
-        )
+    return db
 
-        db.execute(
-            """create table if not exists
+
+def _create_schema(db, config):
+    """Create the litdb tables and indexes in DB."""
+    # Load both models before creating anything, so a failure leaves no
+    # partial schema behind.
+    _, dim = get_model(config["embedding"]["model"]).encode(["test"]).shape
+    _, image_dim = get_model("clip-ViT-B-32").encode(["test"]).shape
+
+    statements = [
+        f"""create table if not exists
+        sources(rowid integer primary key,
+        source text unique,
+        text text,
+        extra text,
+        embedding F32_BLOB({dim}),
+        date_added text)""",
+        """create virtual table if not exists fulltext using fts5(source, text)""",
+        """create table if not exists
         tags(rowid integer primary key,
-        tag text unique)"""
-        )
-
-        db.execute(
-            """create table if not exists
+        tag text unique)""",
+        """create table if not exists
         source_tag(rowid integer primary key,
         source_id integer,
         tag_id integer,
         foreign key(source_id) references sources(rowid) on delete cascade,
-        foreign key(tag_id) references tags(rowid) on delete cascade)"""
-        )
-
-        db.execute(
-            """create table if not exists
-    queries(rowid integer primary key,
-    filter text unique,
-    description text,
-    last_updated text)"""
-        )
-
-        db.execute(
-            """create table if not exists
-    directories(rowid integer primary key,
+        foreign key(tag_id) references tags(rowid) on delete cascade)""",
+        """create table if not exists
+        queries(rowid integer primary key,
+        filter text unique,
+        description text,
+        last_updated text)""",
+        """create table if not exists
+        directories(rowid integer primary key,
         path text unique,
-        last_updated text)"""
-        )
-
-        db.execute(
-            """create index if not exists embedding_idx
-            ON sources (libsql_vector_idx(embedding))"""
-        )
-
-        db.execute(
-            """create table if not exists
-            prompt_history(rowid integer primary key,
-            prompt text)"""
-        )
-
+        last_updated text)""",
+        """create index if not exists embedding_idx
+        ON sources (libsql_vector_idx(embedding))""",
+        """create table if not exists
+        prompt_history(rowid integer primary key,
+        prompt text)""",
         # For images
-        model = SentenceTransformer("clip-ViT-B-32")
-        _, dim = model.encode(["test"]).shape
-
-        db.execute(
-            f"""create table if not exists
-            images(rowid integer primary key,
-            source text unique,
-            embedding F32_BLOB({dim}),
-            date_added text)"""
-        )
-
-        db.execute(
-            """create table if not exists
-            metadata(key text primary key, value text)"""
-        )
-
-        # Store embedding config and warn if it changed
-        _check_embedding_config(db, config)
-
-        db.execute(
-            """create index if not exists image_idx
-            ON images (libsql_vector_idx(embedding))"""
-        )
-
-        return db
+        f"""create table if not exists
+        images(rowid integer primary key,
+        source text unique,
+        embedding F32_BLOB({image_dim}),
+        date_added text)""",
+        """create index if not exists image_idx
+        ON images (libsql_vector_idx(embedding))""",
+    ]
+    for statement in statements:
+        db.execute(statement)
+    db.commit()
 
 
 def add_source(source, text, extra=None):
@@ -181,7 +177,7 @@ def add_source(source, text, extra=None):
     """
     db = get_db()
     config = get_config()
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
         chunk_overlap=config["embedding"]["chunk_overlap"],
@@ -284,6 +280,81 @@ def get_citation(openalex_data):
         return None
 
 
+def _apply_limit(items, limit):
+    """Return the first LIMIT items; None or a negative LIMIT means all of them."""
+    if limit is None or limit < 0:
+        return items
+    return items[:limit]
+
+
+def _confirm_citing(count, trigger, yes):
+    """Ask whether to download COUNT citing works when there are more than TRIGGER.
+
+    --yes downloads them all. Without a terminal to ask on, the answer is no.
+    Only an explicit "y" answer downloads them; the prompt defaults to no.
+    """
+    if count <= trigger or yes:
+        return True
+    if not sys.stdin.isatty():
+        print(f"Found {count} citations. Non-interactive mode, skipping.")
+        return False
+    r = input(f"Found {count} citations. Do you want to download them all? (n/y): ")
+    return r.strip().lower().startswith("y")
+
+
+def _add_citing_works(data, params, config, yes, max_citing, verbose):
+    """Add the works that cite DATA (an OpenAlex work).
+
+    max_citing None asks first when there are more citing works than the
+    citation_count_trigger config value (default 100); -1 (or any negative)
+    downloads all of them; otherwise at most max_citing are downloaded.
+    """
+    # OpenAlex no longer includes cited_by_api_url, so build the URL.
+    work_id = data["id"].split("/")[-1]
+    url = f"https://api.openalex.org/works?filter=cites:{work_id}"
+    params = {**params, "cursor": "*"}
+    limit = None if max_citing is None or max_citing < 0 else max_citing
+
+    downloaded = 0
+    asked = max_citing is not None  # an explicit limit replaces the prompt
+    while limit is None or downloaded < limit:
+        cdata = get_data(url, params)
+        results = cdata.get("results", [])
+        if not results:
+            break
+
+        if not asked:
+            trigger = config["openalex"].get("citation_count_trigger", 100)
+            if not _confirm_citing(cdata["meta"]["count"], trigger, yes):
+                break
+            asked = True
+
+        if limit is not None:
+            results = results[: limit - downloaded]
+
+        for work in tqdm(results):
+            source = work.get("doi") or work["id"]
+            if verbose:
+                title = work.get("title") or "No title"
+                year = work.get("publication_year") or "Unknown"
+                print(
+                    f"  [cit] {title[:70]}{'...' if len(title) > 70 else ''} ({year})"
+                )
+            text = get_text(work)
+            work["citation"] = get_citation(work)
+            work["bibtex"] = dump_bibtex(work)
+            add_source(source, text, work)
+            downloaded += 1
+
+        next_cursor = cdata["meta"].get("next_cursor")
+        if not next_cursor:
+            break
+        params["cursor"] = next_cursor
+
+    if limit is not None and downloaded >= limit:
+        print(f"Reached limit of {limit} citing works.")
+
+
 def add_work(
     workid,
     references=False,
@@ -304,10 +375,14 @@ def add_work(
     if citing is truthy, also add them.
     if related is truthy, also add them.
     if yes is truthy, bypass interactive prompts and proceed automatically.
-    max_citing limits the number of citing works to download (None = use prompt logic, -1 = no limit).
-    max_references limits the number of references to download (None = all, -1 = no limit).
-    max_related limits the number of related works to download (None = all, -1 = no limit).
+    max_citing limits the number of citing works to download (None = ask when
+    there are many, negative = no limit, 0 = none).
+    max_references limits the number of references (None or negative = all).
+    max_related limits the number of related works (None or negative = all).
     verbose prints details about each work being added.
+
+    Returns the source key the work is stored under (its DOI URL as given by
+    OpenAlex, or its OpenAlex id if it has no DOI), or None if it was not found.
 
     """
     config = get_config()
@@ -318,29 +393,32 @@ def add_work(
     data = get_data("https://api.openalex.org/works/" + workid, params)
 
     # I check to make sure we got something
-    source = data.get("id", None)
-    if source is None:
+    if data.get("id") is None:
         # I guess this could happen for a bad DOI.
         print(f"No id found for {workid}.\n{data}")
-        return
+        return None
+
+    # Store the work under the same key that references, citing works and
+    # update_filter use (OpenAlex's normalized DOI URL, else its id), not the
+    # id as given. Otherwise "10.1/ABC", "https://doi.org/10.1/abc" and an
+    # OpenAlex id for the same work become separate rows.
+    key = data.get("doi") or data["id"]
 
     data["citation"] = get_citation(data)
     data["bibtex"] = dump_bibtex(data)
 
     if verbose:
-        title = data.get("title", "No title")
-        doi = data.get("doi", "No DOI")
-        year = data.get("publication_year", "Unknown year")
+        # OpenAlex returns null for some of these, so .get defaults are not enough
+        title = data.get("title") or "No title"
+        doi = data.get("doi") or "No DOI"
+        year = data.get("publication_year") or "Unknown year"
         print(f"Adding: {title[:80]}{'...' if len(title) > 80 else ''}")
         print(f"  DOI: {doi} | Year: {year}")
 
-    add_source(workid, get_text(data), data)
+    add_source(key, get_text(data), data)
 
     if references:
-        # Apply limit: None or -1 means all, otherwise limit to max_references
-        ref_works = data["referenced_works"]
-        if max_references is not None and max_references != -1:
-            ref_works = ref_works[:max_references]
+        ref_works = _apply_limit(data.get("referenced_works", []), max_references)
 
         for wid in tqdm(ref_works):
             # Extract work ID from full URL (e.g., https://openalex.org/W3103133276 -> W3103133276)
@@ -364,10 +442,7 @@ def add_work(
             add_source(source, text, rdata)
 
     if related:
-        # Apply limit: None or -1 means all, otherwise limit to max_related
-        rel_works = data["related_works"]
-        if max_related is not None and max_related != -1:
-            rel_works = rel_works[:max_related]
+        rel_works = _apply_limit(data.get("related_works", []), max_related)
 
         for wid in tqdm(rel_works):
             # Extract work ID from full URL (e.g., https://openalex.org/W3103133276 -> W3103133276)
@@ -391,78 +466,9 @@ def add_work(
             add_source(source, text, rdata)
 
     if citing:
-        # Construct the citing works URL manually since OpenAlex API no longer includes cited_by_api_url
-        work_id = data["id"].split("/")[-1]  # Extract work ID from the full URL
-        CURL = f"https://api.openalex.org/works?filter=cites:{work_id}"
-        next_cursor = "*"
-        params.update(cursor=next_cursor)
-        citing_downloaded = 0
-        while next_cursor:
-            cdata = get_data(CURL, params)
-            next_cursor = cdata["meta"]["next_cursor"]
-            params.update(cursor=next_cursor)
-            if next_cursor is None:
-                break
+        _add_citing_works(data, params, config, yes, max_citing, verbose)
 
-            count = cdata["meta"]["count"]
-
-            # Handle max_citing limit
-            if max_citing is not None:
-                # -1 means no limit, download all
-                if max_citing == -1:
-                    pass  # Download all
-                # Positive number: limit to that many
-                elif max_citing > 0 and citing_downloaded >= max_citing:
-                    print(f"Reached limit of {max_citing} citing works.")
-                    break
-                    # Don't prompt if we're within the limit
-            # No max_citing specified, use existing trigger logic
-            else:
-                # TODO: should the max citations to trigger this be configurable in litdb.toml
-                trigger = config["openalex"].get("citation_count_trigger", 100)
-                if count > trigger:
-                    # Option 1: --yes flag bypasses prompt
-                    if yes:
-                        # Download all
-                        pass
-                    # Option 2: Check if non-interactive mode (piped, scripted, etc.)
-                    elif not sys.stdin.isatty():
-                        # Non-interactive: default to NO (safer)
-                        print(
-                            f"Found {count} citations. Non-interactive mode, skipping."
-                        )
-                        break
-                    # Option 3: Normal interactive prompt
-                    else:
-                        r = input(
-                            f"Found {count} citations. Do you want to download them all? (n/y): "
-                        )
-                        if r.lower().startswith("n"):
-                            break
-                        else:
-                            pass
-
-            for work in tqdm(cdata["results"]):
-                # Check if we've reached the limit
-                if (
-                    max_citing is not None
-                    and max_citing > 0
-                    and citing_downloaded >= max_citing
-                ):
-                    break
-
-                source = work.get("doi") or work["id"]
-                if verbose:
-                    title = work.get("title", "No title") or "No title"
-                    year = work.get("publication_year", "Unknown")
-                    print(
-                        f"  [cit] {title[:70]}{'...' if len(title) > 70 else ''} ({year})"
-                    )
-                text = get_text(work)
-                work["citation"] = get_citation(work)
-                work["bibtex"] = dump_bibtex(work)
-                add_source(source, text, work)
-                citing_downloaded += 1
+    return key
 
 
 def add_author(oaid):
@@ -483,7 +489,12 @@ def add_author(oaid):
 
     data = get_data(aurl, params)
 
-    wurl = data["works_api_url"]
+    wurl = data.get("works_api_url")
+    if wurl is None:
+        # get_data returns an empty result for a bad id (e.g. a 404).
+        print(f"No author found for {oaid}.")
+        return
+
     next_cursor = "*"
     params.update(cursor=next_cursor)
     while next_cursor:
@@ -505,7 +516,7 @@ def update_filter(f, last_updated=None, silent=False):
 
     """
     config = get_config()
-    model = SentenceTransformer(config["embedding"]["model"])
+    model = get_model(config["embedding"]["model"])
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config["embedding"]["chunk_size"],
         chunk_overlap=config["embedding"]["chunk_overlap"],
@@ -526,10 +537,12 @@ def update_filter(f, last_updated=None, silent=False):
 
     params = {
         "mailto": config["openalex"]["email"],
-        "api_key": config["openalex"]["api_key"],
         "per_page": 200,
         "filter": _filter,
     }
+    # api_key is optional: litdb init leaves it out when you do not have one.
+    if config["openalex"].get("api_key"):
+        params["api_key"] = config["openalex"]["api_key"]
 
     next_cursor = "*"
     params.update(cursor=next_cursor)
@@ -578,6 +591,22 @@ def update_filter(f, last_updated=None, silent=False):
     return results
 
 
+def _normalize_doi(doi):
+    """Return DOI as a https://doi.org/ URL, or None if it is not a DOI.
+
+    Accepts a bare DOI ("10.1/x"), a "doi:" prefix, or a doi.org URL, with
+    surrounding whitespace, as found in the doi field of bibtex entries.
+    """
+    doi = doi.strip()
+    if doi.lower().startswith("doi:"):
+        doi = doi[4:].strip()
+    if doi.startswith("http"):
+        return doi
+    if doi.startswith("10."):
+        return f"https://doi.org/{doi}"
+    return None
+
+
 def add_bibtex(bibfile):
     """Add entries with a DOI from bibfile."""
 
@@ -586,10 +615,8 @@ def add_bibtex(bibfile):
 
         for entry in tqdm(bib_database.entries):
             if "doi" in entry:
-                doi = entry["doi"]
-                if doi.startswith("http"):
-                    add_work(doi)
-                elif doi.startswith("10"):
-                    add_work(f"https://doi.org/{doi}")
+                doi = _normalize_doi(entry["doi"])
+                if doi is None:
+                    print(f'I do not know what to do with "{entry["doi"]}"')
                 else:
-                    print(f'I do not know what to do with "{doi}"')
+                    add_work(doi)
