@@ -61,26 +61,39 @@ def image_query(query=None, clipboard=False, n=1):
     """Query the image database.
 
     If query is not None, it is either a text description or path to image.
-    If clipboard is True, use an image or text from the clipboard
+    If clipboard is True, use an image or text from the clipboard.
+
+    Raises ValueError if there is nothing to search with.
     """
-    db = get_db()
-    model = get_model()
-    if query and os.path.exists(query):
-        emb = model.encode(Image.open(query))
-    elif query and not os.path.exists(query):
-        emb = model.encode(query)
+    if query:
+        # A path to an existing file is searched as an image; anything else,
+        # including a directory name, is searched as text.
+        source = Image.open(query) if os.path.isfile(query) else query
     elif clipboard:
-        import pyperclip
         from PIL import ImageGrab
 
         clip = ImageGrab.grabclipboard()
         if isinstance(clip, Image.Image):
-            emb = model.encode(clip)
+            source = clip
         else:
-            clip = pyperclip.paste()
-            print(clip)
-            emb = model.encode(clip)
+            try:
+                import pyperclip
+            except ImportError as e:
+                raise ValueError(
+                    "Searching with text from the clipboard needs pyperclip: "
+                    'pip install "litdb[image]"'
+                ) from e
+            source = pyperclip.paste()
+            if not source:
+                raise ValueError("The clipboard has no image or text to search with.")
+            print(source)
+    else:
+        raise ValueError(
+            "Provide a query (text or an image path) or use the clipboard."
+        )
 
+    db = get_db()
+    emb = get_model().encode(source)
     emb = emb.astype(np.float32).tobytes()
 
     q = """select source from vector_top_k('image_idx', ?, ?)
