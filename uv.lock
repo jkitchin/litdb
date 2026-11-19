@@ -4136,6 +4136,7 @@ test = [
     { name = "pytest-cov" },
     { name = "pytest-mock" },
     { name = "responses" },
+    { name = "streamlit" },
 ]
 youtube = [
     { name = "webvtt-py" },
@@ -4218,6 +4219,7 @@ requires-dist = [
     { name = "speechrecognition", marker = "extra == 'audio'" },
     { name = "streamlit", marker = "extra == 'all'" },
     { name = "streamlit", marker = "extra == 'app'" },
+    { name = "streamlit", marker = "extra == 'test'" },
     { name = "tabulate" },
     { name = "toml" },
     { name = "tomlkit" },

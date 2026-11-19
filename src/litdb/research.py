@@ -29,7 +29,7 @@ from litellm import completion
 
 from .db import get_db, get_model
 from .openalex import get_data, get_text
-from .utils import extract_json, get_config
+from .utils import extract_json, fts_query, get_config
 
 
 def research_env():
@@ -195,11 +195,6 @@ relevant. The queries will be used with sqlite fts5.
     return documents
 
 
-def _fts_literal(query):
-    """Quote each word of QUERY so FTS5 matches it literally."""
-    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
-
-
 def _fulltext_search(db, query, n):
     """Return up to N full-text matches for QUERY.
 
@@ -212,12 +207,10 @@ def _fulltext_search(db, query, n):
         from fulltext
         inner join sources on fulltext.source = sources.source
         where fulltext.text match ? order by rank limit ?"""
-    for q in (query, _fts_literal(query)):
-        try:
-            return db.execute(sql, (q, n)).fetchall()
-        except ValueError:
-            continue
-    return []
+    try:
+        return fts_query(db, sql, query, n)
+    except ValueError:
+        return []
 
 
 def refine_query(query):

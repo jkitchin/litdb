@@ -81,6 +81,8 @@ from mcp.server.fastmcp import FastMCP
 from .bibtex import dump_bibtex
 from .coa import get_coa
 from .db import get_model
+from .openalex import abstract_text as _abstract
+from .utils import fts_query
 
 # Initialize FastMCP server
 mcp = FastMCP("litdb")
@@ -127,20 +129,6 @@ def embedding_model_name(db):
     if row:
         return json.loads(row[0])["model"]
     return DEFAULT_EMBEDDING_MODEL
-
-
-def _fts_literal(query):
-    """Quote each word of QUERY so FTS5 matches it literally."""
-    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
-
-
-def _abstract(work):
-    """Return the abstract of the OpenAlex WORK, or "" if it has none."""
-    index = work.get("abstract_inverted_index") or {}
-    words = sorted(
-        (pos, word) for word, positions in index.items() for pos in positions
-    )
-    return " ".join(word for _pos, word in words)
 
 
 def _authors(work, limit=3):
@@ -323,14 +311,9 @@ def fulltext_search(query: str, n: int = 3) -> str:
     inner join sources on fulltext.source = sources.source
     where fulltext.text match ? order by rank limit ?"""
     try:
-        results = db.execute(sql, (query, n)).fetchall()
-    except ValueError:
-        # Not valid FTS5 syntax (e.g. "density-functional" or "Pt(111)"), so
-        # search for the words literally.
-        try:
-            results = db.execute(sql, (_fts_literal(query), n)).fetchall()
-        except ValueError as e:
-            return f"Invalid full-text query {query!r}: {e}"
+        results = fts_query(db, sql, query, n)
+    except ValueError as e:
+        return f"Invalid full-text query {query!r}: {e}"
 
     if not results:
         return f"No results found for query: {query}"

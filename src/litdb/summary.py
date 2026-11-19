@@ -488,6 +488,8 @@ def generate_summary(since="1 week", output_file=None, model=None):
         since: Time period to look back (dateparser format)
         output_file: Optional filename to save output (defaults to auto-generated name)
         model: LiteLLM model string (uses config default if None)
+
+    Returns the newsletter text, or None if there was nothing to summarize.
     """
     config = get_config()
 
@@ -586,3 +588,4 @@ def generate_summary(since="1 week", output_file=None, model=None):
 
     richprint(f"\n[green]Newsletter saved to {output_file}[/green]")
     richprint("[green]Summary generation complete![/green]")
+    return newsletter

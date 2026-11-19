@@ -134,3 +134,21 @@ def extract_json(text: str) -> str:
                     return candidate
 
     raise ValueError("No matching closing bracket found for JSON start")
+
+
+def fts_literal(query):
+    """Quote each word of QUERY so FTS5 matches it literally."""
+    return " ".join('"' + w.replace('"', '""') + '"' for w in query.split())
+
+
+def fts_query(db, sql, query, *params):
+    """Run SQL, whose first parameter is an FTS5 MATCH, for QUERY.
+
+    QUERY is tried as FTS5 syntax, and if that is invalid (e.g.
+    "density-functional" or "Pt(111)"), as literal words. Raises ValueError if
+    neither works.
+    """
+    try:
+        return db.execute(sql, (query, *params)).fetchall()
+    except ValueError:
+        return db.execute(sql, (fts_literal(query), *params)).fetchall()

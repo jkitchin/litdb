@@ -306,8 +306,12 @@ def index(sources):
         _index_directory(db, directory)
 
 
-def _index_directory(db, directory):
-    """Add the new files under DIRECTORY to DB and record when it was indexed."""
+def _files_to_index(db, directory):
+    """Return the files under DIRECTORY that are not in DB yet.
+
+    Bibtex files are not sources themselves (their entries are), so they are
+    returned if they changed since DIRECTORY was last indexed.
+    """
     directory = pathlib.Path(directory).resolve()
     row = db.execute(
         "select last_updated from directories where path = ?", (str(directory),)
@@ -318,7 +322,8 @@ def _index_directory(db, directory):
         else None
     )
 
-    for fname in directory.rglob("*"):
+    files = []
+    for fname in sorted(directory.rglob("*")):
         if not fname.is_file() or fname.suffix.lower() not in INDEX_EXTENSIONS:
             continue
 
@@ -329,7 +334,26 @@ def _index_directory(db, directory):
             "select source from sources where source = ?", (str(fname),)
         ).fetchone():
             continue
+        files.append(fname)
+    return files
 
+
+def _record_indexed(db, directory):
+    """Record in DB that DIRECTORY was indexed today."""
+    db.execute(
+        """insert into directories(path, last_updated) values (?, ?)
+        on conflict(path) do update set last_updated = excluded.last_updated""",
+        (
+            str(pathlib.Path(directory).resolve()),
+            datetime.date.today().strftime("%Y-%m-%d"),
+        ),
+    )
+    db.commit()
+
+
+def _index_directory(db, directory):
+    """Add the new files under DIRECTORY to DB and record when it was indexed."""
+    for fname in _files_to_index(db, directory):
         try:
             _add_one(str(fname), False, False, False, False, None, None, None, False)
         except Exception as e:  # noqa: BLE001 - one bad file must not stop the rest
@@ -337,12 +361,7 @@ def _index_directory(db, directory):
             continue
         print(f"Added {fname}")
 
-    db.execute(
-        """insert into directories(path, last_updated) values (?, ?)
-        on conflict(path) do update set last_updated = excluded.last_updated""",
-        (str(directory), datetime.date.today().strftime("%Y-%m-%d")),
-    )
-    db.commit()
+    _record_indexed(db, directory)
 
 
 INDEX_EXTENSIONS = {".pdf", ".docx", ".pptx", ".org", ".md", ".html", ".bib", ".ipynb"}

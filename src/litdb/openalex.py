@@ -52,6 +52,18 @@ def html_to_text(html_string):
         return html_string
 
 
+def abstract_text(work):
+    """Return the abstract of the OpenAlex WORK, or "" if it has none.
+
+    OpenAlex stores abstracts as an inverted index of word -> positions.
+    """
+    index = work.get("abstract_inverted_index") or {}
+    words = sorted(
+        (pos, word) for word, positions in index.items() for pos in positions
+    )
+    return " ".join(word for _pos, word in words)
+
+
 def get_text(result):
     """Return a rendered text represenation for RESULT.
 
